@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, RequestStatus, LeaveRequest, RequestType } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2 } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -32,6 +32,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
       if(confirm('¿Seguro que deseas eliminar esta solicitud?')) {
           await store.deleteRequest(reqId);
       }
+  };
+
+  const formatDateSafe = (dateStr: string) => {
+      try {
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return 'Fecha inválida';
+          return d.toLocaleDateString('es-ES', {weekday: 'long', day: 'numeric'});
+      } catch { return 'Fecha inválida'; }
+  };
+
+  const getRequestLabel = (req: LeaveRequest) => {
+      if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) {
+          return (
+              <span className="flex items-center gap-1.5 text-blue-700 font-bold">
+                  <ShieldCheck size={16} className="text-blue-600" />
+                  Regularización Administrativa
+              </span>
+          );
+      }
+      return <span className="font-medium text-slate-800">{String(req.label)}</span>;
   };
 
   const stats = [
@@ -131,8 +151,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
                             <tbody className="divide-y divide-slate-100">
                                 {filteredRequests.map(req => (
                                     <tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors">
-                                        <td className="px-6 py-4"><div className="flex items-center gap-2"><div className="font-medium text-slate-800">{String(req.label)}</div>{req.createdByAdmin && <ShieldCheck size={14} className="text-purple-500" />}</div>{req.reason && <div className="text-xs text-slate-500 italic mt-1">{String(req.reason)}</div>}</td>
-                                        <td className="px-6 py-4 text-slate-600">{(req.typeId as string).includes('ajuste') ? 'Ajuste Manual' : `${new Date(req.startDate).toLocaleDateString()}${req.endDate ? ' - ' + new Date(req.endDate).toLocaleDateString() : ''}`}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                {getRequestLabel(req)}
+                                                {req.reason && <span className="text-xs text-slate-500 italic mt-0.5">{String(req.reason)}</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-600">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}${req.endDate ? ' - ' + new Date(req.endDate).toLocaleDateString() : ''}`}</td>
                                         {isOvertimeView && <td className={`px-6 py-4 font-mono font-bold ${(req.hours||0) < 0 ? 'text-red-600' : 'text-green-600'}`}>{(req.hours||0) > 0 ? '+' : ''}{req.hours}h</td>}
                                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold flex w-fit items-center gap-1 ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span></td>
                                         <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>{req.status === RequestStatus.PENDING && (<div className="flex justify-end gap-2"><button onClick={() => onEditRequest(req)} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(req.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={16}/></button></div>)}</td>
@@ -161,7 +186,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
         <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
              <div className="absolute top-0 right-0 p-4 opacity-10"><Briefcase size={64}/></div>
              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Próximo Turno</p>
-             {nextShiftData && nextShiftData.shift ? (<><h3 className="text-xl font-bold capitalize">{new Date(nextShiftData.date).toLocaleDateString('es-ES', {weekday: 'long', day: 'numeric'})}</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-white/10 border border-white/20"><span className="w-2 h-2 rounded-full" style={{backgroundColor: nextShiftData.shift.color}}></span>{nextShiftData.shift.name}</div></>) : <div className="text-slate-400 italic text-sm mt-2">Sin turnos próximos.</div>}
+             {nextShiftData && nextShiftData.shift ? (<><h3 className="text-xl font-bold capitalize">{formatDateSafe(nextShiftData.date)}</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-white/10 border border-white/20"><span className="w-2 h-2 rounded-full" style={{backgroundColor: nextShiftData.shift.color}}></span>{nextShiftData.shift.name}</div></>) : <div className="text-slate-400 italic text-sm mt-2">Sin turnos próximos.</div>}
         </div>
         {stats.map((stat) => (
           <div key={stat.id} onClick={() => stat.clickable && setDetailView(stat.id as any)} className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between group transition-all ${stat.clickable ? 'cursor-pointer hover:shadow-md' : ''}`}>
@@ -176,7 +201,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
           <div className="space-y-3">
             {requests.length === 0 ? <p className="text-slate-400 text-sm">No hay solicitudes.</p> : requests.slice(0, 4).map((req) => (
               <div key={req.id} onClick={() => onViewRequest(req)} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 group">
-                <div><div className="flex items-center gap-2"><p className="font-semibold text-slate-700 text-sm">{String(req.label)}</p>{req.createdByAdmin && <ShieldCheck size={12} className="text-purple-500" />}</div><p className="text-xs text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Ajuste Manual' : `${new Date(req.startDate).toLocaleDateString()}`}</p></div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        {getRequestLabel(req)}
+                    </div>
+                    <p className="text-xs text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}`}</p>
+                </div>
                 <div className="flex items-center gap-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>{req.status === RequestStatus.PENDING && (<div className="flex gap-1" onClick={e => e.stopPropagation()}><button onClick={() => onEditRequest(req)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button><button onClick={() => handleDelete(req.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button></div>)}</div>
               </div>
             ))}
@@ -184,9 +214,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
              <h3 className="text-lg font-bold text-slate-800 mb-4">Evolución Ausencias (Días)</h3>
-             <div className="h-64 w-full">
+             {/* Forced explicit height for Recharts container */}
+             <div style={{ width: '100%', height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyAbsenceStats}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/><XAxis dataKey="name" fontSize={12} stroke="#94a3b8" /><YAxis fontSize={12} stroke="#94a3b8" allowDecimals={false}/><Tooltip /><Legend iconType="circle" /><Bar dataKey="approved" name="Aprobados" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} /><Bar dataKey="pending" name="Pendientes" stackId="a" fill="#eab308" radius={[4, 4, 0, 0]} /></BarChart>
+                    <BarChart data={monthlyAbsenceStats}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                        <XAxis dataKey="name" fontSize={12} stroke="#94a3b8" />
+                        <YAxis fontSize={12} stroke="#94a3b8" allowDecimals={false}/>
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Legend iconType="circle" />
+                        <Bar dataKey="approved" name="Aprobados" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} />
+                        <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#eab308" radius={[4, 4, 0, 0]} />
+                    </BarChart>
                 </ResponsiveContainer>
              </div>
         </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, RequestStatus, Role, ShiftType } from '../types';
+import { User, RequestStatus, Role, ShiftType, RequestType } from '../types';
 import { store } from '../services/store';
 import { ChevronLeft, ChevronRight, Filter, AlertTriangle, Palmtree, Thermometer, Briefcase, User as UserIcon, Clock, Star, Check } from 'lucide-react';
 
@@ -21,6 +21,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
   const firstDayOfMonth = new Date(year, month, 1);
   const lastDayOfMonth = new Date(year, month + 1, 0);
   
+  // Ajuste para que la semana empiece en Lunes (0 = Lunes en nuestro array DAYS)
   const startingDay = (firstDayOfMonth.getDay() + 6) % 7; 
   const daysInMonth = lastDayOfMonth.getDate();
 
@@ -53,7 +54,51 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
   }, [user, isSupervisorOrAdmin, selectedDeptId]);
 
 
-  const requests = store.getCalendarRequests(user.id, selectedDeptId || undefined);
+  // --- CORE FIX: Strict filtering of requests based on Role ---
+  const requests = useMemo(() => {
+      let filteredReqs = store.requests;
+
+      // 1. Filter out irrelevant Overtime types (Logs, Payments, Adjustments)
+      // We ONLY want to see actual absences or Worked Holidays
+      filteredReqs = filteredReqs.filter(r => {
+           if (r.typeId === RequestType.WORKED_HOLIDAY) return true; // Show worked holidays
+           if (r.typeId === RequestType.OVERTIME_SPEND_DAYS) return true; // Show days taken by hours
+           if (store.isOvertimeRequest(r.typeId)) return false; // Hide earn/pay/adjustments
+           return true; // Show normal absences
+      });
+
+      // 2. Filter by Permissions
+      if (user.role === Role.WORKER) {
+          // WORKER: STRICTLY OWN REQUESTS
+          return filteredReqs.filter(r => r.userId === user.id);
+      } 
+      else if (user.role === Role.SUPERVISOR) {
+          // SUPERVISOR: Own requests + Team requests
+          const myDeptIds = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id);
+          
+          return filteredReqs.filter(r => {
+               // Always show my own
+               if (r.userId === user.id) return true;
+
+               const reqUser = store.users.find(u => u.id === r.userId);
+               if (!reqUser) return false;
+
+               // If dropdown selected, strictly filter by it
+               if (selectedDeptId && reqUser.departmentId !== selectedDeptId) return false;
+
+               // Otherwise show if in my departments
+               return myDeptIds.includes(reqUser.departmentId);
+          });
+      } 
+      else {
+          // ADMIN: All requests (filtered by dropdown if active)
+          if (selectedDeptId) {
+              return filteredReqs.filter(r => store.users.find(u => u.id === r.userId)?.departmentId === selectedDeptId);
+          }
+          return filteredReqs;
+      }
+  }, [user, store.requests, selectedDeptId]);
+
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
@@ -69,10 +114,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
 
   // Obtener eventos (ausencias y TURNOS)
   const getEventsForDay = (day: number) => {
-    // FIX: Construir string local manualmente para evitar desfases de zona horaria (UTC vs Local)
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    // Ausencias
+    // Ausencias (Filtered by the strict logic above)
     const absenceEvents = requests.filter(req => {
        const start = req.startDate.split('T')[0];
        const end = req.endDate ? req.endDate.split('T')[0] : start;
@@ -86,16 +130,25 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
     let teamShifts: { userName: string, shift: ShiftType }[] = [];
 
     if (!isSupervisorOrAdmin) {
-        // Trabajador: Solo su turno, oculto si hay ausencia aprobada
+        // Trabajador: Buscar su turno
         myShift = store.getShiftForUserDate(user.id, dateStr);
-        const myAbsences = absenceEvents.filter(r => r.userId === user.id);
-        const hasApprovedAbsence = myAbsences.some(r => r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId));
-        if (hasApprovedAbsence) {
-            myShift = undefined;
+        // Si hay vacaciones aprobadas PROPIAS, ocultar turno para evitar ruido visual
+        const approvedAbsence = absenceEvents.find(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
+        if (approvedAbsence) {
+            myShift = undefined; 
         }
     } else {
         // Supervisor/Admin: Turnos de TODOS los usuarios en scope
         teamShifts = usersInScope.map(u => {
+            // Check if user has absence
+            const hasAbsence = requests.some(r => {
+                const start = r.startDate.split('T')[0];
+                const end = r.endDate ? r.endDate.split('T')[0] : start;
+                return r.userId === u.id && r.status === RequestStatus.APPROVED && dateStr >= start && dateStr <= end;
+            });
+            
+            if (hasAbsence) return null; // Don't show shift if absent
+
             const s = store.getShiftForUserDate(u.id, dateStr);
             return s ? { userName: u.name.split(' ')[0], shift: s } : null;
         }).filter(Boolean) as { userName: string, shift: ShiftType }[];
@@ -115,9 +168,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
       for(let i = 1; i <= daysToCheck; i++) {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
           
-          const activeRequests = store.requests.filter(req => {
-              // CHANGE: Conflict detection now includes PENDING requests
-              if ((req.status !== RequestStatus.APPROVED && req.status !== RequestStatus.PENDING) || store.isOvertimeRequest(req.typeId)) return false;
+          const activeRequests = requests.filter(req => { // Use filtered requests
+              if ((req.status !== RequestStatus.APPROVED && req.status !== RequestStatus.PENDING)) return false;
               const start = req.startDate.split('T')[0];
               const end = req.endDate ? req.endDate.split('T')[0] : start;
               return dateStr >= start && dateStr <= end;
@@ -128,12 +180,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
           activeRequests.forEach(req => {
               const u = store.users.find(user => user.id === req.userId);
               if (u && u.departmentId) {
-                  if (selectedDeptId && u.departmentId !== selectedDeptId) return;
-                  if (user.role === Role.SUPERVISOR) {
-                       const myDepts = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id);
-                       if (!myDepts.includes(u.departmentId)) return;
-                  }
-
                   if (!deptMap[u.departmentId]) deptMap[u.departmentId] = [];
                   if (!deptMap[u.departmentId].includes(u.name)) {
                       deptMap[u.departmentId].push(`${u.name} (${req.status === RequestStatus.PENDING ? '?' : 'OK'})`);
@@ -153,7 +199,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
           });
       }
       return conflictList;
-  }, [year, month, isSupervisorOrAdmin, selectedDeptId, requests]);
+  }, [year, month, isSupervisorOrAdmin, selectedDeptId, requests, daysInMonth]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -206,8 +252,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                 const { absences, shift, teamShifts, holiday } = getEventsForDay(day);
                 const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
                 
-                // Priorizar la visualización: Festivo > Ausencia Aprobada > Turno > Ausencia Pendiente/Rechazada
-                const approvedAbsence = absences.find(a => a.status === RequestStatus.APPROVED && !store.isOvertimeRequest(a.typeId));
+                // Priorizar la visualización para empleados: Festivo > Ausencia Aprobada > Turno > Ausencia Pendiente
+                const approvedAbsence = absences.find(a => a.status === RequestStatus.APPROVED);
 
                 return (
                 <div 
@@ -288,9 +334,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                                         className="w-full h-full rounded-lg flex flex-col items-center justify-center p-1 text-white shadow-sm animate-fade-in"
                                         style={{ backgroundColor: shift.color }}
                                     >
-                                        <Briefcase size={20} className="mb-0.5 opacity-90"/>
-                                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-90">{shift.name}</span>
-                                        <div className="bg-black/20 rounded px-1.5 py-0.5 mt-1 text-[10px] font-mono flex items-center gap-1">
+                                        <Briefcase size={20} className="mb-0.5 opacity-90 drop-shadow-md"/>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-100 drop-shadow-md">{shift.name}</span>
+                                        <div className="bg-black/30 rounded px-1.5 py-0.5 mt-1 text-[10px] font-mono flex items-center gap-1">
                                             <Clock size={8}/>
                                             {shift.segments[0].start}-{shift.segments[0].end}
                                         </div>
