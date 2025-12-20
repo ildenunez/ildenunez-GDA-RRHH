@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, ReactNode } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest } from './types';
@@ -64,7 +65,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
-                {process.env.NODE_ENV === 'development' && (
+                {/* Corrección: Uso de import.meta.env para Vite */}
+                {import.meta.env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
                         {this.state.error?.toString()}
                     </pre>
@@ -91,7 +93,12 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
         await store.init();
         const user = await store.login(email, pass);
         if (user) onLogin(user); else setError('Credenciales inválidas.');
-    } catch (e) { setError('Error de conexión con la base de datos.'); } finally { setLoading(false); }
+    } catch (e) { 
+        console.error(e);
+        setError('Error de conexión con la base de datos. Verifica tu configuración.'); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   return (
@@ -111,8 +118,8 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
             <input type="email" required className="w-full px-4 py-3 bg-slate-50 border rounded-xl" placeholder="Email corporativo" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" required className="w-full px-4 py-3 bg-slate-50 border rounded-xl" placeholder="Contraseña" value={pass} onChange={e => setPass(e.target.value)} />
           </div>
-          {error && <div className="text-red-600 text-sm flex items-center gap-2"><Info size={16}/> {error}</div>}
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2">
+          {error && <div className="text-red-600 text-sm flex items-center gap-2 bg-red-50 p-3 rounded-lg border border-red-100"><Info size={16} className="shrink-0"/> {error}</div>}
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 hover:bg-blue-700 transition-colors">
             {loading ? <Loader2 className="animate-spin"/> : <>Entrar <ArrowRight size={18}/></>}
           </button>
         </form>

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { User, RequestStatus, Role, ShiftType, RequestType } from '../types';
 import { store } from '../services/store';
-import { ChevronLeft, ChevronRight, Filter, AlertTriangle, Palmtree, Thermometer, Briefcase, User as UserIcon, Clock, Star, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, AlertTriangle, Palmtree, Thermometer, Briefcase, User as UserIcon, Clock, Star, Check, Info } from 'lucide-react';
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -106,10 +106,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
   // Helper para iconos gráficos
   const getEventIcon = (label: string) => {
       const lower = label.toLowerCase();
-      if (lower.includes('vacaci')) return <Palmtree size={24} className="opacity-80"/>;
-      if (lower.includes('baja') || lower.includes('medica')) return <Thermometer size={24} className="opacity-80"/>;
-      if (lower.includes('asuntos')) return <UserIcon size={24} className="opacity-80"/>;
-      return <Star size={24} className="opacity-80"/>;
+      if (lower.includes('vacaci')) return <Palmtree size={20} className="opacity-80"/>;
+      if (lower.includes('baja') || lower.includes('medica')) return <Thermometer size={20} className="opacity-80"/>;
+      if (lower.includes('asuntos')) return <UserIcon size={20} className="opacity-80"/>;
+      if (lower.includes('justifi') || lower.includes('unjustified')) return <AlertTriangle size={20} className="opacity-80"/>;
+      return <Star size={20} className="opacity-80"/>;
+  };
+
+  const formatLabel = (req: { typeId: string, label: string }) => {
+      // Use the store helper to get the friendly name
+      return store.getTypeLabel(req.typeId);
   };
 
   // Obtener eventos (ausencias y TURNOS)
@@ -254,6 +260,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                 
                 // Priorizar la visualización para empleados: Festivo > Ausencia Aprobada > Turno > Ausencia Pendiente
                 const approvedAbsence = absences.find(a => a.status === RequestStatus.APPROVED);
+                // Buscar cualquier ausencia pendiente para mostrarla encima del turno
+                const pendingAbsence = absences.find(a => a.status === RequestStatus.PENDING);
 
                 return (
                 <div 
@@ -286,9 +294,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                                             ev.status === RequestStatus.PENDING ? 'bg-yellow-50 text-yellow-700 border-yellow-500' : 
                                             ev.status === RequestStatus.REJECTED ? 'bg-red-50 text-red-700 border-red-500 line-through opacity-60' : ''}
                                         `}
-                                        title={`${getUserName(ev.userId)}: ${ev.label}`}
+                                        title={`${getUserName(ev.userId)}: ${formatLabel(ev)}`}
                                     >
-                                        <span className="truncate"><strong>{getUserName(ev.userId)}</strong>: {ev.label}</span>
+                                        <span className="truncate"><strong>{getUserName(ev.userId)}</strong>: {formatLabel(ev)}</span>
                                     </div>
                                 ))}
 
@@ -311,27 +319,27 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                             </div>
                         ) : (
                             /* --- MODO TRABAJADOR: VISUAL / WOW --- */
-                            <div className="flex-1 flex flex-col justify-center items-center w-full">
+                            <div className="flex-1 flex flex-col justify-center items-center w-full relative">
                                 {/* CASO 1: FESTIVO */}
                                 {holiday && (
-                                    <div className="text-center">
+                                    <div className="text-center w-full">
                                         <Star className="mx-auto text-red-400 mb-1" size={28} fill="currentColor" fillOpacity={0.2} />
-                                        <span className="text-xs font-bold text-red-600 uppercase leading-tight block">{holiday.name}</span>
+                                        <span className="text-xs font-bold text-red-600 uppercase leading-tight block truncate">{holiday.name}</span>
                                     </div>
                                 )}
 
                                 {/* CASO 2: AUSENCIA APROBADA (Sobrescribe turno) */}
                                 {!holiday && approvedAbsence && (
-                                    <div className="w-full h-full bg-green-50 rounded-lg border border-green-100 flex flex-col items-center justify-center p-1 text-center animate-fade-in">
-                                        <div className="text-green-500 mb-1">{getEventIcon(approvedAbsence.label)}</div>
-                                        <span className="text-xs font-bold text-green-700 leading-tight line-clamp-2">{approvedAbsence.label}</span>
+                                    <div className="w-full h-full bg-green-50 rounded-lg border border-green-100 flex flex-col items-center justify-center p-1 text-center animate-fade-in relative overflow-hidden">
+                                        <div className="text-green-500 mb-1">{getEventIcon(formatLabel(approvedAbsence))}</div>
+                                        <span className="text-[10px] font-bold text-green-700 leading-tight line-clamp-2">{formatLabel(approvedAbsence)}</span>
                                     </div>
                                 )}
 
                                 {/* CASO 3: TURNO (Si no es festivo ni hay ausencia aprobada) */}
                                 {!holiday && !approvedAbsence && shift && (
                                     <div 
-                                        className="w-full h-full rounded-lg flex flex-col items-center justify-center p-1 text-white shadow-sm animate-fade-in"
+                                        className="w-full h-full rounded-lg flex flex-col items-center justify-center p-1 text-white shadow-sm animate-fade-in relative overflow-hidden"
                                         style={{ backgroundColor: shift.color }}
                                     >
                                         <Briefcase size={20} className="mb-0.5 opacity-90 drop-shadow-md"/>
@@ -340,22 +348,30 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
                                             <Clock size={8}/>
                                             {shift.segments[0].start}-{shift.segments[0].end}
                                         </div>
+                                        
+                                        {/* Overlay para solicitud pendiente SOBRE el turno */}
+                                        {pendingAbsence && (
+                                            <div className="absolute top-0 right-0 w-full h-1.5 bg-yellow-400 animate-pulse" title={`Pendiente: ${formatLabel(pendingAbsence)}`}></div>
+                                        )}
                                     </div>
                                 )}
 
-                                {/* CASO 4: OTRAS SOLICITUDES (Pendientes) */}
+                                {/* CASO 4: OTRAS SOLICITUDES (Pendientes si NO hay turno, o si el turno está oculto) */}
                                 {!holiday && !approvedAbsence && !shift && absences.length > 0 && (
-                                     <div className="space-y-1 w-full">
+                                     <div className="w-full h-full space-y-1 flex flex-col justify-center">
                                         {absences.map((ev, idx) => (
                                             <div 
                                                 key={ev.id + idx} 
-                                                className={`text-[9px] px-1.5 py-1 rounded border-l-2 truncate font-medium flex items-center gap-1
-                                                ${ev.status === RequestStatus.PENDING ? 'bg-yellow-50 text-yellow-700 border-yellow-500' : 
-                                                  ev.status === RequestStatus.REJECTED ? 'bg-red-50 text-red-700 border-red-500 line-through opacity-60' : ''}
+                                                className={`text-[10px] px-2 py-1.5 rounded-lg border flex flex-col items-center justify-center text-center gap-1 h-full
+                                                ${ev.status === RequestStatus.PENDING ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 
+                                                  ev.status === RequestStatus.REJECTED ? 'bg-red-50 text-red-700 border-red-200 opacity-60' : ''}
                                                 `}
+                                                title={formatLabel(ev)}
                                             >
-                                                <div className="w-1.5 h-1.5 rounded-full bg-current shrink-0"></div>
-                                                <span className="truncate">{ev.label}</span>
+                                                {ev.status === RequestStatus.PENDING && <Clock size={16} className="text-yellow-600"/>}
+                                                {ev.status === RequestStatus.REJECTED && <AlertTriangle size={16} className="text-red-600"/>}
+                                                <span className="font-bold leading-tight line-clamp-2">{formatLabel(ev)}</span>
+                                                {ev.status === RequestStatus.PENDING && <span className="text-[9px] font-medium opacity-80">(Pendiente)</span>}
                                             </div>
                                         ))}
                                      </div>
@@ -376,10 +392,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
             </div>
         </div>
         
-        <div className="px-6 pb-6 flex gap-6 text-xs text-slate-500 border-t border-slate-100 pt-4 mx-6">
+        <div className="px-6 pb-6 flex gap-6 text-xs text-slate-500 border-t border-slate-100 pt-4 mx-6 flex-wrap">
             <div className="flex items-center gap-2"><div className="w-4 h-4 bg-green-100 border border-green-200 rounded flex items-center justify-center"><Check size={10} className="text-green-600"/></div> Ausencia Aprobada</div>
-            <div className="flex items-center gap-2"><div className="w-4 h-4 bg-yellow-50 border-l-2 border-yellow-500 rounded"></div> Solicitud Pendiente</div>
-            <div className="flex items-center gap-2"><div className="w-4 h-4 bg-red-100 border border-red-200 rounded"></div> Festivo</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 bg-yellow-50 border border-yellow-200 rounded flex items-center justify-center"><Clock size={10} className="text-yellow-600"/></div> Solicitud Pendiente</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 bg-red-100 border border-red-200 rounded flex items-center justify-center"><Star size={10} className="text-red-600"/></div> Festivo</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 bg-blue-500 rounded"></div> Turno Laboral</div>
         </div>
         </div>

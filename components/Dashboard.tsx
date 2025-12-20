@@ -43,15 +43,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   };
 
   const getRequestLabel = (req: LeaveRequest) => {
+      const label = store.getTypeLabel(req.typeId);
+      
       if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) {
           return (
               <span className="flex items-center gap-1.5 text-blue-700 font-bold">
                   <ShieldCheck size={16} className="text-blue-600" />
-                  Regularización Administrativa
+                  {label}
               </span>
           );
       }
-      return <span className="font-medium text-slate-800">{String(req.label)}</span>;
+      return <span className="font-medium text-slate-800">{label}</span>;
   };
 
   const stats = [

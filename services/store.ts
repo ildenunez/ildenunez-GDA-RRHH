@@ -32,10 +32,40 @@ class Store {
     this.listeners.forEach(fn => fn());
   }
 
+  // --- HELPER: Translate Technical IDs to Friendly Names ---
+  getTypeLabel(typeId: string): string {
+      const map: Record<string, string> = {
+          [RequestType.VACATION]: 'Vacaciones',
+          [RequestType.SICKNESS]: 'Baja Médica',
+          [RequestType.PERSONAL]: 'Asuntos Propios',
+          [RequestType.OVERTIME_EARN]: 'Registro Horas Extra',
+          [RequestType.OVERTIME_SPEND_DAYS]: 'Canje por Días Libres',
+          [RequestType.OVERTIME_PAY]: 'Abono en Nómina',
+          [RequestType.WORKED_HOLIDAY]: 'Festivo Trabajado',
+          [RequestType.UNJUSTIFIED]: 'Ausencia Justificada',
+          [RequestType.ADJUSTMENT_DAYS]: 'Regularización Días (Admin)',
+          [RequestType.ADJUSTMENT_OVERTIME]: 'Regularización Horas (Admin)',
+          'unjustified_absence': 'Ausencia Justificada'
+      };
+
+      // 1. Try Configured Leave Types (Dynamic)
+      const dynamic = this.config.leaveTypes.find(t => t.id === typeId);
+      if (dynamic) return dynamic.label;
+
+      // 2. Try Static Map
+      if (map[typeId]) return map[typeId];
+
+      // 3. Fallback: Formatting raw string (replace underscores)
+      return typeId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
   async init() {
     if (this.initialized) return;
     try {
-        const { data: usersData } = await supabase.from('users').select('*');
+        // Validación crítica: Si falla la carga de usuarios, lanzamos error para que la UI lo sepa
+        const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+        if (usersError) throw usersError;
+
         const { data: deptsData } = await supabase.from('departments').select('*');
         const { data: reqsData } = await supabase.from('requests').select('*');
         const { data: typesData } = await supabase.from('leave_types').select('*');
@@ -92,6 +122,8 @@ class Store {
         this.notify();
     } catch (error) {
         console.error("Critical Store Init Error:", error);
+        // Re-lanzar el error para que App.tsx/Login pueda mostrarlo
+        throw error;
     }
   }
 
@@ -662,6 +694,23 @@ class Store {
       for (const u of this.users) {
           await this.updateUserBalance(u.id, (u.daysAvailable || 0) + 31, u.overtimeHours);
       }
+  }
+
+  async assignAnnualVacationDays(year: number) {
+      const label = `Vacaciones ${year}`;
+      // Use sequential creation to ensure integrity and state updates
+      for (const user of this.users) {
+          await this.createRequest({
+              typeId: RequestType.ADJUSTMENT_DAYS,
+              label: label,
+              startDate: new Date().toISOString(),
+              hours: 31, // Positive hours in adjustment adds days
+              reason: `Asignación automática anual ${year}`,
+              isJustified: true,
+              reportedToAdmin: false
+          }, user.id, RequestStatus.APPROVED);
+      }
+      this.notify();
   }
 }
 

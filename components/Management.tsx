@@ -4,11 +4,12 @@ import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, Email
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
-import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck } from 'lucide-react';
+import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR ADMIN ---
 
 const DepartmentManager: React.FC = () => {
+    // ... [Content unchanged from original file, only exported components change]
     const [departments, setDepartments] = useState(store.departments);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -231,6 +232,7 @@ const HRConfigManager: React.FC = () => {
 };
 
 const PPEConfigManager: React.FC = () => {
+    // ... [Same Content]
     const [editingPPEId, setEditingPPEId] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [sizes, setSizes] = useState('');
@@ -292,6 +294,7 @@ const PPEConfigManager: React.FC = () => {
 };
 
 const CommunicationsManager: React.FC = () => {
+    // ... [Same Content]
     const [subTab, setSubTab] = useState<'templates' | 'smtp' | 'message'>('templates');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('request_created');
     const [tempTemplates, setTempTemplates] = useState<EmailTemplate[]>(store.config.emailTemplates);
@@ -524,7 +527,6 @@ const CommunicationsManager: React.FC = () => {
 // --- EXPORTED MANAGEMENT COMPONENTS ---
 
 export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
-  // ... No changes here ...
   const [refresh, setRefresh] = useState(0);
   useEffect(() => store.subscribe(() => setRefresh(r => r+1)), []);
   
@@ -568,7 +570,7 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
                                     <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">{store.departments.find(d => d.id === store.users.find(u => u.id === req.userId)?.departmentId)?.name}</span>
                                 </div>
                                 <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-                                    <div className="flex items-center gap-1"><FileText size={16}/> {req.label}</div>
+                                    <div className="flex items-center gap-1 font-medium"><FileText size={16}/> {store.getTypeLabel(req.typeId)}</div>
                                     <div className="flex items-center gap-1"><Calendar size={16}/> {new Date(req.startDate).toLocaleDateString()} {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString()}`}</div>
                                     {req.hours && <div className="flex items-center gap-1"><Clock size={16}/> {req.hours}h</div>}
                                 </div>
@@ -600,6 +602,7 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 };
 
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
+    // ... [Same Content, updated table rendering below]
     const today = new Date().toISOString().split('T')[0];
     const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
 
@@ -724,7 +727,7 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
                                                  </div>
                                              )}
                                          </td>
-                                         <td className="px-6 py-4 align-top print:py-2 print:px-2 border print:border-slate-300">{req.label}</td>
+                                         <td className="px-6 py-4 align-top print:py-2 print:px-2 border print:border-slate-300">{store.getTypeLabel(req.typeId)}</td>
                                          <td className="px-6 py-4 text-slate-500 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{start.toLocaleDateString()} - {end.toLocaleDateString()}</td>
                                          <td className="px-6 py-4 font-mono font-bold text-blue-600 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{diff}</td>
                                          
@@ -780,7 +783,7 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
 };
 
 export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: LeaveRequest) => void }> = ({ currentUser, onViewRequest }) => {
-    // ... No changes needed ...
+    // ... [Content]
     const [viewMode, setViewMode] = useState<'list' | 'shifts'>('list');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -794,6 +797,7 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
     const [modalActionUser, setModalActionUser] = useState<User | null>(null);
     const [isActionModalOpen, setIsActionModalOpen] = useState(false);
     const [refreshTick, setRefreshTick] = useState(0);
+    const [loading, setLoading] = useState(false);
 
     const users = useMemo(() => {
         let filtered = store.users;
@@ -853,6 +857,29 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
         setIsUserModalOpen(true);
     };
 
+    const handleAnnualAssignment = async () => {
+        const nextYear = new Date().getFullYear() + 1;
+        const inputYear = prompt("Introduce el año para la asignación de vacaciones (31 días):", nextYear.toString());
+        if (!inputYear) return;
+
+        const year = parseInt(inputYear);
+        if (isNaN(year)) return alert("Año inválido. Debe ser un número.");
+
+        if (confirm(`¿Estás seguro de añadir 31 días de vacaciones a TODOS los empleados para el año ${year}?`)) {
+            setLoading(true);
+            try {
+                await store.assignAnnualVacationDays(year);
+                alert("Asignación anual completada exitosamente.");
+            } catch (error) {
+                console.error(error);
+                alert("Hubo un error durante la asignación.");
+            } finally {
+                setLoading(false);
+                setRefreshTick(t => t + 1);
+            }
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -867,9 +894,14 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
                          <input className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm" placeholder="Buscar empleado..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
                     </div>
                     {isAdmin && (
-                        <button onClick={() => resetModalState()} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">
-                            <UserPlus size={18}/> Nuevo
-                        </button>
+                        <>
+                            <button onClick={handleAnnualAssignment} disabled={loading} className="bg-orange-50 text-orange-600 border border-orange-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-orange-100 transition-all whitespace-nowrap">
+                                {loading ? <Loader2 size={18} className="animate-spin"/> : <CalendarPlus size={18}/>} Asignar Vacaciones Anuales
+                            </button>
+                            <button onClick={() => resetModalState()} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">
+                                <UserPlus size={18}/> Nuevo
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -951,7 +983,7 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
                                 {editingUser.id && (
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center"><h4 className="font-bold text-slate-800 flex items-center gap-2"><Clock size={18} className="text-slate-500"/> Historial del Empleado</h4><button type="button" onClick={() => { setModalActionUser(editingUser as User); setIsActionModalOpen(true); }} className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-slate-800 transition-colors"><Plus size={12}/> Crear Solicitud Manual</button></div>
-                                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200"><tr><th className="p-3">Tipo / Descripción</th><th className="p-3">Fecha(s)</th><th className="p-3">Estado</th><th className="p-3 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{editingUserRequests.length === 0 ? (<tr><td colSpan={4} className="p-6 text-center text-slate-400 italic">No hay historial de solicitudes para este empleado.</td></tr>) : editingUserRequests.map(req => (<tr key={req.id} className="hover:bg-slate-50" onClick={() => onViewRequest(req)}><td className="p-3"><div className="font-bold text-slate-700">{req.label}</div><div className="text-[10px] text-slate-400 italic truncate max-w-[200px]">{req.reason || 'Sin motivo'}</div></td><td className="p-3 font-medium text-slate-600">{new Date(req.startDate).toLocaleDateString()}</td><td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span></td><td className="p-3 text-right"><button type="button" onClick={(e) => { e.stopPropagation(); if(confirm('¿Borrar registro? Se revertirá el saldo.')) { store.deleteRequest(req.id); setRefreshTick(t => t+1); } }} className="text-red-400 hover:text-red-600 font-bold hover:underline">Eliminar</button></td></tr>))}</tbody></table></div>
+                                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200"><tr><th className="p-3">Tipo / Descripción</th><th className="p-3">Fecha(s)</th><th className="p-3">Estado</th><th className="p-3 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{editingUserRequests.length === 0 ? (<tr><td colSpan={4} className="p-6 text-center text-slate-400 italic">No hay historial de solicitudes para este empleado.</td></tr>) : editingUserRequests.map(req => (<tr key={req.id} className="hover:bg-slate-50" onClick={() => onViewRequest(req)}><td className="p-3"><div className="font-bold text-slate-700">{store.getTypeLabel(req.typeId)}</div><div className="text-[10px] text-slate-400 italic truncate max-w-[200px]">{req.reason || 'Sin motivo'}</div></td><td className="p-3 font-medium text-slate-600">{new Date(req.startDate).toLocaleDateString()}</td><td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span></td><td className="p-3 text-right"><button type="button" onClick={(e) => { e.stopPropagation(); if(confirm('¿Borrar registro? Se revertirá el saldo.')) { store.deleteRequest(req.id); setRefreshTick(t => t+1); } }} className="text-red-400 hover:text-red-600 font-bold hover:underline">Eliminar</button></td></tr>))}</tbody></table></div>
                                     </div>
                                 )}
                             </form>
@@ -969,6 +1001,7 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
 };
 
 export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => void }> = ({ onViewRequest }) => {
+    // ... [Same Content]
     const [activeTab, setActiveTab] = useState<'users' | 'depts' | 'config' | 'epis' | 'comms'>('users');
     const adminUser: User = { id: 'admin_sys', name: 'Admin', email: '', role: Role.ADMIN, departmentId: '', daysAvailable: 0, overtimeHours: 0 };
 

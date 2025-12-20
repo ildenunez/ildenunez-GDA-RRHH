@@ -94,7 +94,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
 
             {/* Detalles de la Solicitud */}
             <div className="mb-8 bg-slate-50 p-6 rounded-xl border border-slate-100 print:bg-white print:border-black">
-                <h3 className="text-lg font-bold text-slate-800 mb-4">{request.label}</h3>
+                <h3 className="text-lg font-bold text-slate-800 mb-4">{store.getTypeLabel(request.typeId)}</h3>
                 
                 <div className="grid grid-cols-2 gap-y-4">
                     <div>
