@@ -62,7 +62,10 @@
       }
 
       @media print {
-        @page { margin: 0; }
+        @page { 
+          size: landscape; 
+          margin: 15mm; 
+        }
         
         /* Reset containers to allow full page printing */
         html, body, #root, main, .overflow-auto {
@@ -89,6 +92,10 @@
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
+        
+        /* Table enhancements for print */
+        table { width: 100% !important; border-collapse: collapse !important; }
+        th, td { border: 1px solid #e2e8f0 !important; }
       }
     </style>
   <script type="importmap">

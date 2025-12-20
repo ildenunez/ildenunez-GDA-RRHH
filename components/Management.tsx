@@ -101,6 +101,7 @@ const DepartmentManager: React.FC = () => {
 };
 
 const HRConfigManager: React.FC = () => {
+    // ... Same implementation as previous ...
     const [activeModal, setActiveModal] = useState<'holiday' | 'type' | 'shift' | null>(null);
     const [typeName, setTypeName] = useState('');
     const [typeSubtracts, setTypeSubtracts] = useState(true);
@@ -231,6 +232,7 @@ const HRConfigManager: React.FC = () => {
 };
 
 const PPEConfigManager: React.FC = () => {
+    // ... Same implementation as previous ...
     const [editingPPEId, setEditingPPEId] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [sizes, setSizes] = useState('');
@@ -292,7 +294,7 @@ const PPEConfigManager: React.FC = () => {
 };
 
 const CommunicationsManager: React.FC = () => {
-    // ... Keeping logic identical, just outputting component for file completeness ...
+    // ... Same implementation as previous ...
     const [subTab, setSubTab] = useState<'templates' | 'smtp' | 'message'>('templates');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('request_created');
     const [tempTemplates, setTempTemplates] = useState<EmailTemplate[]>(store.config.emailTemplates);
@@ -433,7 +435,7 @@ const CommunicationsManager: React.FC = () => {
                         </div>
                     </div>
                 )}
-
+                {/* SMTP and Message tabs remain same ... */}
                 {subTab === 'smtp' && (
                     <div className="p-8 animate-fade-in max-w-lg mx-auto w-full">
                         <h2 className="text-lg font-bold text-slate-800 mb-6 text-center">Configuración SMTP</h2>
@@ -601,7 +603,8 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
     const today = new Date().toISOString().split('T')[0];
-    
+    const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
+
     const teamIds = useMemo(() => {
         if (user.role === Role.ADMIN) return store.users.map(u => u.id);
         const myDepts = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id);
@@ -638,32 +641,43 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
     };
 
     return (
-        <div className="space-y-6 animate-fade-in print:bg-white print:p-0">
+        <div className="space-y-6 animate-fade-in print:bg-white print:p-0 print:m-0 print:w-full">
+             {/* UI Header - HIdden on Print */}
              <div className="flex justify-between items-center print:hidden">
                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><CalendarClock className="text-blue-600"/> Próximas Ausencias</h2>
                  <button onClick={handlePrint} className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-50 shadow-sm"><Printer size={18}/> Imprimir</button>
              </div>
 
-             {/* Print Header */}
-             <div className="hidden print:block mb-6">
-                 <h1 className="text-2xl font-bold text-slate-900">Informe de Próximas Ausencias y Conflictos</h1>
-                 <p className="text-sm text-slate-500">Generado el {new Date().toLocaleDateString()}</p>
+             {/* Print Report Header - Visible ONLY on print */}
+             <div className="hidden print:flex justify-between items-start mb-6 border-b-2 border-slate-100 pb-4">
+                 <div className="flex items-center gap-4">
+                     <img src={LOGO_URL} alt="Logo" className="w-16 h-16 object-contain" />
+                     <div>
+                         <h1 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Informe de Próximas Ausencias</h1>
+                         <p className="text-sm text-slate-500">Documento de control y planificación</p>
+                     </div>
+                 </div>
+                 <div className="text-right">
+                     <p className="text-sm font-bold text-slate-700">Fecha de emisión</p>
+                     <p className="text-lg font-mono">{new Date().toLocaleDateString()}</p>
+                 </div>
              </div>
 
              {absences.length === 0 ? (
                  <p className="text-slate-500 italic">No hay ausencias próximas programadas en tu equipo.</p>
              ) : (
-                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border">
-                     <table className="w-full text-left text-sm">
-                         <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs print:bg-slate-100">
+                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden print:shadow-none print:border-none print:rounded-none">
+                     <table className="w-full text-left text-sm print:text-xs">
+                         <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs print:bg-slate-100 print:text-black">
                              <tr>
-                                 <th className="px-6 py-4">Empleado</th>
-                                 <th className="px-6 py-4">Tipo</th>
-                                 <th className="px-6 py-4">Fechas</th>
-                                 <th className="px-6 py-4">Días</th>
+                                 <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Empleado</th>
+                                 <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Tipo</th>
+                                 <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Fechas</th>
+                                 <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Días</th>
+                                 <th className="hidden print:table-cell px-2 py-2 border print:border-slate-300">Observaciones</th>
                              </tr>
                          </thead>
-                         <tbody className="divide-y divide-slate-100">
+                         <tbody className="divide-y divide-slate-100 print:divide-slate-300">
                              {absences.map(req => {
                                  const u = store.users.find(usr => usr.id === req.userId);
                                  const start = new Date(req.startDate);
@@ -676,26 +690,28 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
 
                                  return (
                                      <tr key={req.id} className="hover:bg-slate-50 cursor-pointer print:cursor-auto group" onClick={() => onViewRequest(req)}>
-                                         <td className="px-6 py-4">
-                                             <div className="font-bold text-slate-700">{u?.name}</div>
+                                         <td className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">
+                                             <div className="font-bold text-slate-700 print:text-black">{u?.name}</div>
                                              {hasConflict && (
-                                                 <div className="mt-2 text-xs flex flex-col gap-1 text-red-600 bg-red-50 p-2 rounded border border-red-100 w-fit animate-pulse print:animate-none">
-                                                     <div className="flex items-center gap-1 font-bold"><AlertTriangle size={12}/> Conflicto Detectado:</div>
+                                                 <div className="mt-2 text-xs flex flex-col gap-1 text-red-600 bg-red-50 p-2 rounded border border-red-100 w-fit animate-pulse print:animate-none print:bg-transparent print:border-none print:text-black print:p-0">
+                                                     <div className="flex items-center gap-1 font-bold print:hidden"><AlertTriangle size={12}/> Conflicto Detectado:</div>
+                                                     <div className="hidden print:block font-bold">Conflictos:</div>
                                                      {conflicts.map(c => {
                                                          const conflictUser = store.users.find(u => u.id === c.userId)?.name.split(' ')[0];
                                                          const range = getOverlapText(req, c);
                                                          return (
-                                                             <div key={c.id} className="pl-4 border-l-2 border-red-200">
-                                                                 Coincide con <strong>{conflictUser}</strong> ({range})
+                                                             <div key={c.id} className="pl-4 border-l-2 border-red-200 print:border-none print:pl-0">
+                                                                 Coincide: <strong>{conflictUser}</strong> ({range})
                                                              </div>
                                                          );
                                                      })}
                                                  </div>
                                              )}
                                          </td>
-                                         <td className="px-6 py-4 align-top">{req.label}</td>
-                                         <td className="px-6 py-4 text-slate-500 align-top">{start.toLocaleDateString()} - {end.toLocaleDateString()}</td>
-                                         <td className="px-6 py-4 font-mono font-bold text-blue-600 align-top">{diff}</td>
+                                         <td className="px-6 py-4 align-top print:py-2 print:px-2 border print:border-slate-300">{req.label}</td>
+                                         <td className="px-6 py-4 text-slate-500 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{start.toLocaleDateString()} - {end.toLocaleDateString()}</td>
+                                         <td className="px-6 py-4 font-mono font-bold text-blue-600 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{diff}</td>
+                                         <td className="hidden print:table-cell px-2 py-2 border print:border-slate-300"></td>
                                      </tr>
                                  )
                              })}
@@ -703,6 +719,12 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
                      </table>
                  </div>
              )}
+             
+             {/* Print Footer */}
+             <div className="hidden print:flex mt-8 text-xs text-slate-400 justify-between">
+                 <p>Informe generado automáticamente por GdA RRHH</p>
+                 <p>Página 1 de 1</p>
+             </div>
         </div>
     );
 };
