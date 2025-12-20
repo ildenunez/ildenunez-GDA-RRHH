@@ -101,7 +101,6 @@ const DepartmentManager: React.FC = () => {
 };
 
 const HRConfigManager: React.FC = () => {
-    // ... Same implementation as previous ...
     const [activeModal, setActiveModal] = useState<'holiday' | 'type' | 'shift' | null>(null);
     const [typeName, setTypeName] = useState('');
     const [typeSubtracts, setTypeSubtracts] = useState(true);
@@ -232,7 +231,6 @@ const HRConfigManager: React.FC = () => {
 };
 
 const PPEConfigManager: React.FC = () => {
-    // ... Same implementation as previous ...
     const [editingPPEId, setEditingPPEId] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [sizes, setSizes] = useState('');
@@ -294,7 +292,6 @@ const PPEConfigManager: React.FC = () => {
 };
 
 const CommunicationsManager: React.FC = () => {
-    // ... Same implementation as previous ...
     const [subTab, setSubTab] = useState<'templates' | 'smtp' | 'message'>('templates');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('request_created');
     const [tempTemplates, setTempTemplates] = useState<EmailTemplate[]>(store.config.emailTemplates);
@@ -603,7 +600,6 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 };
 
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
-    // ... No changes needed ...
     const today = new Date().toISOString().split('T')[0];
     const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
 
@@ -613,8 +609,9 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
         return store.users.filter(u => myDepts.includes(u.departmentId)).map(u => u.id);
     }, [user]);
 
+    // NEW: Include Pending
     const absences = store.requests.filter(r => 
-        r.status === RequestStatus.APPROVED && 
+        (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
         !store.isOvertimeRequest(r.typeId) &&
         (r.endDate || r.startDate) >= today &&
         teamIds.includes(r.userId)
@@ -622,6 +619,22 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
 
     const handlePrint = () => {
         window.print();
+    };
+
+    // NEW: Action handler
+    const handleAction = async (e: React.MouseEvent, req: LeaveRequest, status: RequestStatus) => {
+        e.stopPropagation();
+        const message = status === RequestStatus.APPROVED ? 'Comentario (opcional):' : 'Motivo del rechazo (Obligatorio):';
+        const comment = prompt(message);
+        
+        if (comment === null) return; 
+
+        if (status === RequestStatus.REJECTED && !comment.trim()) {
+            alert("Debes indicar un motivo para rechazar la solicitud.");
+            return;
+        }
+        
+        await store.updateRequestStatus(req.id, status, user.id, comment || undefined);
     };
 
     const getOverlapText = (r1: LeaveRequest, r2: LeaveRequest) => {
@@ -676,6 +689,8 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
                                  <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Tipo</th>
                                  <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Fechas</th>
                                  <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Días</th>
+                                 <th className="px-6 py-4 print:py-2 print:px-2 border print:border-slate-300">Estado</th> {/* NEW */}
+                                 <th className="px-6 py-4 print:hidden">Acciones</th> {/* NEW */}
                                  <th className="hidden print:table-cell px-2 py-2 border print:border-slate-300">Observaciones</th>
                              </tr>
                          </thead>
@@ -686,7 +701,6 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
                                  const end = new Date(req.endDate || req.startDate);
                                  const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
                                  
-                                 // Check Conflicts In-Line
                                  const conflicts = store.getRequestConflicts(req);
                                  const hasConflict = conflicts.length > 0;
 
@@ -713,6 +727,40 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
                                          <td className="px-6 py-4 align-top print:py-2 print:px-2 border print:border-slate-300">{req.label}</td>
                                          <td className="px-6 py-4 text-slate-500 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{start.toLocaleDateString()} - {end.toLocaleDateString()}</td>
                                          <td className="px-6 py-4 font-mono font-bold text-blue-600 align-top print:text-black print:py-2 print:px-2 border print:border-slate-300">{diff}</td>
+                                         
+                                         {/* Status Column */}
+                                         <td className="px-6 py-4 align-top print:py-2 print:px-2 border print:border-slate-300">
+                                             <span className={`px-2 py-1 rounded-full text-xs font-bold inline-block
+                                                 ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}
+                                                 print:bg-transparent print:text-black print:border-none print:p-0
+                                             `}>
+                                                 {req.status}
+                                             </span>
+                                         </td>
+
+                                         {/* Actions Column (Hidden on Print) */}
+                                         <td className="px-6 py-4 print:hidden" onClick={e => e.stopPropagation()}>
+                                             <div className="flex gap-2">
+                                                 {req.status === RequestStatus.PENDING && (
+                                                     <button 
+                                                        onClick={(e) => handleAction(e, req, RequestStatus.APPROVED)} 
+                                                        className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 border border-green-200 transition-colors"
+                                                        title="Aprobar"
+                                                     >
+                                                         <Check size={16}/>
+                                                     </button>
+                                                 )}
+                                                 
+                                                 <button 
+                                                    onClick={(e) => handleAction(e, req, RequestStatus.REJECTED)} 
+                                                    className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 border border-red-200 transition-colors"
+                                                    title={req.status === RequestStatus.APPROVED ? "Revocar" : "Rechazar"}
+                                                 >
+                                                     <X size={16}/>
+                                                 </button>
+                                             </div>
+                                         </td>
+                                         
                                          <td className="hidden print:table-cell px-2 py-2 border print:border-slate-300"></td>
                                      </tr>
                                  )
