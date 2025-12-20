@@ -4,7 +4,7 @@ import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, Email
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
-import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle } from 'lucide-react';
+import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR ADMIN ---
 
@@ -527,6 +527,7 @@ const CommunicationsManager: React.FC = () => {
 // --- EXPORTED MANAGEMENT COMPONENTS ---
 
 export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
+  // ... No changes here ...
   const [refresh, setRefresh] = useState(0);
   useEffect(() => store.subscribe(() => setRefresh(r => r+1)), []);
   
@@ -602,6 +603,7 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 };
 
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
+    // ... No changes needed ...
     const today = new Date().toISOString().split('T')[0];
     const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
 
@@ -730,7 +732,7 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
 };
 
 export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: LeaveRequest) => void }> = ({ currentUser, onViewRequest }) => {
-    // ... Keeping exact same logic as before, just outputting for file completeness ...
+    // ... No changes needed ...
     const [viewMode, setViewMode] = useState<'list' | 'shifts'>('list');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -922,11 +924,69 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
     const [activeTab, setActiveTab] = useState<'users' | 'depts' | 'config' | 'epis' | 'comms'>('users');
     const adminUser: User = { id: 'admin_sys', name: 'Admin', email: '', role: Role.ADMIN, departmentId: '', daysAvailable: 0, overtimeHours: 0 };
 
+    // --- Statistics Calculations ---
+    const totalEmployees = store.users.length;
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Count Absent employees today (Approved Leave Requests for today, excluding Overtime earning types)
+    const absentCount = store.users.filter(u => {
+        return store.requests.some(req => {
+            if (req.userId !== u.id) return false;
+            if (req.status !== RequestStatus.APPROVED) return false;
+            if (store.isOvertimeRequest(req.typeId)) return false; // Ensure it's absence, not working overtime
+            
+            const start = req.startDate.split('T')[0];
+            const end = req.endDate ? req.endDate.split('T')[0] : start;
+            
+            return today >= start && today <= end;
+        });
+    }).length;
+
+    const activeCount = totalEmployees - absentCount;
+    const activePercent = totalEmployees > 0 ? Math.round((activeCount / totalEmployees) * 100) : 0;
+    const absentPercent = totalEmployees > 0 ? Math.round((absentCount / totalEmployees) * 100) : 0;
+
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><Settings className="text-slate-400"/> Administración</h2>
             </div>
+
+            {/* Dashboard Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Users size={24}/></div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-500 uppercase">Total Plantilla</p>
+                        <p className="text-2xl font-black text-slate-800">{totalEmployees}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
+                    <div className="p-3 bg-green-50 text-green-600 rounded-lg relative z-10"><UserCheck size={24}/></div>
+                    <div className="relative z-10">
+                        <p className="text-sm font-bold text-slate-500 uppercase">Activos Hoy</p>
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-2xl font-black text-slate-800">{activeCount}</p>
+                            <span className="text-sm font-bold text-green-600 bg-green-50 px-1.5 rounded">{activePercent}%</span>
+                        </div>
+                    </div>
+                    {/* Progress Bar Background */}
+                    <div className="absolute bottom-0 left-0 h-1 bg-green-500" style={{ width: `${activePercent}%` }}></div>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
+                    <div className="p-3 bg-orange-50 text-orange-600 rounded-lg relative z-10"><UserMinus size={24}/></div>
+                    <div className="relative z-10">
+                        <p className="text-sm font-bold text-slate-500 uppercase">Vacaciones / Ausentes</p>
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-2xl font-black text-slate-800">{absentCount}</p>
+                            <span className="text-sm font-bold text-orange-600 bg-orange-50 px-1.5 rounded">{absentPercent}%</span>
+                        </div>
+                    </div>
+                    {/* Progress Bar Background */}
+                    <div className="absolute bottom-0 left-0 h-1 bg-orange-500" style={{ width: `${absentPercent}%` }}></div>
+                </div>
+            </div>
+
             <div className="bg-white rounded-t-2xl border-b border-slate-200 px-6 pt-4 flex gap-6 overflow-x-auto">
                 {[
                     {id: 'users', label: 'Usuarios'},
