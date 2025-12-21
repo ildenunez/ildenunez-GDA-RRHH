@@ -669,11 +669,27 @@ class Store {
     const user = this.users.find(u => u.id === request.userId);
     if (!user) return [];
     
+    // DEFINITION OF CONFLICT:
+    // Only exists if BOTH parts are "Physical Absences".
+    // If the request being checked is for earning hours (working), paying hours, or adjustments, it is not an absence.
+    const nonAbsenceTypes = [
+        RequestType.OVERTIME_EARN,      
+        RequestType.OVERTIME_PAY,       
+        RequestType.WORKED_HOLIDAY,     
+        RequestType.ADJUSTMENT_DAYS,    
+        RequestType.ADJUSTMENT_OVERTIME 
+    ];
+
+    if (nonAbsenceTypes.includes(request.typeId as RequestType)) {
+        return [];
+    }
+
     // Check conflicts with Approved requests AND Pending requests (excluding self)
-    // Only check absences, not earning overtime records
     return this.requests.filter(r => {
         if (r.id === request.id) return false;
-        if (this.isOvertimeRequest(r.typeId)) return false; 
+        
+        // If other request is non-absence, ignore it
+        if (nonAbsenceTypes.includes(r.typeId as RequestType)) return false; 
         
         // Only consider APPROVED or PENDING conflicts
         if (r.status === RequestStatus.REJECTED) return false;
