@@ -271,7 +271,10 @@ class Store {
           case RequestType.OVERTIME_SPEND_DAYS: deltaHours = -(hours || 0); break;
           case RequestType.ADJUSTMENT_DAYS: deltaDays = +(hours || 0); break; // Add/Sub based on sign
           case RequestType.ADJUSTMENT_OVERTIME: deltaHours = +(hours || 0); break; // Add/Sub based on sign
-          case RequestType.WORKED_HOLIDAY: deltaDays = +1; break; // Add 1 day
+          case RequestType.WORKED_HOLIDAY: 
+              deltaDays = +1; 
+              deltaHours = +4; 
+              break; 
       }
       return { deltaDays, deltaHours };
   }
