@@ -858,20 +858,16 @@ class Store {
     });
   }
 
-  async startNewYear() {
-      for (const u of this.users) {
-          await this.updateUserBalance(u.id, (u.daysAvailable || 0) + 31, u.overtimeHours);
-      }
-  }
-
-  async assignAnnualVacationDays(year: number) {
+  async assignAnnualVacationDays(year: number, days: number = 31) {
       const label = `Vacaciones ${year}`;
       for (const user of this.users) {
           await this.createRequest({
               typeId: RequestType.ADJUSTMENT_DAYS,
               label: label,
               startDate: new Date().toISOString(),
-              hours: 31,
+              // NOTA: 'hours' es el nombre de la columna en BD para cantidades numéricas. 
+              // Al ser tipo ADJUSTMENT_DAYS, 'calculateRequestImpact' interpreta esto como DÍAS.
+              hours: days, 
               reason: `Asignación automática anual ${year}`,
               isJustified: true,
               reportedToAdmin: false

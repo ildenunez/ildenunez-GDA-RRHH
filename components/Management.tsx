@@ -1045,16 +1045,20 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
 
     const handleAnnualAssignment = async () => {
         const nextYear = new Date().getFullYear() + 1;
-        const inputYear = prompt("Introduce el año para la asignación de vacaciones (31 días):", nextYear.toString());
+        const inputYear = prompt("Introduce el año para la asignación de vacaciones:", nextYear.toString());
         if (!inputYear) return;
-
         const year = parseInt(inputYear);
-        if (isNaN(year)) return alert("Año inválido. Debe ser un número.");
+        if (isNaN(year)) return alert("Año inválido.");
 
-        if (confirm(`¿Estás seguro de añadir 31 días de vacaciones a TODOS los empleados para el año ${year}?`)) {
+        const inputDays = prompt("Introduce los días a asignar:", "31");
+        if (!inputDays) return;
+        const days = parseFloat(inputDays);
+        if (isNaN(days)) return alert("Cantidad de días inválida.");
+
+        if (confirm(`¿Estás seguro de añadir ${days} días de vacaciones a TODOS los empleados para el año ${year}?`)) {
             setLoading(true);
             try {
-                await store.assignAnnualVacationDays(year);
+                await store.assignAnnualVacationDays(year, days);
                 alert("Asignación anual completada exitosamente.");
             } catch (error) {
                 console.error(error);
