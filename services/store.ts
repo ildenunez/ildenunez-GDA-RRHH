@@ -1,5 +1,4 @@
-
-import { User, Role, Department, LeaveRequest, RequestStatus, AppConfig, Notification, LeaveTypeConfig, EmailTemplate, ShiftType, ShiftAssignment, Holiday, PPEType, PPERequest, RequestType, OvertimeUsage } from '../types';
+import { User, Role, Department, LeaveRequest, RequestStatus, AppConfig, Notification, LeaveTypeConfig, EmailTemplate, ShiftType, ShiftAssignment, Holiday, PPEType, PPERequest, RequestType, OvertimeUsage, DateRange } from '../types';
 import { supabase } from './supabase';
 
 class Store {
@@ -80,7 +79,27 @@ class Store {
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ id: t.id, label: String(t.label || ''), subtractsDays: !!t.subtracts_days, fixedRange: t.fixed_range }));
+        
+        // Map Leave Types handling array or object for fixed_range
+        if (typesData) {
+            this.config.leaveTypes = typesData.map((t: any) => {
+                let ranges: DateRange[] = [];
+                if (Array.isArray(t.fixed_range)) {
+                    ranges = t.fixed_range;
+                } else if (t.fixed_range && typeof t.fixed_range === 'object') {
+                    // Backward compatibility for single object
+                    ranges = [t.fixed_range];
+                }
+
+                return { 
+                    id: t.id, 
+                    label: String(t.label || ''), 
+                    subtractsDays: !!t.subtracts_days, 
+                    fixedRanges: ranges
+                };
+            });
+        }
+
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData.map((s: any) => ({ id: s.id, name: String(s.name || ''), color: String(s.color || '#cccccc'), segments: s.segments || [] }));
         if (shiftAssignmentsData) this.config.shiftAssignments = shiftAssignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: String(a.date || ''), shiftTypeId: a.shift_type_id }));
         if (holidaysData) this.config.holidays = holidaysData.map((h: any) => ({ id: h.id, date: String(h.date || ''), name: String(h.name || '') }));
@@ -282,6 +301,7 @@ class Store {
   async createRequest(data: any, userId: string, status: RequestStatus = RequestStatus.PENDING) {
     let label = data.label || this.config.leaveTypes.find(t => t.id === data.typeId)?.label || data.typeId;
     const { data: inserted } = await supabase.from('requests').insert({
+      id: crypto.randomUUID(),
       user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
       hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(),
       overtime_usage: data.overtimeUsage, is_justified: data.isJustified, reported_to_admin: data.reportedToAdmin
@@ -389,6 +409,7 @@ class Store {
 
   async createUser(user: Partial<User>, password: string) {
     const { data } = await supabase.from('users').insert({
+      id: crypto.randomUUID(),
       name: user.name,
       email: user.email?.trim().toLowerCase(),
       role: user.role,
@@ -542,7 +563,10 @@ class Store {
   async deleteNotification(id: string) { await supabase.from('notifications').delete().eq('id', id); this.notifications = this.notifications.filter(n => n.id !== id); this.notify(); }
   
   async createPPERequest(userId: string, typeId: string, size: string) {
-    const { data } = await supabase.from('ppe_requests').insert({ user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() }).select().single();
+    const { data } = await supabase.from('ppe_requests').insert({ 
+      id: crypto.randomUUID(), 
+      user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() 
+    }).select().single();
     if (data) { const mapped = { id: data.id, userId: data.user_id, typeId: data.type_id, type_id: data.type_id, size: data.size, status: data.status, createdAt: data.created_at, deliveryDate: data.delivery_date }; this.config.ppeRequests.push(mapped); this.notify(); }
   }
   async deliverPPERequest(id: string) { const d = new Date().toISOString(); await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: d }).eq('id', id); const req = this.config.ppeRequests.find(r => r.id === id); if (req) { req.status = 'ENTREGADO'; req.deliveryDate = d; this.notify(); } }
@@ -551,7 +575,10 @@ class Store {
   
   // Department Methods
   async createDepartment(name: string, supervisorIds: string[]) {
-      const { data } = await supabase.from('departments').insert({ name, supervisor_ids: supervisorIds }).select().single();
+      const { data } = await supabase.from('departments').insert({ 
+        id: crypto.randomUUID(), 
+        name, supervisor_ids: supervisorIds 
+      }).select().single();
       if(data) { this.departments.push({ id: data.id, name: data.name, supervisorIds: data.supervisor_ids }); this.notify(); }
   }
   async updateDepartment(id: string, name: string, supervisorIds: string[]) {
@@ -567,27 +594,104 @@ class Store {
 
   // Holiday Methods
   async createHoliday(date: string, name: string) {
-    const { data } = await supabase.from('holidays').insert({ date, name }).select().single();
-    if (data) { this.config.holidays.push({ id: data.id, date: data.date, name: data.name }); this.notify(); }
+    const { data, error } = await supabase.from('holidays').insert({ 
+      id: crypto.randomUUID(), 
+      date, name 
+    }).select().single();
+    if (error) {
+        console.error("Error creating holiday:", error);
+        alert(`Error al guardar festivo en la base de datos: ${error.message}`);
+        return;
+    }
+    if (data) { 
+        this.config.holidays.push({ id: data.id, date: data.date, name: data.name }); 
+        this.notify(); 
+    }
   }
+
   async updateHoliday(id: string, date: string, name: string) {
-      await supabase.from('holidays').update({ date, name }).eq('id', id);
+      const { error } = await supabase.from('holidays').update({ date, name }).eq('id', id);
+      if (error) {
+          alert(`Error al actualizar festivo: ${error.message}`);
+          return;
+      }
       const h = this.config.holidays.find(ho => ho.id === id);
       if(h) { h.date = date; h.name = name; this.notify(); }
   }
+
   async deleteHoliday(id: string) {
-    await supabase.from('holidays').delete().eq('id', id);
+    const { error } = await supabase.from('holidays').delete().eq('id', id);
+    if (error) {
+        alert(`Error al eliminar festivo: ${error.message}`);
+        return;
+    }
     this.config.holidays = this.config.holidays.filter(h => h.id !== id);
     this.notify();
   }
 
   // Leave Type Methods
-  async createLeaveType(label: string, subtractsDays: boolean, fixedRange?: {startDate: string, endDate: string} | null) {
-     const { data } = await supabase.from('leave_types').insert({ label, subtracts_days: subtractsDays, fixed_range: fixedRange }).select().single();
-     if(data) { this.config.leaveTypes.push({ id: data.id, label: data.label, subtractsDays: !!data.subtracts_days, fixedRange: data.fixed_range }); this.notify(); }
+  async createLeaveType(label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) {
+     const payload = {
+         id: crypto.randomUUID(),
+         label,
+         subtracts_days: subtractsDays,
+         fixed_range: fixedRanges || null // Using the same DB column 'fixed_range' but passing an array
+     };
+
+     const { data, error } = await supabase.from('leave_types').insert(payload).select().single();
+     
+     if (error) {
+         console.error("Error creating leave type:", error);
+         alert(`Error al guardar tipo de ausencia en base de datos: ${error.message}`);
+         return;
+     }
+
+     if(data) { 
+         this.config.leaveTypes.push({ 
+             id: data.id, 
+             label: data.label, 
+             subtractsDays: !!data.subtracts_days, 
+             fixedRanges: fixedRanges || undefined
+         }); 
+         this.notify(); 
+     }
   }
+
+  async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) {
+     const payload = {
+         label,
+         subtracts_days: subtractsDays,
+         fixed_range: fixedRanges || null
+     };
+
+     const { data, error } = await supabase.from('leave_types').update(payload).eq('id', id).select().single();
+     
+     if (error) {
+         console.error("Error updating leave type:", error);
+         alert(`Error al actualizar tipo de ausencia: ${error.message}`);
+         return;
+     }
+
+     if(data) { 
+         const idx = this.config.leaveTypes.findIndex(t => t.id === id);
+         if (idx !== -1) {
+             this.config.leaveTypes[idx] = { 
+                 id: data.id, 
+                 label: data.label, 
+                 subtractsDays: !!data.subtracts_days, 
+                 fixedRanges: fixedRanges || undefined
+             };
+             this.notify();
+         }
+     }
+  }
+
   async deleteLeaveType(id: string) {
-    await supabase.from('leave_types').delete().eq('id', id);
+    const { error } = await supabase.from('leave_types').delete().eq('id', id);
+    if (error) {
+        alert(`Error al eliminar tipo de ausencia: ${error.message}`);
+        return;
+    }
     this.config.leaveTypes = this.config.leaveTypes.filter(t => t.id !== id);
     this.notify();
   }
@@ -595,21 +699,39 @@ class Store {
   // Shift Type Methods
   async createShiftType(name: string, color: string, start: string, end: string) {
     const segments = [{ start, end }];
-    const { data } = await supabase.from('shift_types').insert({ name, color, segments }).select().single();
+    const { data, error } = await supabase.from('shift_types').insert({ 
+      id: crypto.randomUUID(),
+      name, color, segments 
+    }).select().single();
+    
+    if (error) {
+        console.error("Error creating shift type:", error);
+        alert(`Error al guardar tipo de turno en base de datos: ${error.message}`);
+        return;
+    }
+
     if (data) {
         this.config.shiftTypes.push({ id: data.id, name: data.name, color: data.color, segments: data.segments });
         this.notify();
     }
   }
+
   async deleteShiftType(id: string) {
-      await supabase.from('shift_types').delete().eq('id', id);
+      const { error } = await supabase.from('shift_types').delete().eq('id', id);
+      if (error) {
+          alert(`Error al eliminar tipo de turno: ${error.message}`);
+          return;
+      }
       this.config.shiftTypes = this.config.shiftTypes.filter(s => s.id !== id);
       this.notify();
   }
 
   // PPE Type Methods
   async createPPEType(name: string, sizes: string[]) {
-      const { data } = await supabase.from('ppe_types').insert({ name, sizes }).select().single();
+      const { data } = await supabase.from('ppe_types').insert({ 
+        id: crypto.randomUUID(), 
+        name, sizes 
+      }).select().single();
       if(data) { this.config.ppeTypes.push({ id: data.id, name: data.name, sizes: data.sizes }); this.notify(); }
   }
   async updatePPEType(id: string, name: string, sizes: string[]) {
@@ -647,6 +769,7 @@ class Store {
 
   async sendMassNotification(userIds: string[], message: string) {
       const notifications = userIds.map(uid => ({
+          id: crypto.randomUUID(),
           user_id: uid,
           message,
           read: false,

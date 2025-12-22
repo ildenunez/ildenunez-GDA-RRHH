@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, EmailTemplate } from '../types';
+import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, EmailTemplate, DateRange, LeaveTypeConfig } from '../types';
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
@@ -9,7 +8,6 @@ import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileT
 // --- SUB-COMPONENTS FOR ADMIN ---
 
 const DepartmentManager: React.FC = () => {
-    // ... [Content unchanged from original file, only exported components change]
     const [departments, setDepartments] = useState(store.departments);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -103,11 +101,17 @@ const DepartmentManager: React.FC = () => {
 
 const HRConfigManager: React.FC = () => {
     const [activeModal, setActiveModal] = useState<'holiday' | 'type' | 'shift' | null>(null);
+    const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
     const [typeName, setTypeName] = useState('');
     const [typeSubtracts, setTypeSubtracts] = useState(true);
     const [isFixedDates, setIsFixedDates] = useState(false);
-    const [fixedStart, setFixedStart] = useState('');
-    const [fixedEnd, setFixedEnd] = useState('');
+    
+    // NEW: Multiple Ranges Support
+    const [tempRanges, setTempRanges] = useState<DateRange[]>([]);
+    const [newRangeStart, setNewRangeStart] = useState('');
+    const [newRangeEnd, setNewRangeEnd] = useState('');
+    const [newRangeLabel, setNewRangeLabel] = useState('');
+
     const [holidayDate, setHolidayDate] = useState('');
     const [holidayName, setHolidayName] = useState('');
     const [editingHolidayId, setEditingHolidayId] = useState<string | null>(null);
@@ -115,12 +119,59 @@ const HRConfigManager: React.FC = () => {
     const [shiftColor, setShiftColor] = useState('#3b82f6');
     const [shiftStart, setShiftStart] = useState('');
     const [shiftEnd, setShiftEnd] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const [refresh, setRefresh] = useState(0); // Add refresh trigger
+
+    useEffect(() => {
+        const unsub = store.subscribe(() => setRefresh(prev => prev + 1));
+        return unsub;
+    }, []);
+
+    const handleAddRange = () => {
+        if (!newRangeStart || !newRangeEnd) return;
+        setTempRanges([...tempRanges, { startDate: newRangeStart, endDate: newRangeEnd, label: newRangeLabel }]);
+        setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel('');
+    };
+
+    const removeRange = (idx: number) => {
+        setTempRanges(tempRanges.filter((_, i) => i !== idx));
+    };
 
     const handleSaveType = async (e: React.FormEvent) => {
         e.preventDefault();
-        const fixedRange = isFixedDates && fixedStart && fixedEnd ? { startDate: fixedStart, endDate: fixedEnd } : null;
-        await store.createLeaveType(typeName, typeSubtracts, fixedRange);
-        setActiveModal(null); setTypeName(''); setFixedStart(''); setFixedEnd(''); setIsFixedDates(false);
+        const ranges = isFixedDates ? tempRanges : undefined;
+        if (isFixedDates && tempRanges.length === 0) {
+            alert("Si activas Fechas Fijas, debes añadir al menos un rango de fechas.");
+            return;
+        }
+
+        setIsSaving(true);
+        if (editingTypeId) {
+            await store.updateLeaveType(editingTypeId, typeName, typeSubtracts, ranges);
+        } else {
+            await store.createLeaveType(typeName, typeSubtracts, ranges);
+        }
+        setIsSaving(false);
+        
+        setActiveModal(null); 
+        setTypeName(''); 
+        setIsFixedDates(false); 
+        setTempRanges([]);
+        setEditingTypeId(null);
+    };
+
+    const openEditLeaveType = (t: LeaveTypeConfig) => {
+        setEditingTypeId(t.id);
+        setTypeName(t.label);
+        setTypeSubtracts(t.subtractsDays);
+        if (t.fixedRanges && t.fixedRanges.length > 0) {
+            setIsFixedDates(true);
+            setTempRanges([...t.fixedRanges]);
+        } else {
+            setIsFixedDates(false);
+            setTempRanges([]);
+        }
+        setActiveModal('type');
     };
 
     const handleSaveHoliday = async (e: React.FormEvent) => {
@@ -154,22 +205,61 @@ const HRConfigManager: React.FC = () => {
                         <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center group">
                             <div>
                                 <div className="font-bold text-slate-800">{t.label}</div>
-                                <div className="text-xs text-slate-500 mt-1">{t.subtractsDays ? 'Resta Días' : 'No Resta'} {t.fixedRange ? '• Fechas Fijas' : ''}</div>
+                                <div className="text-xs text-slate-500 mt-1">
+                                    {t.subtractsDays ? 'Resta Días' : 'No Resta'} 
+                                    {t.fixedRanges && t.fixedRanges.length > 0 ? ` • ${t.fixedRanges.length} Rangos Fijos` : ''}
+                                </div>
                             </div>
                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => store.deleteLeaveType(t.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+                                <button onClick={() => openEditLeaveType(t)} className="text-blue-400 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16}/></button>
+                                <button onClick={() => store.deleteLeaveType(t.id)} className="text-slate-300 hover:text-red-500 p-1.5 rounded"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
                     <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6">
-                        <button onClick={() => { setActiveModal('type'); setTypeName(''); }} className="w-full text-sm font-bold text-slate-500 hover:text-blue-600 text-left">CREAR TIPO</button>
+                        <button onClick={() => { setActiveModal('type'); setTypeName(''); setTempRanges([]); setIsFixedDates(false); setEditingTypeId(null); }} className="w-full text-sm font-bold text-slate-500 hover:text-blue-600 text-left">CREAR TIPO</button>
                         {activeModal === 'type' && (
                             <form onSubmit={handleSaveType} className="mt-4 space-y-3 animate-fade-in">
+                                <h4 className="text-xs font-bold text-slate-500 mb-3 uppercase">{editingTypeId ? 'Editar Tipo' : 'Crear Tipo'}</h4>
                                 <div><label className="text-xs font-bold text-slate-500">Nombre</label><input autoFocus required className="w-full p-2 border rounded-lg text-sm" value={typeName} onChange={e=>setTypeName(e.target.value)}/></div>
                                 <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={typeSubtracts} onChange={e=>setTypeSubtracts(e.target.checked)} className="rounded text-blue-600"/> Resta días</label>
-                                <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={isFixedDates} onChange={e=>setIsFixedDates(e.target.checked)} className="rounded text-blue-600"/> Fechas Fijas</label>
-                                {isFixedDates && <div className="grid grid-cols-2 gap-2"><input type="date" required className="p-2 border rounded-lg text-xs" value={fixedStart} onChange={e=>setFixedStart(e.target.value)}/><input type="date" required className="p-2 border rounded-lg text-xs" value={fixedEnd} onChange={e=>setFixedEnd(e.target.value)}/></div>}
-                                <button className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-bold">Añadir</button>
+                                <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={isFixedDates} onChange={e=>setIsFixedDates(e.target.checked)} className="rounded text-blue-600"/> Fechas Fijas / Turnos</label>
+                                
+                                {isFixedDates && (
+                                    <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-3">
+                                        <p className="text-xs font-bold text-slate-400 uppercase">Configuración de Rangos</p>
+                                        
+                                        {/* List of added ranges */}
+                                        {tempRanges.length > 0 && (
+                                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                {tempRanges.map((r, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-xs bg-slate-50 p-1.5 rounded border border-slate-100">
+                                                        <span>{r.label ? <b>{r.label}: </b> : ''}{new Date(r.startDate).toLocaleDateString()} - {new Date(r.endDate).toLocaleDateString()}</span>
+                                                        <button type="button" onClick={() => removeRange(idx)} className="text-red-400 hover:text-red-600"><X size={12}/></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Add Range Inputs */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="text" placeholder="Etiqueta (Opcional)" className="col-span-2 p-2 border rounded text-xs" value={newRangeLabel} onChange={e => setNewRangeLabel(e.target.value)}/>
+                                            <input type="date" className="p-2 border rounded text-xs" value={newRangeStart} onChange={e => setNewRangeStart(e.target.value)}/>
+                                            <input type="date" className="p-2 border rounded text-xs" value={newRangeEnd} onChange={e => setNewRangeEnd(e.target.value)}/>
+                                        </div>
+                                        <button type="button" onClick={handleAddRange} disabled={!newRangeStart || !newRangeEnd} className="w-full bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold hover:bg-slate-200 disabled:opacity-50">
+                                            + Añadir Rango
+                                        </button>
+                                    </div>
+                                )}
+
+                                <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-bold flex justify-center items-center gap-2">
+                                    {isSaving && <Loader2 className="animate-spin" size={16}/>}
+                                    {isSaving ? 'Guardando...' : (editingTypeId ? 'Actualizar Tipo' : 'Crear Tipo de Ausencia')}
+                                </button>
+                                {editingTypeId && (
+                                    <button type="button" onClick={() => { setActiveModal(null); setEditingTypeId(null); setTypeName(''); }} className="w-full text-xs text-slate-500 underline mt-2 text-center">Cancelar Edición</button>
+                                )}
                             </form>
                         )}
                     </div>

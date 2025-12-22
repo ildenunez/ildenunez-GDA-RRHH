@@ -11,14 +11,17 @@ export enum RequestStatus {
   REJECTED = 'RECHAZADO'
 }
 
+export interface DateRange {
+  startDate: string;
+  endDate: string;
+  label?: string; // Optional label for the specific range (e.g., "Turno 1")
+}
+
 export interface LeaveTypeConfig {
   id: string;
   label: string;
   subtractsDays: boolean;
-  fixedRange?: {
-    startDate: string;
-    endDate: string;
-  } | null;
+  fixedRanges?: DateRange[]; // Changed from single object to array
 }
 
 export enum RequestType {

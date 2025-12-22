@@ -1,4 +1,5 @@
-import React, { useState, useEffect, ReactNode, Component, ErrorInfo } from 'react';
+
+import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest } from './types';
 import Dashboard from './components/Dashboard';

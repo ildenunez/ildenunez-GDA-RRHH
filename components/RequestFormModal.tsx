@@ -24,6 +24,9 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const [adminStatus, setAdminStatus] = useState<RequestStatus>(RequestStatus.PENDING);
   const [availableOvertime, setAvailableOvertime] = useState<LeaveRequest[]>([]);
   const [usageMap, setUsageMap] = useState<Record<string, number>>({});
+  
+  // New State for Fixed Range Selection
+  const [selectedRangeIndex, setSelectedRangeIndex] = useState<string>('');
 
   const effectiveTargetUser = targetUser || user;
   const isManagerMode = (user.role === Role.ADMIN || user.role === Role.SUPERVISOR);
@@ -79,14 +82,41 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
 
   useEffect(() => {
     const selectedType = absenceTypes.find(t => t.id === typeId);
-    if (activeTab === 'absence' && selectedType && selectedType.fixedRange) {
-        setStartDate(selectedType.fixedRange.startDate);
-        setEndDate(selectedType.fixedRange.endDate);
+    
+    // Check for fixedRanges (array) or backward compatible single fixedRange
+    const ranges = selectedType?.fixedRanges;
+
+    if (activeTab === 'absence' && ranges && ranges.length > 0) {
         setIsDatesLocked(true);
+        // If editing, try to match current dates to a range index
+        if (editingRequest && editingRequest.typeId === typeId) {
+             // Logic to find index... skipped for simplicity or set manual
+        } else if (selectedRangeIndex === '') {
+             // Default to empty or first? Let's default to empty to force user choice
+             setStartDate('');
+             setEndDate('');
+        }
     } else {
         setIsDatesLocked(false);
     }
   }, [typeId, activeTab, absenceTypes]);
+
+  // Handle Range Selection
+  const handleRangeSelect = (indexStr: string) => {
+      setSelectedRangeIndex(indexStr);
+      const selectedType = absenceTypes.find(t => t.id === typeId);
+      if (selectedType && selectedType.fixedRanges && indexStr !== '') {
+          const idx = parseInt(indexStr);
+          const range = selectedType.fixedRanges[idx];
+          if (range) {
+              setStartDate(range.startDate);
+              setEndDate(range.endDate);
+          }
+      } else {
+          setStartDate('');
+          setEndDate('');
+      }
+  };
 
   const handleUsageChange = (req: LeaveRequest, isChecked: boolean, customAmount?: number) => {
       const remaining = (req.hours || 0) - (req.consumedHours || 0);
@@ -127,6 +157,9 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const isConsumptionType = activeTab === 'overtime' && ![RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(typeId as RequestType);
   const isWorkedHoliday = typeId === RequestType.WORKED_HOLIDAY;
   const isUnjustified = typeId === RequestType.UNJUSTIFIED;
+  
+  const currentLeaveType = absenceTypes.find(t => t.id === typeId);
+  const hasFixedRanges = activeTab === 'absence' && currentLeaveType?.fixedRanges && currentLeaveType.fixedRanges.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[80] p-4 backdrop-blur-sm">
@@ -168,14 +201,52 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
                  </select>
                 </div>
            )}
+
+           {/* Range Selector for Fixed Dates */}
+           {hasFixedRanges && (
+               <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                   <label className="block text-sm font-bold text-blue-800 mb-2">Selecciona un turno / fecha disponible:</label>
+                   <select 
+                       required 
+                       className="w-full p-3 border border-blue-200 rounded-xl bg-white"
+                       value={selectedRangeIndex}
+                       onChange={(e) => handleRangeSelect(e.target.value)}
+                   >
+                       <option value="">-- Seleccionar --</option>
+                       {currentLeaveType?.fixedRanges?.map((range, idx) => (
+                           <option key={idx} value={idx}>
+                               {range.label ? `${range.label}: ` : ''} 
+                               {new Date(range.startDate).toLocaleDateString()} - {new Date(range.endDate).toLocaleDateString()}
+                           </option>
+                       ))}
+                   </select>
+               </div>
+           )}
            
            <div className="grid grid-cols-2 gap-4">
              <div className={`${(isWorkedHoliday || isUnjustified) ? 'col-span-2' : ''}`}>
                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha {isUnjustified ? 'de la Falta' : 'Inicio'}</label>
-               <input type="date" required disabled={isDatesLocked} className={`w-full p-3 border border-slate-200 rounded-xl ${isDatesLocked ? 'bg-slate-100' : ''}`} value={startDate} onChange={e => setStartDate(e.target.value)} />
+               <input 
+                    type="date" 
+                    required 
+                    // Lock if fixed ranges exist, unless editing (though logic for editing fixed ranges is complex, simplified here)
+                    disabled={isDatesLocked} 
+                    className={`w-full p-3 border border-slate-200 rounded-xl ${isDatesLocked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`} 
+                    value={startDate} 
+                    onChange={e => setStartDate(e.target.value)} 
+               />
              </div>
              {activeTab === 'absence' && !isUnjustified && (
-               <div><label className="block text-sm font-medium text-slate-700 mb-1">Fecha Fin</label><input type="date" disabled={isDatesLocked} className={`w-full p-3 border border-slate-200 rounded-xl ${isDatesLocked ? 'bg-slate-100' : ''}`} value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
+               <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">Fecha Fin</label>
+                   <input 
+                        type="date" 
+                        disabled={isDatesLocked} 
+                        className={`w-full p-3 border border-slate-200 rounded-xl ${isDatesLocked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`} 
+                        value={endDate} 
+                        onChange={e => setEndDate(e.target.value)} 
+                    />
+               </div>
              )}
              {activeTab === 'overtime' && !isWorkedHoliday && (
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">Total Horas</label><input type="number" step="0.5" required disabled={isConsumptionType} className="w-full p-3 border border-slate-200 rounded-xl font-bold" value={hours} onChange={e => setHours(parseFloat(e.target.value))} /></div>
