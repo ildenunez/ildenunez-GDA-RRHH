@@ -791,13 +791,44 @@ class Store {
       }
   }
 
+  async sendTestEmail(to: string) {
+      // Validate settings locally first
+      if (!this.config.smtpSettings.host || !this.config.smtpSettings.user) {
+          throw new Error("Faltan datos de configuración SMTP. Guarda la configuración antes de probar.");
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke('send-test-email', {
+            body: {
+                to: to,
+                config: this.config.smtpSettings // Fixed: Sending 'config' to match edge function expectations
+            }
+        });
+
+        if (error) {
+            if (error.message && error.message.includes("Failed to send a request")) {
+                 throw new Error("No se pudo contactar con la Edge Function. Verifica que 'send-test-email' esté desplegada.");
+            }
+            throw new Error(error.message);
+        }
+
+        if (data && !data.success) {
+            // Updated to catch 'error' field which comes from the provided edge function code
+            const msg = data.error || data.message || JSON.stringify(data);
+            throw new Error("Respuesta del servidor: " + msg);
+        }
+
+        return true;
+      } catch (err: any) {
+          console.error("Email Test Error:", err);
+          throw new Error(err.message || "Error desconocido al enviar el email.");
+      }
+  }
+
   getRequestConflicts(request: LeaveRequest) {
     const user = this.users.find(u => u.id === request.userId);
     if (!user) return [];
     
-    // DEFINITION OF CONFLICT:
-    // Only exists if BOTH parts are "Physical Absences".
-    // If the request being checked is for earning hours (working), paying hours, or adjustments, it is not an absence.
     const nonAbsenceTypes = [
         RequestType.OVERTIME_EARN,      
         RequestType.OVERTIME_PAY,       
@@ -810,14 +841,9 @@ class Store {
         return [];
     }
 
-    // Check conflicts with Approved requests AND Pending requests (excluding self)
     return this.requests.filter(r => {
         if (r.id === request.id) return false;
-        
-        // If other request is non-absence, ignore it
         if (nonAbsenceTypes.includes(r.typeId as RequestType)) return false; 
-        
-        // Only consider APPROVED or PENDING conflicts
         if (r.status === RequestStatus.REJECTED) return false;
 
         const otherUser = this.users.find(u => u.id === r.userId);
@@ -840,13 +866,12 @@ class Store {
 
   async assignAnnualVacationDays(year: number) {
       const label = `Vacaciones ${year}`;
-      // Use sequential creation to ensure integrity and state updates
       for (const user of this.users) {
           await this.createRequest({
               typeId: RequestType.ADJUSTMENT_DAYS,
               label: label,
               startDate: new Date().toISOString(),
-              hours: 31, // Positive hours in adjustment adds days
+              hours: 31,
               reason: `Asignación automática anual ${year}`,
               isJustified: true,
               reportedToAdmin: false

@@ -3,7 +3,7 @@ import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, Email
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
-import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus } from 'lucide-react';
+import { Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus, Terminal } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR ADMIN ---
 
@@ -384,7 +384,6 @@ const PPEConfigManager: React.FC = () => {
 };
 
 const CommunicationsManager: React.FC = () => {
-    // ... [Same Content]
     const [subTab, setSubTab] = useState<'templates' | 'smtp' | 'message'>('templates');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('request_created');
     const [tempTemplates, setTempTemplates] = useState<EmailTemplate[]>(store.config.emailTemplates);
@@ -392,6 +391,12 @@ const CommunicationsManager: React.FC = () => {
     const [msgBody, setMsgBody] = useState('');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
+    
+    // New State for Email Test and Logs
+    const [testEmail, setTestEmail] = useState('');
+    const [isTesting, setIsTesting] = useState(false);
+    const [testLogs, setTestLogs] = useState<string[]>([]);
+    const [showDebug, setShowDebug] = useState(false);
 
     const activeTemplate = tempTemplates.find(t => t.id === selectedTemplateId) || tempTemplates[0];
 
@@ -412,6 +417,51 @@ const CommunicationsManager: React.FC = () => {
         e.preventDefault();
         await store.saveSmtpSettings(smtp);
         alert('Configuración SMTP guardada.');
+    };
+
+    const addLog = (msg: string) => {
+        setTestLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    };
+
+    const handleTestConnection = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        if(!testEmail) return alert("Introduce un email para la prueba.");
+        
+        setIsTesting(true);
+        setShowDebug(true);
+        setTestLogs([]); // Clear logs
+        addLog("Iniciando prueba de conexión...");
+        addLog(`Destinatario: ${testEmail}`);
+        addLog(`Configuración SMTP Local: Host=${smtp.host}, Port=${smtp.port}, User=${smtp.user}`);
+        addLog("Validando configuración local...");
+
+        if (!smtp.host || !smtp.user || !smtp.password) {
+            addLog("❌ Error: Faltan datos en la configuración (Host, Usuario o Contraseña).");
+            setIsTesting(false);
+            return;
+        }
+
+        try {
+            addLog("Enviando petición a Supabase Edge Function 'send-test-email'...");
+            await store.sendTestEmail(testEmail);
+            addLog("✅ Éxito: La Edge Function procesó el envío correctamente.");
+            addLog("El correo debería llegar a la bandeja de entrada en breves instantes.");
+        } catch (err: any) {
+            addLog("❌ ERROR DETECTADO:");
+            addLog(err.message);
+            
+            if (err.message.includes("Function not found") || err.message.includes("network error")) {
+                addLog("⚠️ DIAGNÓSTICO: La Edge Function no está desplegada o no es accesible.");
+                addLog("SOLUCIÓN REQUERIDA: Ejecuta en tu terminal:");
+                addLog("> supabase functions deploy send-test-email --no-verify-jwt");
+            } else {
+                 addLog("⚠️ DIAGNÓSTICO: Error devuelto por el servidor de correo o la función.");
+                 addLog("Revisa si la contraseña es correcta (usa App Password si es Gmail).");
+            }
+        } finally {
+            setIsTesting(false);
+            addLog("--- Fin del proceso de prueba ---");
+        }
     };
 
     const handleSendMessage = async () => {
@@ -525,9 +575,8 @@ const CommunicationsManager: React.FC = () => {
                         </div>
                     </div>
                 )}
-                {/* SMTP and Message tabs remain same ... */}
                 {subTab === 'smtp' && (
-                    <div className="p-8 animate-fade-in max-w-lg mx-auto w-full">
+                    <div className="p-8 animate-fade-in max-w-lg mx-auto w-full overflow-y-auto">
                         <h2 className="text-lg font-bold text-slate-800 mb-6 text-center">Configuración SMTP</h2>
                         <form onSubmit={handleSaveSmtp} className="space-y-4">
                             <div>
@@ -560,6 +609,53 @@ const CommunicationsManager: React.FC = () => {
                                 </button>
                             </div>
                         </form>
+
+                        {/* Prueba de Conexión Section */}
+                        <div className="mt-8 pt-6 border-t border-slate-200">
+                            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <Send size={16}/> Prueba de Conexión
+                            </h3>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="email" 
+                                    placeholder="email@ejemplo.com" 
+                                    className="flex-1 p-3 border rounded-xl text-sm"
+                                    value={testEmail}
+                                    onChange={e => setTestEmail(e.target.value)}
+                                />
+                                <button 
+                                    onClick={handleTestConnection} 
+                                    disabled={isTesting}
+                                    className="bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-900 disabled:opacity-50"
+                                >
+                                    {isTesting ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
+                                    Probar
+                                </button>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-2 mb-4">
+                                Se intentará enviar un email de prueba usando la configuración actual.
+                            </p>
+
+                            {/* DEBUG TERMINAL */}
+                            {showDebug && (
+                                <div className="bg-slate-900 text-green-400 p-4 rounded-xl font-mono text-xs overflow-y-auto max-h-60 border border-slate-700 shadow-inner">
+                                    <div className="flex items-center gap-2 border-b border-slate-700 pb-2 mb-2 text-slate-400">
+                                        <Terminal size={14}/> Console Log
+                                    </div>
+                                    <div className="space-y-1">
+                                        {testLogs.map((log, i) => (
+                                            <div key={i} className="break-words">
+                                                <span className="opacity-50 mr-2">{log.split(']')[0]}]</span>
+                                                <span className={log.includes('❌') || log.includes('⚠️') ? 'text-red-400 font-bold' : ''}>
+                                                    {log.split(']').slice(1).join(']')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {isTesting && <div className="animate-pulse">_</div>}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
