@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, ReactNode, ErrorInfo, Component } from 'react';
 import { store } from './services/store';
-import { User, Role, LeaveRequest } from './types';
+import { User, Role, LeaveRequest, Notification } from './types';
 import Dashboard from './components/Dashboard';
 import { Approvals, UserManagement, UpcomingAbsences, AdminSettings } from './components/Management';
 import CalendarView from './components/CalendarView';
@@ -10,6 +11,7 @@ import RequestDetailModal from './components/RequestDetailModal';
 import RequestFormModal from './components/RequestFormModal';
 import HelpView from './components/HelpView';
 import PPEView from './components/PPEView';
+import UnreadNotificationsModal from './components/UnreadNotificationsModal';
 import { 
   LayoutDashboard, 
   CalendarDays, 
@@ -140,6 +142,9 @@ export default function App() {
   const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null);
   const [viewingRequest, setViewingRequest] = useState<LeaveRequest | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Nuevo: Estado para manejar notificaciones no leídas al iniciar
+  const [unreadToModal, setUnreadToModal] = useState<Notification | null>(null);
 
   useEffect(() => {
     const initApp = async () => {
@@ -163,6 +168,17 @@ export default function App() {
     });
     return unsubscribe;
   }, [user?.id]);
+
+  // Nuevo: Efecto para detectar notificaciones sin leer y mostrarlas en el modal
+  useEffect(() => {
+    if (user && !unreadToModal) {
+      const allNotifs = store.getNotificationsForUser(user.id);
+      const firstUnread = allNotifs.find(n => !n.read);
+      if (firstUnread) {
+        setUnreadToModal(firstUnread);
+      }
+    }
+  }, [user, user?.id, store.notifications]);
 
   if (initializing) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
@@ -256,6 +272,14 @@ export default function App() {
         </div>
         {showRequestModal && <RequestFormModal onClose={() => setShowRequestModal(false)} user={user} initialTab={modalInitialTab} editingRequest={editingRequest} />}
         {viewingRequest && <RequestDetailModal request={viewingRequest} onClose={() => setViewingRequest(null)} />}
+        
+        {/* Modal de Mensaje Administrativo */}
+        {unreadToModal && (
+          <UnreadNotificationsModal 
+            notification={unreadToModal} 
+            onClose={() => setUnreadToModal(null)} 
+          />
+        )}
       </main>
     </div>
   );
