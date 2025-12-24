@@ -65,21 +65,35 @@
       @media print {
         @page { 
           size: portrait; 
-          margin: 0; 
+          margin: 15mm; 
         }
         
+        /* Reset radical de contenedores para impresión multi-página */
+        html, body, #root, #root > div, main {
+          height: auto !important;
+          overflow: visible !important;
+          display: block !important;
+          position: static !important;
+        }
+
+        /* Desactivar el scroll interno de los contenedores de la App */
+        div[class*="overflow-auto"], 
+        div[class*="overflow-y-auto"],
+        div[class*="h-screen"],
+        main > div {
+          height: auto !important;
+          overflow: visible !important;
+          display: block !important;
+          max-height: none !important;
+        }
+
         body {
           background: white !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        html, body, #root, main {
-          height: auto !important;
-          overflow: visible !important;
-        }
-
-        aside, header, nav, .print-hidden, .bg-black\/60 { 
+        aside, header, nav, .print-hidden, button { 
           display: none !important; 
         }
         
@@ -94,12 +108,13 @@
         .bg-slate-900 { background: #0f172a !important; }
         .text-white { color: white !important; }
         
-        .rounded-3xl { border-radius: 0 !important; }
-        .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+        .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 8px !important; }
+        .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
 
         section {
-          break-inside: avoid;
+          break-inside: avoid-page;
           page-break-inside: avoid;
+          margin-bottom: 20px;
         }
 
         .print\:break-after-page {
@@ -109,6 +124,12 @@
 
         .print\:min-h-screen {
           min-height: 100vh !important;
+        }
+        
+        /* Forzar que el manual ocupe todo el ancho */
+        .max-w-5xl {
+          max-width: none !important;
+          width: 100% !important;
         }
       }
     </style>
