@@ -106,8 +106,9 @@ const HRConfigManager: React.FC = () => {
     const [typeSubtracts, setTypeSubtracts] = useState(true);
     const [isFixedDates, setIsFixedDates] = useState(false);
     
-    // NEW: Multiple Ranges Support
+    // NEW: Multiple Ranges Support and Editing
     const [tempRanges, setTempRanges] = useState<DateRange[]>([]);
+    const [editingRangeIdx, setEditingRangeIdx] = useState<number | null>(null);
     const [newRangeStart, setNewRangeStart] = useState('');
     const [newRangeEnd, setNewRangeEnd] = useState('');
     const [newRangeLabel, setNewRangeLabel] = useState('');
@@ -120,21 +121,54 @@ const HRConfigManager: React.FC = () => {
     const [shiftStart, setShiftStart] = useState('');
     const [shiftEnd, setShiftEnd] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-    const [refresh, setRefresh] = useState(0); // Add refresh trigger
+    const [refresh, setRefresh] = useState(0); 
 
     useEffect(() => {
         const unsub = store.subscribe(() => setRefresh(prev => prev + 1));
         return unsub;
     }, []);
 
+    const calculateDaysInRange = (start: string, end: string) => {
+        if (!start || !end) return 0;
+        const s = new Date(start);
+        const e = new Date(end);
+        s.setHours(0,0,0,0);
+        e.setHours(0,0,0,0);
+        const diffTime = Math.abs(e.getTime() - s.getTime());
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    };
+
     const handleAddRange = () => {
         if (!newRangeStart || !newRangeEnd) return;
-        setTempRanges([...tempRanges, { startDate: newRangeStart, endDate: newRangeEnd, label: newRangeLabel }]);
+        
+        const newRange: DateRange = { startDate: newRangeStart, endDate: newRangeEnd, label: newRangeLabel };
+        
+        if (editingRangeIdx !== null) {
+            const updated = [...tempRanges];
+            updated[editingRangeIdx] = newRange;
+            setTempRanges(updated);
+            setEditingRangeIdx(null);
+        } else {
+            setTempRanges([...tempRanges, newRange]);
+        }
+        
         setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel('');
     };
 
     const removeRange = (idx: number) => {
         setTempRanges(tempRanges.filter((_, i) => i !== idx));
+        if (editingRangeIdx === idx) {
+            setEditingRangeIdx(null);
+            setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel('');
+        }
+    };
+
+    const startEditRange = (idx: number) => {
+        const range = tempRanges[idx];
+        setEditingRangeIdx(idx);
+        setNewRangeLabel(range.label || '');
+        setNewRangeStart(range.startDate);
+        setNewRangeEnd(range.endDate);
     };
 
     const handleSaveType = async (e: React.FormEvent) => {
@@ -158,6 +192,7 @@ const HRConfigManager: React.FC = () => {
         setIsFixedDates(false); 
         setTempRanges([]);
         setEditingTypeId(null);
+        setEditingRangeIdx(null);
     };
 
     const openEditLeaveType = (t: LeaveTypeConfig) => {
@@ -226,34 +261,79 @@ const HRConfigManager: React.FC = () => {
                                 <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={isFixedDates} onChange={e=>setIsFixedDates(e.target.checked)} className="rounded text-blue-600"/> Fechas Fijas / Turnos</label>
                                 
                                 {isFixedDates && (
-                                    <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-3">
-                                        <p className="text-xs font-bold text-slate-400 uppercase">Configuración de Rangos</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+                                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Gestión de Franjas Vacacionales</p>
                                         
-                                        {/* List of added ranges */}
+                                        {/* List of added ranges in a detailed table format */}
                                         {tempRanges.length > 0 && (
-                                            <div className="space-y-1 max-h-32 overflow-y-auto">
-                                                {tempRanges.map((r, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center text-xs bg-slate-50 p-1.5 rounded border border-slate-100">
-                                                        <span>{r.label ? <b>{r.label}: </b> : ''}{new Date(r.startDate).toLocaleDateString()} - {new Date(r.endDate).toLocaleDateString()}</span>
-                                                        <button type="button" onClick={() => removeRange(idx)} className="text-red-400 hover:text-red-600"><X size={12}/></button>
-                                                    </div>
-                                                ))}
+                                            <div className="overflow-hidden border border-slate-100 rounded-lg">
+                                                <table className="w-full text-left text-[10px]">
+                                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase">
+                                                        <tr>
+                                                            <th className="p-2">Nombre/Días</th>
+                                                            <th className="p-2">Rango</th>
+                                                            <th className="p-2 text-right">Acciones</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {tempRanges.map((r, idx) => {
+                                                            const days = calculateDaysInRange(r.startDate, r.endDate);
+                                                            return (
+                                                                <tr key={idx} className={`hover:bg-slate-50 transition-colors ${editingRangeIdx === idx ? 'bg-blue-50/50' : ''}`}>
+                                                                    <td className="p-2">
+                                                                        <div className="font-bold text-slate-700">{r.label || 'S/N'}</div>
+                                                                        <div className="text-blue-600 font-bold">{days} {days === 1 ? 'día' : 'días'}</div>
+                                                                    </td>
+                                                                    <td className="p-2 text-slate-500 whitespace-nowrap">
+                                                                        {new Date(r.startDate).toLocaleDateString()} al<br/>
+                                                                        {new Date(r.endDate).toLocaleDateString()}
+                                                                    </td>
+                                                                    <td className="p-2 text-right">
+                                                                        <div className="flex justify-end gap-1">
+                                                                            <button type="button" onClick={() => startEditRange(idx)} className="text-blue-500 hover:bg-white p-1 rounded shadow-sm"><Edit2 size={12}/></button>
+                                                                            <button type="button" onClick={() => removeRange(idx)} className="text-red-400 hover:bg-white p-1 rounded shadow-sm"><X size={12}/></button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         )}
 
-                                        {/* Add Range Inputs */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <input type="text" placeholder="Etiqueta (Opcional)" className="col-span-2 p-2 border rounded text-xs" value={newRangeLabel} onChange={e => setNewRangeLabel(e.target.value)}/>
-                                            <input type="date" className="p-2 border rounded text-xs" value={newRangeStart} onChange={e => setNewRangeStart(e.target.value)}/>
-                                            <input type="date" className="p-2 border rounded text-xs" value={newRangeEnd} onChange={e => setNewRangeEnd(e.target.value)}/>
+                                        {/* Form to add/update range */}
+                                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase">{editingRangeIdx !== null ? 'Editando Franja' : 'Nueva Franja'}</span>
+                                                {editingRangeIdx !== null && (
+                                                    <button type="button" onClick={() => { setEditingRangeIdx(null); setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel(''); }} className="text-[10px] text-red-500 font-bold underline">Cancelar</button>
+                                                )}
+                                            </div>
+                                            <input type="text" placeholder="Nombre de la franja (ej: Turno A)" className="w-full p-2 border rounded text-xs" value={newRangeLabel} onChange={e => setNewRangeLabel(e.target.value)}/>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase">Inicio</label>
+                                                    <input type="date" className="w-full p-2 border rounded text-xs" value={newRangeStart} onChange={e => setNewRangeStart(e.target.value)}/>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase">Fin</label>
+                                                    <input type="date" className="w-full p-2 border rounded text-xs" value={newRangeEnd} onChange={e => setNewRangeEnd(e.target.value)}/>
+                                                </div>
+                                            </div>
+                                            {newRangeStart && newRangeEnd && (
+                                                <div className="text-center text-xs font-bold text-blue-600 bg-blue-50 py-1 rounded">
+                                                    Días calculados: {calculateDaysInRange(newRangeStart, newRangeEnd)}
+                                                </div>
+                                            )}
+                                            <button type="button" onClick={handleAddRange} disabled={!newRangeStart || !newRangeEnd} className={`w-full py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${editingRangeIdx !== null ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-800 text-white hover:bg-slate-900'} disabled:opacity-50`}>
+                                                {editingRangeIdx !== null ? 'Actualizar Franja' : '+ Añadir a la lista'}
+                                            </button>
                                         </div>
-                                        <button type="button" onClick={handleAddRange} disabled={!newRangeStart || !newRangeEnd} className="w-full bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold hover:bg-slate-200 disabled:opacity-50">
-                                            + Añadir Rango
-                                        </button>
                                     </div>
                                 )}
 
-                                <button type="submit" disabled={isSaving} className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-bold flex justify-center items-center gap-2">
+                                <button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-blue-500/20">
                                     {isSaving && <Loader2 className="animate-spin" size={16}/>}
                                     {isSaving ? 'Guardando...' : (editingTypeId ? 'Actualizar Tipo' : 'Crear Tipo de Ausencia')}
                                 </button>
@@ -969,7 +1049,6 @@ export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: Leave
 };
 
 export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: LeaveRequest) => void }> = ({ currentUser, onViewRequest }) => {
-    // ... [Content]
     const [viewMode, setViewMode] = useState<'list' | 'shifts'>('list');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -994,11 +1073,11 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
         if (filterDept) filtered = filtered.filter(u => u.departmentId === filterDept);
         if (searchTerm) filtered = filtered.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase()));
         return filtered.sort((a, b) => a.name.localeCompare(b.name));
-    }, [currentUser, store.users, searchTerm, filterDept, refreshTick]);
+    }, [currentUser, searchTerm, filterDept, refreshTick]);
 
     const editingUserRequests = useMemo(() => {
         return editingUser.id ? store.requests.filter(r => r.userId === editingUser.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt)) : [];
-    }, [editingUser.id, store.requests.length, refreshTick]);
+    }, [editingUser.id, refreshTick]);
 
     const handleSaveUser = async (e: React.FormEvent) => {
         e.preventDefault();
