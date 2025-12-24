@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -25,6 +25,7 @@
               'fade-in': 'fadeIn 0.5s ease-out',
               'fade-in-up': 'fadeInUp 0.5s ease-out',
               'scale-in': 'scaleIn 0.3s ease-out',
+              'bounce-slow': 'bounce 3s infinite',
             },
             keyframes: {
               fadeIn: {
@@ -63,39 +64,52 @@
 
       @media print {
         @page { 
-          size: landscape; 
-          margin: 15mm; 
+          size: portrait; 
+          margin: 0; 
         }
         
-        /* Reset containers to allow full page printing */
-        html, body, #root, main, .overflow-auto {
-          height: auto !important;
-          overflow: visible !important;
+        body {
           background: white !important;
-        }
-
-        /* Hide UI elements */
-        aside, header, button:not(.print-button) { 
-          display: none !important; 
-        }
-        
-        /* Targeted hiding for SPA structure */
-        body > div#root > div > div > aside { display: none !important; }
-        body > div#root > div > main > header { display: none !important; }
-
-        /* Ensure modals and content take full width */
-        .fixed { position: absolute; z-index: 9999; }
-        .min-h-screen { min-height: 0 !important; }
-        
-        /* Force background graphics */
-        * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
+
+        html, body, #root, main {
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        aside, header, nav, .print-hidden, .bg-black\/60 { 
+          display: none !important; 
+        }
         
-        /* Table enhancements for print */
-        table { width: 100% !important; border-collapse: collapse !important; }
-        th, td { border: 1px solid #e2e8f0 !important; }
+        main {
+          margin-left: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+        }
+
+        .bg-white { background: white !important; }
+        .bg-slate-50 { background: #f8fafc !important; }
+        .bg-slate-900 { background: #0f172a !important; }
+        .text-white { color: white !important; }
+        
+        .rounded-3xl { border-radius: 0 !important; }
+        .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+
+        section {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+
+        .print\:break-after-page {
+          break-after: page;
+          page-break-after: always;
+        }
+
+        .print\:min-h-screen {
+          min-height: 100vh !important;
+        }
       }
     </style>
   <script type="importmap">
@@ -110,8 +124,8 @@
     "react-dom": "https://esm.sh/react-dom@19.0.0?deps=react@19.0.0",
     "recharts": "https://esm.sh/recharts@2.12.7?deps=react@19.0.0,react-dom@19.0.0",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.7",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>

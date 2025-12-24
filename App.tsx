@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode, ErrorInfo } from 'react';
+import React, { useState, useEffect, ReactNode, ErrorInfo, Component } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest } from './types';
 import Dashboard from './components/Dashboard';
@@ -40,10 +40,12 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Explicitly extending Component and declaring state property to resolve inheritance visibility issues in TypeScript
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = { hasError: false, error: null };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error) {
@@ -111,7 +113,7 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
              <img src={LOGO_URL} alt="GdA RRHH" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-800">GdA <span className="text-blue-600">RRHH</span></h1>
-          <p className="text-slate-500 font-medium">Portal del Empleado</p>
+          <p className="text-slate-500 font-medium">Portal del Empleado by Ilde Núñez</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
