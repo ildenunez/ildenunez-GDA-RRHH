@@ -4,7 +4,7 @@ import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, Email
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
-import { User as UserIcon, Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus, Terminal, Megaphone, History } from 'lucide-react';
+import { User as UserIcon, Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus, Terminal, Megaphone, History, Palmtree } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR ADMIN ---
 
@@ -639,11 +639,75 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
 
 export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => void }> = ({ onViewRequest }) => {
     const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm'>('users');
+    const [refresh, setRefresh] = useState(0);
     const currentUser = store.currentUser!;
+
+    useEffect(() => {
+        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
+        return unsubscribe;
+    }, []);
+
+    const stats = useMemo(() => {
+        const total = store.users.length;
+        
+        // Obtenemos la fecha de hoy en formato local YYYY-MM-DD para comparación segura
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${y}-${m}-${d}`;
+
+        const absentCount = store.users.filter(u => 
+            store.requests.some(r => {
+                // Debe ser del mismo usuario y estar aprobada
+                if (r.userId !== u.id || r.status !== RequestStatus.APPROVED) return false;
+                
+                // Excluimos registros de horas extra o ajustes que no implican ausencia física
+                if (store.isOvertimeRequest(r.typeId)) return false;
+                if (r.typeId === RequestType.ADJUSTMENT_DAYS || r.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
+
+                // Extraemos solo la parte YYYY-MM-DD de las fechas de la solicitud
+                const startStr = r.startDate.split('T')[0];
+                const endStr = (r.endDate || r.startDate).split('T')[0];
+
+                // Comprobamos si el día de hoy cae dentro del rango (inclusive)
+                return todayStr >= startStr && todayStr <= endStr;
+            })
+        ).length;
+
+        const percent = total > 0 ? ((absentCount / total) * 100).toFixed(1) : "0";
+        return { total, absent: absentCount, percent };
+    }, [refresh, store.users, store.requests]);
     
     return (
         <div className="space-y-6 animate-fade-in">
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Settings className="text-blue-600"/> Administración del Sistema</h2>
+            
+            {/* Estadísticas de Administración */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
+                    <div className="bg-blue-50 p-4 rounded-xl text-blue-600 group-hover:scale-110 transition-transform"><Users size={32}/></div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Empleados</p>
+                        <h4 className="text-3xl font-black text-slate-800">{stats.total}</h4>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
+                    <div className="bg-orange-50 p-4 rounded-xl text-orange-600 group-hover:scale-110 transition-transform"><Palmtree size={32}/></div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Ausencias Hoy</p>
+                        <h4 className="text-3xl font-black text-slate-800">{stats.absent}</h4>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
+                    <div className="bg-purple-50 p-4 rounded-xl text-purple-600 group-hover:scale-110 transition-transform"><TrendingUp size={32}/></div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">% Plantilla Ausente</p>
+                        <h4 className="text-3xl font-black text-slate-800">{stats.percent}%</h4>
+                    </div>
+                </div>
+            </div>
+
             <div className="flex flex-wrap gap-2 border-b border-slate-200">
                 <button onClick={() => setAdminTab('users')} className={`px-4 py-3 font-bold text-sm transition-all border-b-2 ${adminTab === 'users' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Usuarios</button>
                 <button onClick={() => setAdminTab('depts')} className={`px-4 py-3 font-bold text-sm transition-all border-b-2 ${adminTab === 'depts' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Dptos</button>
