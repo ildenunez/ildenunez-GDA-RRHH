@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, RequestStatus, LeaveRequest, RequestType } from '../types';
+import { User, RequestStatus, LeaveRequest, RequestType, NewsPost } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -19,19 +19,52 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = store.subscribe(() => {
-        setRefresh(prev => prev + 1);
-    });
+    const unsubscribe = store.subscribe(() => { setRefresh(prev => prev + 1); });
     return unsubscribe;
   }, []);
 
   const requests = store.getMyRequests();
   const nextShiftData = store.getNextShift(user.id);
+  
+  // Filtrar anuncios: Solo los que ya han llegado a su fecha de publicación programada
+  const news = store.config.news.filter(post => {
+      const pubDate = new Date(post.publishAt || post.createdAt);
+      return pubDate <= new Date();
+  });
+
+  // Birthday logic
+  const upcomingBirthdays = store.users.filter(u => {
+      if (!u.birthdate) return false;
+      const b = new Date(u.birthdate);
+      const today = new Date();
+      const bMonth = b.getMonth();
+      const bDay = b.getDate();
+      
+      const isToday = bMonth === today.getMonth() && bDay === today.getDate();
+      
+      // Next 7 days
+      const nextWeek = new Date();
+      nextWeek.setDate(today.getDate() + 7);
+      
+      const bThisYear = new Date(today.getFullYear(), bMonth, bDay);
+      const bNextYear = new Date(today.getFullYear() + 1, bMonth, bDay);
+      
+      const isInRange = (bThisYear >= today && bThisYear <= nextWeek) || (bNextYear >= today && bNextYear <= nextWeek);
+      
+      return isToday || isInRange;
+  }).sort((a,b) => {
+      const today = new Date();
+      const getDays = (u: User) => {
+          const bd = new Date(u.birthdate!);
+          let bDate = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+          if (bDate < today) bDate.setFullYear(today.getFullYear() + 1);
+          return Math.ceil((bDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+      };
+      return getDays(a) - getDays(b);
+  });
 
   const handleDelete = async (reqId: string) => {
-      if(confirm('¿Seguro que deseas eliminar esta solicitud?')) {
-          await store.deleteRequest(reqId);
-      }
+      if(confirm('¿Seguro que deseas eliminar esta solicitud?')) await store.deleteRequest(reqId);
   };
 
   const formatDateSafe = (dateStr: string) => {
@@ -44,67 +77,30 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
 
   const getRequestLabel = (req: LeaveRequest) => {
       const label = store.getTypeLabel(req.typeId);
-      
       if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) {
-          return (
-              <span className="flex items-center gap-1.5 text-blue-700 font-bold">
-                  <ShieldCheck size={16} className="text-blue-600" />
-                  {label}
-              </span>
-          );
+          return ( <span className="flex items-center gap-1.5 text-blue-700 font-bold"><ShieldCheck size={16} className="text-blue-600" />{label}</span> );
       }
       return <span className="font-medium text-slate-800">{label}</span>;
   };
 
   const stats = [
-    { 
-      id: 'days',
-      label: 'Días Disponibles', 
-      value: (user.daysAvailable || 0).toFixed(1), 
-      icon: Sun, 
-      color: 'text-orange-500', 
-      bg: 'bg-orange-50',
-      clickable: true 
-    },
-    { 
-      id: 'hours',
-      label: 'Saldo Horas Extra', 
-      value: `${user.overtimeHours || 0}h`, 
-      icon: Clock, 
-      color: 'text-blue-500', 
-      bg: 'bg-blue-50',
-      clickable: true
-    },
-    { 
-      id: 'pending',
-      label: 'Solicitudes Pendientes', 
-      value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), 
-      icon: AlertCircle, 
-      color: 'text-yellow-500', 
-      bg: 'bg-yellow-50',
-      clickable: false
-    },
+    { id: 'days', label: 'Días Disponibles', value: (user.daysAvailable || 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true },
+    { id: 'hours', label: 'Saldo Horas Extra', value: `${user.overtimeHours || 0}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true },
+    { id: 'pending', label: 'Solicitudes Pendientes', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false },
   ];
 
   const currentYear = new Date().getFullYear();
   const monthlyAbsenceStats = Array.from({ length: 12 }, (_, i) => ({
       name: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][i],
-      approved: 0,
-      pending: 0
+      approved: 0, pending: 0
   }));
 
   requests.forEach(req => {
       const isAbsence = !store.isOvertimeRequest(req.typeId) && req.typeId !== RequestType.ADJUSTMENT_DAYS;
       if (isAbsence && (req.status === RequestStatus.APPROVED || req.status === RequestStatus.PENDING)) {
-          let current = new Date(req.startDate);
-          const end = new Date(req.endDate || req.startDate);
-          
-          // Safety Check for invalid dates
+          let current = new Date(req.startDate); const end = new Date(req.endDate || req.startDate);
           if (isNaN(current.getTime()) || isNaN(end.getTime())) return;
-
-          current.setHours(0,0,0,0);
-          end.setHours(0,0,0,0);
-          
+          current.setHours(0,0,0,0); end.setHours(0,0,0,0);
           while (current <= end) {
               if (current.getFullYear() === currentYear) {
                   const month = current.getMonth();
@@ -122,7 +118,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
     const isOvertimeView = detailView === 'hours';
     const title = isOvertimeView ? 'Historial de Horas Extra' : 'Historial de Ausencias';
     const filteredRequests = requests.filter(r => isOvertimeView ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId));
-
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex items-center gap-4">
@@ -175,7 +170,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
          <div><h2 className="text-2xl font-bold text-slate-800">Hola, {user.name}</h2><p className="text-slate-500">Resumen de tu actividad laboral.</p></div>
          <div className="flex gap-3 w-full md:w-auto">
@@ -184,6 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
             <button onClick={() => setShowPPEModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-5 py-3 rounded-xl font-medium"><HardHat size={18}/> EPI</button>
          </div>
       </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
              <div className="absolute top-0 right-0 p-4 opacity-10"><Briefcase size={64}/></div>
@@ -197,18 +193,71 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
           </div>
         ))}
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* News Board Section */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Megaphone className="text-blue-500" size={20}/> Muro de Anuncios</h3>
+            <div className="space-y-6">
+                {news.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 italic">No hay anuncios publicados todavía.</div>
+                ) : news.map(post => (
+                    <div key={post.id} className="relative p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition-all group overflow-hidden">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-slate-800 text-lg">{post.title}</h4>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(post.publishAt || post.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{post.content}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        {/* Sidebar: Birthday and Secondary info */}
+        <div className="space-y-6">
+             {/* Birthday Reminder */}
+             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
+                 <div className="absolute -top-4 -right-4 text-orange-100 opacity-50 transform rotate-12"><Cake size={100}/></div>
+                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10"><Cake className="text-orange-500" size={20}/> Cumpleaños</h3>
+                 <div className="space-y-4 relative z-10">
+                     {upcomingBirthdays.length === 0 ? (
+                         <p className="text-sm text-slate-400 italic">No hay cumpleaños próximos.</p>
+                     ) : upcomingBirthdays.map(u => {
+                         const bd = new Date(u.birthdate!);
+                         const today = new Date();
+                         const isToday = bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+                         return (
+                             <div key={u.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isToday ? 'bg-orange-50 border-orange-200 animate-pulse' : 'bg-slate-50 border-slate-100'}`}>
+                                 <img src={u.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm"/>
+                                 <div className="flex-1 min-w-0">
+                                     <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
+                                     <p className={`text-xs font-medium ${isToday ? 'text-orange-600' : 'text-slate-500'}`}>
+                                         {isToday ? '¡Hoy es su día! 🎂' : `${bd.getDate()} de ${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][bd.getMonth()]}`}
+                                     </p>
+                                 </div>
+                                 {isToday && <Star className="text-orange-400 fill-orange-400" size={16}/>}
+                             </div>
+                         );
+                     })}
+                 </div>
+             </div>
+
+             <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white">
+                 <Quote className="text-white/20 mb-2" size={32}/>
+                 <p className="italic font-medium leading-relaxed">"El talento gana partidos, pero el trabajo en equipo y la inteligencia ganan campeonatos."</p>
+                 <p className="text-right text-xs font-bold mt-4 text-blue-200 uppercase tracking-widest">— Michael Jordan</p>
+             </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><Calendar className="w-5 h-5 mr-2 text-slate-500" /> Solicitudes Recientes</h3>
           <div className="space-y-3">
             {requests.length === 0 ? <p className="text-slate-400 text-sm">No hay solicitudes.</p> : requests.slice(0, 4).map((req) => (
               <div key={req.id} onClick={() => onViewRequest(req)} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 group">
-                <div>
-                    <div className="flex items-center gap-2">
-                        {getRequestLabel(req)}
-                    </div>
-                    <p className="text-xs text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}`}</p>
-                </div>
+                <div><div className="flex items-center gap-2">{getRequestLabel(req)}</div><p className="text-xs text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}`}</p></div>
                 <div className="flex items-center gap-3"><span className={`px-2 py-1 rounded-full text-xs font-medium ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>{req.status === RequestStatus.PENDING && (<div className="flex gap-1" onClick={e => e.stopPropagation()}><button onClick={() => onEditRequest(req)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button><button onClick={() => handleDelete(req.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button></div>)}</div>
               </div>
             ))}
@@ -216,16 +265,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
              <h3 className="text-lg font-bold text-slate-800 mb-4">Evolución Ausencias (Días)</h3>
-             {/* Forced explicit height for Recharts container */}
              <div style={{ width: '100%', height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthlyAbsenceStats}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
                         <XAxis dataKey="name" fontSize={12} stroke="#94a3b8" />
                         <YAxis fontSize={12} stroke="#94a3b8" allowDecimals={false}/>
-                        <Tooltip 
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                         <Legend iconType="circle" />
                         <Bar dataKey="approved" name="Aprobados" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} />
                         <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#eab308" radius={[4, 4, 0, 0]} />

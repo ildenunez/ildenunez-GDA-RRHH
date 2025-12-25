@@ -42,20 +42,18 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fix: Explicitly extending React.Component and using generic types to ensure 'props' is recognized by TypeScript
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fixed ErrorBoundary: Use Component from react and remove unnecessary constructor to fix 'props' existence error
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false, error: null };
-
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
+
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("React Error:", error, errorInfo);
   }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -69,7 +67,6 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
-                {/* Corrección: Uso de import.meta.env para Vite */}
                 {(import.meta as any).env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
                         {this.state.error?.toString()}
@@ -79,7 +76,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         </div>
       );
     }
-    // Fix: Accessing children from this.props which is now correctly inferred through React.Component
+    // Correctly accessing children from this.props after ensuring correct Component inheritance
     return this.props.children;
   }
 }

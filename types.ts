@@ -46,6 +46,7 @@ export interface User {
   daysAvailable: number;
   overtimeHours: number;
   avatar?: string;
+  birthdate?: string; // Nuevo: Fecha de nacimiento
 }
 
 export interface Department {
@@ -91,6 +92,16 @@ export interface Notification {
   message: string;
   read: boolean;
   date: string;
+}
+
+export interface NewsPost {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+  createdAt: string;
+  publishAt: string; // Nuevo: Fecha programada de publicación
+  pinned?: boolean;
 }
 
 export interface EmailTemplate {
@@ -156,6 +167,7 @@ export interface AppConfig {
   holidays: Holiday[];
   ppeTypes: PPEType[];
   ppeRequests: PPERequest[];
+  news: NewsPost[]; // Nuevo
   smtpSettings: {
     host: string;
     port: number;
