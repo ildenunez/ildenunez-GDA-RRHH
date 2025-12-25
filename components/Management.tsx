@@ -108,7 +108,7 @@ const HRConfigManager: React.FC = () => {
                                                 <tr key={idx} className={`hover:bg-slate-50 transition-colors ${editingRangeIdx === idx ? 'bg-blue-50/50' : ''}`}><td className="p-2"><div className="font-bold text-slate-700">{r.label || 'S/N'}</div><div className="text-blue-600 font-bold">{days} {days === 1 ? 'día' : 'días'}</div></td><td className="p-2 text-slate-500 whitespace-nowrap">{new Date(r.startDate).toLocaleDateString()} al<br/>{new Date(r.endDate).toLocaleDateString()}</td><td className="p-2 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => startEditRange(idx)} className="text-blue-500 hover:bg-white p-1 rounded shadow-sm"><Edit2 size={12}/></button><button type="button" onClick={() => removeRange(idx)} className="text-red-400 hover:bg-white p-1 rounded shadow-sm"><X size={12}/></button></div></td></tr>
                                             ); })}</tbody></table></div>
                                         )}
-                                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3"><div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase">{editingRangeIdx !== null ? 'Editando Franja' : 'Nueva Franja'}</span>{editingRangeIdx !== null && ( <button type="button" onClick={() => { setEditingRangeIdx(null); setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel(''); }} className="text-[10px] text-red-500 font-bold underline">Cancelar</button> )}</div><input type="text" placeholder="Nombre de la franja (ej: Turno A)" className="w-full p-2 border rounded text-xs" value={newRangeLabel} onChange={e => setNewRangeLabel(e.target.value)}/><div className="grid grid-cols-2 gap-2"><div><label className="text-[9px] font-bold text-slate-400 uppercase">Inicio</label><input type="date" className="w-full p-2 border rounded text-xs" value={newRangeStart} onChange={e => setNewRangeStart(e.target.value)}/></div><div><label className="text-[9px] font-bold text-slate-400 uppercase">Fin</label><input type="date" className="w-full p-2 border rounded text-xs" value={newRangeEnd} onChange={e => setNewRangeEnd(e.target.value)}/></div></div>{newRangeStart && newRangeEnd && ( <div className="text-center text-xs font-bold text-blue-600 bg-blue-50 py-1 rounded">Días calculados: {calculateDaysInRange(newRangeStart, newRangeEnd)}</div> )}<button type="button" onClick={handleAddRange} disabled={!newRangeStart || !newRangeEnd} className={`w-full py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${editingRangeIdx !== null ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-800 text-white hover:bg-slate-900'} disabled:opacity-50`}>{editingRangeIdx !== null ? 'Actualizar Franja' : '+ Añadir a la lista'}</button></div>
+                                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3"><div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase">{editingRangeIdx !== null ? 'Editando Franja' : 'Nueva Franja'}</span>{editingRangeIdx !== null && ( <button type="button" onClick={() => { setEditingRangeIdx(null); setNewRangeStart(''); setNewRangeEnd(''); setNewRangeLabel(''); }} className="text-[10px] text-red-500 font-bold underline">Cancelar</button> )}</div><input type="text" placeholder="Nombre de la franja (ej: Turno A)" className="w-full p-2 border rounded text-xs" value={newRangeLabel} onChange={e => setNewRangeLabel(e.target.value)}/><div className="grid grid-cols-2 gap-2"><div><label className="text-[9px] font-bold text-slate-400 uppercase">Inicio</label><input type="date" className="w-full p-2 border rounded text-xs" value={newRangeStart} onChange={e => setNewRangeStart(e.target.value)}/></div><div><label className="text-[9px] font-bold text-slate-400 uppercase">Fin</label><input type="date" className="w-full p-2 border rounded text-xs" value={newRangeEnd} onChange={e => setNewRangeEnd(e.target.value)}/></div></div>{newRangeStart && newRangeEnd && ( <div className="text-center text-xs font-bold text-blue-600 bg-blue-50/50 py-1 rounded">Días calculados: {calculateDaysInRange(newRangeStart, newRangeEnd)}</div> )}<button type="button" onClick={handleAddRange} disabled={!newRangeStart || !newRangeEnd} className={`w-full py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${editingRangeIdx !== null ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-800 text-white hover:bg-slate-900'} disabled:opacity-50`}>{editingRangeIdx !== null ? 'Actualizar Franja' : '+ Añadir a la lista'}</button></div>
                                     </div>
                                 )}<button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold flex justify-center items-center gap-2 shadow-lg shadow-blue-500/20">{isSaving && <Loader2 className="animate-spin" size={16}/>}{isSaving ? 'Guardando...' : (editingTypeId ? 'Actualizar Tipo' : 'Crear Tipo de Ausencia')}</button>{editingTypeId && ( <button type="button" onClick={() => { setActiveModal(null); setEditingTypeId(null); setTypeName(''); }} className="w-full text-xs text-slate-500 underline mt-2 text-center">Cancelar Edición</button> )}</form>
                         )}
@@ -224,38 +224,83 @@ const CommunicationsManager: React.FC = () => {
 export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => store.subscribe(() => setRefresh(r => r+1)), []);
+  
   const pending = store.getPendingApprovalsForUser(user.id);
-  const handleAction = async (req: LeaveRequest, status: RequestStatus) => { const message = status === RequestStatus.APPROVED ? 'Comentario (opcional):' : 'Motivo del rechazo (Obligatorio):'; const comment = prompt(message); if (comment === null) return; if (status === RequestStatus.REJECTED && !comment.trim()) { alert("Debes indicar un motivo."); return; } await store.updateRequestStatus(req.id, status, user.id, comment || undefined); };
+  const absences = pending.filter(r => !store.isOvertimeRequest(r.typeId));
+  const overtimes = pending.filter(r => store.isOvertimeRequest(r.typeId));
+
+  const handleAction = async (req: LeaveRequest, status: RequestStatus) => { 
+    const message = status === RequestStatus.APPROVED ? 'Comentario (opcional):' : 'Motivo del rechazo (Obligatorio):'; 
+    const comment = prompt(message); 
+    if (comment === null) return; 
+    if (status === RequestStatus.REJECTED && !comment.trim()) { alert("Debes indicar un motivo."); return; } 
+    await store.updateRequestStatus(req.id, status, user.id, comment || undefined); 
+  };
+
+  const renderRequestList = (list: LeaveRequest[]) => (
+    <div className="grid gap-4">
+        {list.map(req => { 
+            const conflicts = store.getRequestConflicts(req); 
+            const hasConflict = conflicts.length > 0;
+            const start = new Date(req.startDate);
+            const end = new Date(req.endDate || req.startDate);
+            const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            return ( <div key={req.id} className={`bg-white p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row gap-6 items-start md:items-center transition-all ${hasConflict ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-100'}`}><div className="flex-1"><div className="flex items-center gap-2 mb-2"><span className="font-bold text-lg text-slate-800">{store.users.find(u => u.id === req.userId)?.name}</span><span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">{store.departments.find(d => d.id === store.users.find(u => u.id === req.userId)?.departmentId)?.name}</span></div><div className="flex flex-wrap gap-4 text-sm text-slate-600"><div className="flex items-center gap-1 font-medium"><FileText size={16}/> {store.getTypeLabel(req.typeId)}</div><div className="flex items-center gap-1"><Calendar size={16}/> {new Date(req.startDate).toLocaleDateString()} {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString()}`}</div>{!store.isOvertimeRequest(req.typeId) && <div className="flex items-center gap-1 font-bold text-blue-600"><CalendarDays size={16}/> {diffDays} {diffDays === 1 ? 'día' : 'días'}</div>}{req.hours && <div className="flex items-center gap-1 font-bold text-indigo-600"><Clock size={16}/> {req.hours}h</div>}</div>{hasConflict && ( 
+                <div className="mt-3 bg-red-50 text-red-700 p-3 rounded-xl text-xs space-y-2 border border-red-100 shadow-sm animate-pulse">
+                    <div className="flex items-center gap-2 font-bold uppercase tracking-wider">
+                        <AlertTriangle size={14} className="shrink-0"/>
+                        Conflictos Detectados ({conflicts.length})
+                    </div>
+                    <div className="space-y-1 pl-6">
+                        {conflicts.map(c => {
+                            const otherUser = store.users.find(u => u.id === c.userId);
+                            const overlapStart = new Date(Math.max(new Date(req.startDate).getTime(), new Date(c.startDate).getTime()));
+                            const overlapEnd = new Date(Math.min(new Date(req.endDate || req.startDate).getTime(), new Date(c.endDate || c.startDate).getTime()));
+                            return (
+                                <div key={c.id} className="flex flex-col border-l-2 border-red-200 pl-2 py-0.5">
+                                    <span className="font-bold text-red-800">{otherUser?.name}</span>
+                                    <span className="text-[10px] text-red-600 opacity-80 italic">
+                                        Solapa del {overlapStart.toLocaleDateString()} al {overlapEnd.toLocaleDateString()}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div> 
+            )}</div><div className="flex gap-3"><button onClick={() => onViewRequest(req)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><ExternalLink size={20}/></button><button onClick={() => handleAction(req, RequestStatus.REJECTED)} className="px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg hover:bg-red-100 transition-colors">Rechazar</button><button onClick={() => handleAction(req, RequestStatus.APPROVED)} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg transition-colors">Aprobar</button></div></div> ); 
+        })}
+    </div>
+  );
+
   return (
-    <div className="space-y-6 animate-fade-in"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><ShieldCheck className="text-blue-600"/> Aprobaciones Pendientes</h2>{pending.length === 0 ? ( <div className="text-center py-12 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-400"><CheckCircle size={48} className="mx-auto mb-4 opacity-20"/><p>¡Todo al día!</p></div> ) : ( <div className="grid gap-4">{pending.map(req => { 
-        const conflicts = store.getRequestConflicts(req); 
-        const hasConflict = conflicts.length > 0;
-        const start = new Date(req.startDate);
-        const end = new Date(req.endDate || req.startDate);
-        const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        return ( <div key={req.id} className={`bg-white p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row gap-6 items-start md:items-center transition-all ${hasConflict ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-100'}`}><div className="flex-1"><div className="flex items-center gap-2 mb-2"><span className="font-bold text-lg text-slate-800">{store.users.find(u => u.id === req.userId)?.name}</span><span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">{store.departments.find(d => d.id === store.users.find(u => u.id === req.userId)?.departmentId)?.name}</span></div><div className="flex flex-wrap gap-4 text-sm text-slate-600"><div className="flex items-center gap-1 font-medium"><FileText size={16}/> {store.getTypeLabel(req.typeId)}</div><div className="flex items-center gap-1"><Calendar size={16}/> {new Date(req.startDate).toLocaleDateString()} {req.endDate && ` - ${new Date(req.endDate).toLocaleDateString()}`}</div><div className="flex items-center gap-1 font-bold text-blue-600"><CalendarDays size={16}/> {diffDays} {diffDays === 1 ? 'día' : 'días'}</div>{req.hours && <div className="flex items-center gap-1"><Clock size={16}/> {req.hours}h</div>}</div>{hasConflict && ( 
-            <div className="mt-3 bg-red-50 text-red-700 p-3 rounded-xl text-xs space-y-2 border border-red-100 shadow-sm animate-pulse">
-                <div className="flex items-center gap-2 font-bold uppercase tracking-wider">
-                    <AlertTriangle size={14} className="shrink-0"/>
-                    Conflictos Detectados ({conflicts.length})
-                </div>
-                <div className="space-y-1 pl-6">
-                    {conflicts.map(c => {
-                        const otherUser = store.users.find(u => u.id === c.userId);
-                        const overlapStart = new Date(Math.max(new Date(req.startDate).getTime(), new Date(c.startDate).getTime()));
-                        const overlapEnd = new Date(Math.min(new Date(req.endDate || req.startDate).getTime(), new Date(c.endDate || c.startDate).getTime()));
-                        return (
-                            <div key={c.id} className="flex flex-col border-l-2 border-red-200 pl-2 py-0.5">
-                                <span className="font-bold text-red-800">{otherUser?.name}</span>
-                                <span className="text-[10px] text-red-600 opacity-80 italic">
-                                    Solapa del {overlapStart.toLocaleDateString()} al {overlapEnd.toLocaleDateString()}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
+    <div className="space-y-10 animate-fade-in">
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><ShieldCheck className="text-blue-600"/> Aprobaciones Pendientes</h2>
+        {pending.length === 0 ? ( 
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-400">
+                <CheckCircle size={48} className="mx-auto mb-4 opacity-20"/><p>¡Todo al día!</p>
             </div> 
-        )}</div><div className="flex gap-3"><button onClick={() => onViewRequest(req)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><ExternalLink size={20}/></button><button onClick={() => handleAction(req, RequestStatus.REJECTED)} className="px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg hover:bg-red-100 transition-colors">Rechazar</button><button onClick={() => handleAction(req, RequestStatus.APPROVED)} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg transition-colors">Aprobar</button></div></div> ); })}</div> )}</div>
+        ) : ( 
+            <div className="space-y-12">
+                {absences.length > 0 && (
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-1">
+                            <CalendarDays size={16} /> Solicitudes de Ausencia ({absences.length})
+                        </h3>
+                        {renderRequestList(absences)}
+                    </div>
+                )}
+
+                {overtimes.length > 0 && (
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-1">
+                            <Clock size={16} /> Solicitudes de Horas ({overtimes.length})
+                        </h3>
+                        {renderRequestList(overtimes)}
+                    </div>
+                )}
+            </div>
+        )}
+    </div>
   );
 };
 
