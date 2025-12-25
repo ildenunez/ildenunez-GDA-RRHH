@@ -92,6 +92,7 @@ export interface Notification {
   message: string;
   read: boolean;
   date: string;
+  type?: 'system' | 'admin'; // Nuevo campo para distinguir el origen
 }
 
 export interface NewsPost {
@@ -100,7 +101,6 @@ export interface NewsPost {
   content: string;
   authorId: string;
   createdAt: string;
-  publishAt: string; // Nuevo: Fecha programada de publicación
   pinned?: boolean;
 }
 

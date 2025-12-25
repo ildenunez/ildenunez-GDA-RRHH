@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { User } from '../types';
 import { store } from '../services/store';
-import { Camera, Mail, User as UserIcon, Lock, Save, Loader2, Upload, Briefcase, Cake, PartyPopper } from 'lucide-react';
+import { Camera, Mail, User as UserIcon, Lock, Save, Loader2, Upload, Briefcase } from 'lucide-react';
 
 interface ProfileViewProps {
   user: User;
@@ -13,7 +13,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onProfileUpdate }) => {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [password, setPassword] = useState('');
-  const [birthdate, setBirthdate] = useState(user.birthdate || '');
   const [avatar, setAvatar] = useState(user.avatar || '');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,8 +44,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onProfileUpdate }) => {
               name,
               email,
               password,
-              avatar,
-              birthdate
+              avatar
           });
           alert('Perfil actualizado correctamente');
           if (onProfileUpdate) onProfileUpdate();
@@ -114,25 +112,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onProfileUpdate }) => {
                                     onChange={e => setEmail(e.target.value)}
                                     className="w-full pl-10 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">Fecha de Nacimiento</label>
-                            <div className="relative">
-                                <Cake className="absolute left-3 top-3.5 text-slate-400 w-5 h-5"/>
-                                <input 
-                                    type="date" 
-                                    value={birthdate}
-                                    onChange={e => setBirthdate(e.target.value)}
-                                    className="w-full pl-10 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                            <div className="mt-3 p-4 bg-orange-50 rounded-xl border border-orange-100 flex gap-3 animate-fade-in">
-                                <PartyPopper className="text-orange-500 shrink-0" size={20} />
-                                <p className="text-xs text-orange-800 leading-relaxed font-medium">
-                                    ¡Cumpleaños a la vista! 🎂 Si indicas tu fecha de nacimiento, tus compañeros verán un recordatorio en su Dashboard cuando se acerque el gran día. ¡No te sorprendas si te felicitan!
-                                </p>
                             </div>
                         </div>
 

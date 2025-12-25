@@ -25,12 +25,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
 
   const requests = store.getMyRequests();
   const nextShiftData = store.getNextShift(user.id);
-  
-  // Filtrar anuncios: Solo los que ya han llegado a su fecha de publicación programada
-  const news = store.config.news.filter(post => {
-      const pubDate = new Date(post.publishAt || post.createdAt);
-      return pubDate <= new Date();
-  });
+  const news = store.config.news;
 
   // Birthday logic
   const upcomingBirthdays = store.users.filter(u => {
@@ -206,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
                         <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-slate-800 text-lg">{post.title}</h4>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(post.publishAt || post.createdAt).toLocaleDateString()}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(post.createdAt).toLocaleDateString()}</span>
                         </div>
                         <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{post.content}</p>
                     </div>

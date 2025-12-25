@@ -42,18 +42,20 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fixed ErrorBoundary: Use Component from react and remove unnecessary constructor to fix 'props' existence error
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Using React.Component explicitly to resolve property 'props' access issue in TypeScript
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false, error: null };
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+  }
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
-
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("React Error:", error, errorInfo);
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -67,6 +69,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
+                {/* Corrección: Uso de import.meta.env para Vite */}
                 {(import.meta as any).env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
                         {this.state.error?.toString()}
@@ -76,7 +79,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    // Correctly accessing children from this.props after ensuring correct Component inheritance
+    // Fix: Properly returning children from this.props
     return this.props.children;
   }
 }
@@ -166,13 +169,13 @@ export default function App() {
     return unsubscribe;
   }, [user?.id]);
 
-  // Nuevo: Efecto para detectar notificaciones sin leer y mostrarlas en el modal
+  // Modificado: Solo las notificaciones enviadas por admin ('type: admin') se muestran en el popup
   useEffect(() => {
     if (user && !unreadToModal) {
       const allNotifs = store.getNotificationsForUser(user.id);
-      const firstUnread = allNotifs.find(n => !n.read);
-      if (firstUnread) {
-        setUnreadToModal(firstUnread);
+      const firstAdminUnread = allNotifs.find(n => !n.read && n.type === 'admin');
+      if (firstAdminUnread) {
+        setUnreadToModal(firstAdminUnread);
       }
     }
   }, [user, user?.id, store.notifications]);
