@@ -79,7 +79,14 @@ class Store {
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, author_id: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
+        if (newsData) this.config.news = newsData.map((n: any) => ({ 
+            id: n.id, 
+            title: n.title, 
+            content: n.content, 
+            authorId: n.author_id, 
+            createdAt: n.created_at, 
+            pinned: n.pinned 
+        }));
         
         if (typesData) {
             this.config.leaveTypes = typesData.map((t: any) => {
@@ -155,7 +162,7 @@ class Store {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: String(r.label || 'Solicitud'), startDate: String(r.start_date || ''), endDate: r.end_date,
           hours: r.hours, reason: r.reason, status: r.status as RequestStatus, createdAt: String(r.created_at || ''), adminComment: r.admin_comment, createdByAdmin: !!r.created_by_admin, 
-          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reportedToAdmin: !!r.reported_to_admin
+          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reported_to_admin: !!r.reported_to_admin
       }));
   }
 
@@ -244,7 +251,7 @@ class Store {
     let label = data.label || this.getTypeLabel(data.typeId);
     const { data: inserted } = await supabase.from('requests').insert({
       id: crypto.randomUUID(), user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
-      hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(), overtime_usage: data.overtimeUsage, is_justified: data.isJustified, reported_to_admin: data.reportedToAdmin
+      hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(), overtime_usage: data.overtimeUsage, is_justified: data.is_justified, reported_to_admin: data.reported_to_admin
     }).select().single();
     
     if (inserted) {

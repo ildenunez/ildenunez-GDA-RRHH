@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, ErrorInfo, Component } from 'react';
+import React, { useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest, Notification } from './types';
 import Dashboard from './components/Dashboard';
@@ -42,14 +42,17 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fixed: Correctly extending Component and using standard props access to avoid TypeScript error
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+/**
+ * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
+ * Standard implementation using React.Component to ensure props and state are correctly typed and accessible.
+ */
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
@@ -70,7 +73,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
-                {/* Corrección: Uso de import.meta.env para Vite */}
+                {/* Visualizar error en modo desarrollo de Vite */}
                 {(import.meta as any).env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
                         {this.state.error?.toString()}

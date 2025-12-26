@@ -173,7 +173,7 @@ const CommunicationsManager: React.FC = () => {
     const handleTestConnection = async (e: React.MouseEvent) => { e.preventDefault(); if(!testEmail) return alert("Introduce un email para la prueba."); setIsTesting(true); setShowDebug(true); setTestLogs([]); addLog("Iniciando prueba..."); if (!smtp.host || !smtp.user || !smtp.password) { addLog("❌ Error: Faltan datos."); setIsTesting(false); return; } try { await store.sendTestEmail(testEmail); addLog("✅ Éxito."); } catch (err: any) { addLog("❌ ERROR: " + err.message); } finally { setIsTesting(false); } };
     const handleSendMessage = async () => { if (!msgBody) return alert('Escribe un mensaje.'); if (selectedUsers.length === 0) return alert('Selecciona destinatarios.'); await store.sendMassNotification(selectedUsers, msgBody); alert('Enviado.'); setMsgBody(''); setSelectedUsers([]); setSelectAll(false); };
     const handlePostNews = async () => { if (!newsTitle || !newsContent) return alert('Completa título y contenido.'); await store.createNewsPost(newsTitle, newsContent, store.currentUser!.id); alert('Anuncio publicado en el muro.'); setNewsTitle(''); setNewsContent(''); };
-    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u.id !== id)); else { const found = store.users.find(u => u.id === id); if (found) setSelectedUsers([...selectedUsers, found.id]); } };
+    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u !== id)); else { const found = store.users.find(u => u.id === id); if (found) setSelectedUsers([...selectedUsers, found.id]); } };
     const toggleSelectAll = () => { if (selectAll) setSelectedUsers([]); else setSelectedUsers(store.users.map(u => u.id)); setSelectAll(!selectAll); };
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-[600px]">
@@ -552,7 +552,7 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                                                     <td className="px-4 py-3 text-right">
                                                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <button onClick={() => { setEditingRequestLocal(m); setShowCreateRequestModal(true); }} className="p-1.5 text-slate-300 hover:text-blue-600 hover:bg-white rounded shadow-sm border border-transparent hover:border-blue-100 transition-all"><Edit2 size={14}/></button>
-                                                            <button onClick={() => handleDeleteMovement(m.id)} className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-white rounded shadow-sm border border-transparent hover:border-red-100 transition-all"><Trash2 size={14}/></button>
+                                                            <button onClick={() => handleDeleteMovement(m.id)} className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-white rounded shadow-sm border border-transparent hover:border-blue-100 transition-all"><Trash2 size={14}/></button>
                                                         </div>
                                                     </td>
                                                 </tr>
