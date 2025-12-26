@@ -1,3 +1,4 @@
+
 import { User, Role, Department, LeaveRequest, RequestStatus, AppConfig, Notification, LeaveTypeConfig, EmailTemplate, ShiftType, ShiftAssignment, Holiday, PPEType, PPERequest, RequestType, OvertimeUsage, DateRange, NewsPost } from '../types';
 import { supabase } from './supabase';
 
@@ -55,8 +56,11 @@ class Store {
       return typeId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
-  async init() {
-    if (this.initialized) return;
+  /**
+   * Carga todos los datos desde Supabase y actualiza el estado local.
+   * Se puede llamar repetidamente para sincronizar.
+   */
+  async refresh() {
     try {
         const { data: usersData, error: usersError } = await supabase.from('users').select('*');
         if (usersError) throw usersError;
@@ -103,6 +107,26 @@ class Store {
             } else this.config.emailTemplates = this.getDefaultEmailTemplates();
         } else this.config.emailTemplates = this.getDefaultEmailTemplates();
         
+        // Actualizar el objeto currentUser si ya existe una sesión
+        if (this.currentUser) {
+            const freshUser = this.users.find(u => u.id === this.currentUser!.id);
+            if (freshUser) {
+                this.currentUser = { ...freshUser };
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
+            }
+        }
+
+        this.notify();
+    } catch (error) {
+        console.error("Store Refresh Error:", error);
+    }
+  }
+
+  async init() {
+    if (this.initialized) return;
+    try {
+        await this.refresh();
+
         const savedUser = localStorage.getItem('gda_session');
         if (savedUser) {
             try {

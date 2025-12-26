@@ -46,11 +46,10 @@ interface ErrorBoundaryState {
  * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
  * Standard implementation using Component to ensure props and state are correctly typed and accessible.
  */
-// Fix: Use React.Component for reliable type inference of state and props in TypeScript class components
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Use the imported Component class instead of React.Component for better type recognition in some environments
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Fix: Explicitly initialize state on the class instance
     this.state = { hasError: false, error: null };
   }
 
@@ -63,7 +62,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
-    // Fix: Correctly access the component's state using 'this' context
+    // Fix: access state properties after ensuring Component generics are properly applied
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -76,10 +75,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
-                {/* Visualizar error en modo desarrollo de Vite */}
                 {(import.meta as any).env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
-                        {/* Fix: Safely access the error property from this.state */}
                         {this.state.error?.toString()}
                     </pre>
                 )}
@@ -88,7 +85,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
     
-    // Fix: Correctly access the component's props using 'this' context
+    // Fix: access props properties after ensuring Component generics are properly applied
     return this.props.children;
   }
 }
@@ -152,7 +149,6 @@ export default function App() {
   const [viewingRequest, setViewingRequest] = useState<LeaveRequest | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
-  // Nuevo: Estado para manejar notificaciones no leídas al iniciar
   const [unreadToModal, setUnreadToModal] = useState<Notification | null>(null);
 
   useEffect(() => {
@@ -178,7 +174,6 @@ export default function App() {
     return unsubscribe;
   }, [user?.id]);
 
-  // Modificado: Solo las notificaciones enviadas por admin ('type: admin') se muestran en el popup
   useEffect(() => {
     if (user && !unreadToModal) {
       const allNotifs = store.getNotificationsForUser(user.id);
@@ -188,6 +183,16 @@ export default function App() {
       }
     }
   }, [user, user?.id, store.notifications]);
+
+  /**
+   * Cambia la pestaña y sincroniza con la DB de forma silenciosa
+   */
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+    // Sincronización silenciosa cada vez que el usuario navega
+    store.refresh();
+  };
 
   if (initializing) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
@@ -209,7 +214,7 @@ export default function App() {
   const unreadCount = store.getNotificationsForUser(user.id).filter(n => !n.read).length;
 
   const NavItem = ({ id, icon: Icon, label, badgeCount }: any) => (
-    <button onClick={() => { setActiveTab(id); setMobileMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+    <button onClick={() => handleTabChange(id)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
       <div className="flex items-center space-x-3"><Icon size={20} /><span className="font-medium">{label}</span></div>
       {badgeCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{badgeCount}</span>}
     </button>
@@ -248,7 +253,7 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-800 shrink-0 bg-slate-900 z-50">
-          <div className="flex items-center gap-3 mb-4 p-2 cursor-pointer hover:bg-slate-800 rounded-lg" onClick={() => setActiveTab('profile')}>
+          <div className="flex items-center gap-3 mb-4 p-2 cursor-pointer hover:bg-slate-800 rounded-lg" onClick={() => handleTabChange('profile')}>
             <img src={user.avatar} className="w-10 h-10 rounded-full border-2 border-slate-700 object-cover" />
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{user.name}</p>
@@ -279,10 +284,9 @@ export default function App() {
              {activeTab === 'help' && <HelpView />}
            </ErrorBoundary>
         </div>
-        {showRequestModal && <RequestFormModal onClose={() => setShowRequestModal(false)} user={user} initialTab={modalInitialTab} editingRequest={editingRequest} />}
+        {showRequestModal && <RequestFormModal onClose={() => { setShowRequestModal(false); store.refresh(); }} user={user} initialTab={modalInitialTab} editingRequest={editingRequest} />}
         {viewingRequest && <RequestDetailModal request={viewingRequest} onClose={() => setViewingRequest(null)} />}
         
-        {/* Modal de Mensaje Administrativo */}
         {unreadToModal && (
           <UnreadNotificationsModal 
             notification={unreadToModal} 
