@@ -74,7 +74,7 @@ class Store {
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, authorId: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
+        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, author_id: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
         
         if (typesData) {
             this.config.leaveTypes = typesData.map((t: any) => {
@@ -184,7 +184,11 @@ class Store {
   private calculateRequestImpact(typeId: string, startDate: string, endDate?: string, hours?: number) {
       let deltaDays = 0; let deltaHours = 0;
       const leaveType = this.config.leaveTypes.find(t => t.id === typeId);
-      if (leaveType && leaveType.subtractsDays) {
+      
+      // FIX: Asegurar que tipos base siempre restan días, incluso si el leaveType no se cargó correctamente
+      const isBaseAbsence = [RequestType.VACATION, RequestType.PERSONAL, RequestType.OVERTIME_SPEND_DAYS, RequestType.UNJUSTIFIED].includes(typeId as RequestType);
+      
+      if (isBaseAbsence || (leaveType && leaveType.subtractsDays)) {
           const start = new Date(startDate); const end = new Date(endDate || startDate);
           if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             start.setHours(0,0,0,0); end.setHours(0,0,0,0);
@@ -226,7 +230,7 @@ class Store {
   async updateRequest(id: string, data: any) {
     let label = data.label || this.config.leaveTypes.find(t => t.id === data.typeId)?.label || data.typeId;
     const { data: updated } = await supabase.from('requests').update({
-      type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate, hours: data.hours, reason: data.reason, is_justified: data.isJustified, reported_to_admin: data.reportedToAdmin, overtime_usage: data.overtimeUsage
+      type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate, hours: data.hours, reason: data.reason, is_justified: data.is_justified, reported_to_admin: data.reported_to_admin, overtime_usage: data.overtimeUsage
     }).eq('id', id).select().single();
     if (updated) {
         const idx = this.requests.findIndex(r => r.id === id);
@@ -302,7 +306,7 @@ class Store {
     this.notify();
   }
 
-  // Dept/Holiday/LeaveType/Shift/PPE - [OMITTED REPEATED LOGIC TO SAVE SPACE BUT FULL FILE RETURNED]
+  // Dept/Holiday/LeaveType/Shift/PPE
   async createDepartment(name: string, supervisorIds: string[]) { const { data } = await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds }).select().single(); if(data) { this.departments.push({ id: data.id, name: data.name, supervisorIds: data.supervisor_ids }); this.notify(); } }
   async updateDepartment(id: string, name: string, supervisorIds: string[]) { await supabase.from('departments').update({ name, supervisor_ids: supervisorIds }).eq('id', id); const d = this.departments.find(dep => dep.id === id); if(d) { d.name = name; d.supervisorIds = supervisorIds; this.notify(); } }
   async deleteDepartment(id: string) { await supabase.from('departments').delete().eq('id', id); this.departments = this.departments.filter(d => d.id !== id); this.notify(); }
@@ -326,7 +330,7 @@ class Store {
         message, 
         read: false, 
         created_at: new Date().toISOString(),
-        type: 'admin' // Se marca explícitamente como mensaje de admin para el popup
+        type: 'admin'
     })); 
     const { error } = await supabase.from('notifications').insert(notifications); 
     if(!error) { 

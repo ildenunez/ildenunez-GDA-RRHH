@@ -42,7 +42,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fix: Using Component from 'react' import and removing explicit constructor to resolve property 'props' access issue in TypeScript
+// Fix: Using the imported 'Component' type directly to ensure 'this.props' is correctly recognized by TypeScript
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false, error: null };
 
@@ -75,7 +75,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    // Fix: Correctly returning children from this.props which is now available via standard Component inheritance
+    // Fix: Accessing children from this.props which is now correctly recognized via Component extension
     return this.props.children;
   }
 }

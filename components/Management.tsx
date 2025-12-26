@@ -508,9 +508,25 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                                                         {m.startDate.includes('T') ? new Date(m.startDate).toLocaleDateString() : m.startDate}{m.endDate && ` - ${new Date(m.endDate).toLocaleDateString()}`}
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
-                                                        <span className={`font-mono font-bold px-2 py-0.5 rounded ${m.hours && m.hours < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>
-                                                            {m.hours ? (m.hours > 0 ? `+${m.hours}` : m.hours) : '-'}{m.typeId.includes('horas') || m.typeId.includes('overtime') ? 'h' : 'd'}
-                                                        </span>
+                                                        {(() => {
+                                                            const isOvertime = store.isOvertimeRequest(m.typeId);
+                                                            const isAbsence = !isOvertime;
+                                                            let val = m.hours;
+                                                            // FIX: Si el valor es 0 o indefinido y es una ausencia, calculamos los días entre fechas
+                                                            if ((!val || val === 0) && isAbsence && m.typeId !== RequestType.ADJUSTMENT_DAYS) {
+                                                                const start = new Date(m.startDate);
+                                                                const end = new Date(m.endDate || m.startDate);
+                                                                const diff = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                                                val = -diff;
+                                                            }
+                                                            const colorClass = val < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50';
+                                                            const unit = (isOvertime || m.typeId.includes('horas') || m.typeId.includes('overtime')) ? 'h' : 'd';
+                                                            return (
+                                                                <span className={`font-mono font-bold px-2 py-0.5 rounded ${colorClass}`}>
+                                                                    {val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)}{unit}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${m.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : m.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{m.status}</span>
@@ -707,9 +723,19 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 // Debe ser del mismo usuario y estar aprobada
                 if (r.userId !== u.id || r.status !== RequestStatus.APPROVED) return false;
                 
-                // Excluimos registros de horas extra o ajustes que no implican ausencia física
-                if (store.isOvertimeRequest(r.typeId)) return false;
-                if (r.typeId === RequestType.ADJUSTMENT_DAYS || r.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
+                // Determinamos si es una solicitud que representa una ausencia física hoy
+                const absenceTypes = [
+                    RequestType.VACATION, 
+                    RequestType.SICKNESS, 
+                    RequestType.PERSONAL, 
+                    RequestType.OVERTIME_SPEND_DAYS, 
+                    RequestType.UNJUSTIFIED
+                ];
+
+                const leaveConfig = store.config.leaveTypes.find(t => t.id === r.typeId);
+                const isPhysicalAbsence = absenceTypes.includes(r.typeId as RequestType) || (leaveConfig && leaveConfig.subtractsDays);
+
+                if (!isPhysicalAbsence) return false;
 
                 // Extraemos solo la parte YYYY-MM-DD de las fechas de la solicitud
                 const startStr = r.startDate.split('T')[0];
