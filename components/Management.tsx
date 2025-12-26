@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, EmailTemplate, DateRange, LeaveTypeConfig, NewsPost } from '../types';
 import { store } from '../services/store';
@@ -173,7 +172,7 @@ const CommunicationsManager: React.FC = () => {
     const handleTestConnection = async (e: React.MouseEvent) => { e.preventDefault(); if(!testEmail) return alert("Introduce un email para la prueba."); setIsTesting(true); setShowDebug(true); setTestLogs([]); addLog("Iniciando prueba..."); if (!smtp.host || !smtp.user || !smtp.password) { addLog("❌ Error: Faltan datos."); setIsTesting(false); return; } try { await store.sendTestEmail(testEmail); addLog("✅ Éxito."); } catch (err: any) { addLog("❌ ERROR: " + err.message); } finally { setIsTesting(false); } };
     const handleSendMessage = async () => { if (!msgBody) return alert('Escribe un mensaje.'); if (selectedUsers.length === 0) return alert('Selecciona destinatarios.'); await store.sendMassNotification(selectedUsers, msgBody); alert('Enviado.'); setMsgBody(''); setSelectedUsers([]); setSelectAll(false); };
     const handlePostNews = async () => { if (!newsTitle || !newsContent) return alert('Completa título y contenido.'); await store.createNewsPost(newsTitle, newsContent, store.currentUser!.id); alert('Anuncio publicado en el muro.'); setNewsTitle(''); setNewsContent(''); };
-    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u !== id)); else { const found = store.users.find(u => u.id === id); if (found) setSelectedUsers([...selectedUsers, found.id]); } };
+    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(uid => uid !== id)); else setSelectedUsers([...selectedUsers, id]); };
     const toggleSelectAll = () => { if (selectAll) setSelectedUsers([]); else setSelectedUsers(store.users.map(u => u.id)); setSelectAll(!selectAll); };
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-[600px]">
@@ -343,17 +342,15 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
     const [email, setEmail] = useState(editingUser?.email || '');
     const [role, setRole] = useState<Role>(editingUser?.role || Role.WORKER);
     const [deptId, setDeptId] = useState(editingUser?.departmentId || '');
-    const [days, setDays] = useState(editingUser?.daysAvailable || 22);
+    const [days, setDays] = useState(editingUser?.daysAvailable || 0);
     const [hours, setHours] = useState(editingUser?.overtimeHours || 0);
     const [pass, setPass] = useState('');
     const [birthdate, setBirthdate] = useState(editingUser?.birthdate || '');
     const [isSaving, setIsSaving] = useState(false);
-
     const [adjDays, setAdjDays] = useState(0);
     const [adjDaysReason, setAdjDaysReason] = useState('');
     const [adjHours, setAdjHours] = useState(0);
     const [adjHoursReason, setAdjHoursReason] = useState('');
-
     const [showCreateRequestModal, setShowCreateRequestModal] = useState(false);
     const [editingRequestLocal, setEditingRequestLocal] = useState<LeaveRequest | null>(null);
     const [refresh, setRefresh] = useState(0);
@@ -364,38 +361,29 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
     }, [editingUser?.id, store.requests, refresh]);
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSaving(true);
+        e.preventDefault(); setIsSaving(true);
         if (editingUser) {
             await store.updateUserAdmin(editingUser.id, { name, email, departmentId: deptId, birthdate });
             if (editingUser.role !== role) await store.updateUserRole(editingUser.id, role);
             if (pass) await store.updateUserProfile(editingUser.id, { name, email, password: pass });
-            if (adjDays !== 0) {
-                await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: adjDays, reason: adjDaysReason || 'Ajuste manual de administrador', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
-            }
-            if (adjHours !== 0) {
-                await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: adjHours, reason: adjHoursReason || 'Ajuste manual de administrador', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
-            }
+            if (adjDays !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: adjDays, reason: adjDaysReason || 'Ajuste manual', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
+            if (adjHours !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: adjHours, reason: adjHoursReason || 'Ajuste manual', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
         } else {
             await store.createUser({ name, email, role, departmentId: deptId, daysAvailable: days, overtimeHours: hours, birthdate }, pass || '123456');
         }
-        setIsSaving(false);
-        onClose();
+        setIsSaving(false); onClose();
     };
 
     const handleDeleteMovement = async (id: string) => {
-        if(confirm('¿Seguro que deseas eliminar este registro?')) {
-            await store.deleteRequest(id);
-            setRefresh(r => r+1);
-        }
+        if(confirm('¿Eliminar registro?')) { await store.deleteRequest(id); setRefresh(r => r+1); }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[95vh]">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                     <div className="flex items-center gap-3">
-                        <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/30"><Users size={20}/></div>
+                        <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Users size={20}/></div>
                         <h3 className="text-xl font-bold text-slate-800">{editingUser ? 'Ficha del Empleado' : 'Nuevo Empleado'}</h3>
                     </div>
                     <div className="flex items-center gap-2">
@@ -404,183 +392,108 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                                 <Plus size={18}/> Nueva Solicitud
                             </button>
                         )}
-                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-6 space-y-10">
                     <form id="userForm" onSubmit={handleSubmit} className="flex flex-col gap-10">
-                        {/* Profile Section */}
                         <div className="space-y-4">
-                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><UserIcon size={14}/> Datos de Perfil</h4>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><UserIcon size={14}/> Perfil</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="col-span-2 md:col-span-1">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nombre Completo</label>
-                                    <input required className="w-full p-2.5 border rounded-xl bg-slate-50" value={name} onChange={e=>setName(e.target.value)}/>
-                                </div>
-                                <div className="col-span-2 md:col-span-1">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Corporativo</label>
-                                    <input type="email" required className="w-full p-2.5 border rounded-xl bg-slate-50" value={email} onChange={e=>setEmail(e.target.value)}/>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Rol en Sistema</label>
-                                    <select className="w-full p-2.5 border rounded-xl bg-slate-50" value={role} onChange={e=>setRole(e.target.value as Role)}>
-                                        <option value={Role.WORKER}>Trabajador</option>
-                                        <option value={Role.SUPERVISOR}>Supervisor</option>
-                                        <option value={Role.ADMIN}>Administrador</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Departamento</label>
-                                    <select required className="w-full p-2.5 border rounded-xl bg-slate-50" value={deptId} onChange={e=>setDeptId(e.target.value)}>
-                                        <option value="">Seleccionar...</option>
-                                        {store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">F. Nacimiento</label>
-                                    <input type="date" className="w-full p-2.5 border rounded-xl bg-slate-50" value={birthdate} onChange={e=>setBirthdate(e.target.value)}/>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contraseña</label>
-                                    <input type="password" placeholder={editingUser ? 'Mantiene actual' : '123456 por defecto'} className="w-full p-2.5 border rounded-xl bg-slate-50" value={pass} onChange={e=>setPass(e.target.value)}/>
-                                </div>
+                                <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nombre</label><input required className="w-full p-2.5 border rounded-xl bg-slate-50" value={name} onChange={e=>setName(e.target.value)}/></div>
+                                <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" required className="w-full p-2.5 border rounded-xl bg-slate-50" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+                                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Rol</label><select className="w-full p-2.5 border rounded-xl bg-slate-50" value={role} onChange={e=>setRole(e.target.value as Role)}><option value={Role.WORKER}>Trabajador</option><option value={Role.SUPERVISOR}>Supervisor</option><option value={Role.ADMIN}>Administrador</option></select></div>
+                                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dpto</label><select required className="w-full p-2.5 border rounded-xl bg-slate-50" value={deptId} onChange={e=>setDeptId(e.target.value)}><option value="">Seleccionar...</option>{store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">F. Nacimiento</label><input type="date" className="w-full p-2.5 border rounded-xl bg-slate-50" value={birthdate} onChange={e=>setBirthdate(e.target.value)}/></div>
+                                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pass</label><input type="password" placeholder={editingUser ? 'Sin cambios' : '123456'} className="w-full p-2.5 border rounded-xl bg-slate-50" value={pass} onChange={e=>setPass(e.target.value)}/></div>
                             </div>
                         </div>
 
-                        {/* Balance Section - BELOW PROFILE */}
                         <div className="space-y-4">
-                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><PieChart size={14}/> Ajustes de Saldo</h4>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><PieChart size={14}/> Saldo</h4>
                             {editingUser ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-4 flex flex-col justify-between">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Días</span>
-                                                <span className="text-3xl font-black text-orange-600 leading-none">{editingUser.daysAvailable.toFixed(1)}</span>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <input type="number" step="0.5" className="w-20 p-2 border rounded-xl text-center font-bold" placeholder="0" value={adjDays || ''} onChange={e=>setAdjDays(parseFloat(e.target.value) || 0)}/>
-                                                <input className="flex-1 p-2 border rounded-xl text-xs" placeholder="Motivo..." value={adjDaysReason} onChange={e=>setAdjDaysReason(e.target.value)}/>
-                                            </div>
+                                            <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Días</span><span className="text-3xl font-black text-orange-600 leading-none">{editingUser.daysAvailable.toFixed(1)}</span></div>
+                                            <div className="flex gap-2"><input type="number" step="0.5" className="w-20 p-2 border rounded-xl text-center font-bold" placeholder="0" value={adjDays || ''} onChange={e=>setAdjDays(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-xs" placeholder="Motivo..." value={adjDaysReason} onChange={e=>setAdjDaysReason(e.target.value)}/></div>
                                         </div>
                                         <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex flex-col justify-between">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Horas</span>
-                                                <span className="text-3xl font-black text-blue-600 leading-none">{editingUser.overtimeHours}h</span>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <input type="number" step="0.5" className="w-20 p-2 border rounded-xl text-center font-bold" placeholder="0" value={adjHours || ''} onChange={e=>setAdjHours(parseFloat(e.target.value) || 0)}/>
-                                                <input className="flex-1 p-2 border rounded-xl text-xs" placeholder="Motivo..." value={adjHoursReason} onChange={e=>setAdjHoursReason(e.target.value)}/>
-                                            </div>
+                                            <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Horas</span><span className="text-3xl font-black text-blue-600 leading-none">{editingUser.overtimeHours.toFixed(1)}h</span></div>
+                                            <div className="flex gap-2"><input type="number" step="0.5" className="w-20 p-2 border rounded-xl text-center font-bold" placeholder="0" value={adjHours || ''} onChange={e=>setAdjHours(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-xs" placeholder="Motivo..." value={adjHoursReason} onChange={e=>setAdjHoursReason(e.target.value)}/></div>
                                         </div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200 text-[10px] text-slate-500 italic">Introduce valores positivos para sumar o negativos para restar. Se generará un registro de "Regularización" automático.</div>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Días Vacaciones Iniciales</label><input type="number" className="w-full p-2.5 border rounded-xl bg-slate-50" value={days} onChange={e=>setDays(parseFloat(e.target.value))}/></div>
-                                    <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Saldo Horas Inicial</label><input type="number" className="w-full p-2.5 border rounded-xl bg-slate-50" value={hours} onChange={e=>setHours(parseFloat(e.target.value))}/></div>
+                                    <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Días Iniciales</label><input type="number" className="w-full p-2.5 border rounded-xl bg-slate-50" value={days} onChange={e=>setDays(parseFloat(e.target.value))}/></div>
+                                    <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Horas Iniciales</label><input type="number" className="w-full p-2.5 border rounded-xl bg-slate-50" value={hours} onChange={e=>setHours(parseFloat(e.target.value))}/></div>
                                 </div>
                             )}
                         </div>
-                    </form>
 
-                    {/* Movements Section - BELOW BALANCE */}
-                    {editingUser && (
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Historial de Movimientos</h4>
-                                <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-bold text-slate-500">{movements.length} registros</span>
-                            </div>
-                            {movements.length === 0 ? <div className="text-center py-8 text-slate-400 italic text-sm">Sin movimientos registrados.</div> : (
-                                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                        {editingUser && (
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><History size={14}/> Historial</h4>
+                                <div className="border border-slate-100 rounded-2xl overflow-hidden">
                                     <table className="w-full text-left text-xs">
-                                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase"><tr><th className="px-4 py-3">Tipo / Motivo</th><th className="px-4 py-3">Fechas / Aplicación</th><th className="px-4 py-3 text-center">Cantidad</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead>
+                                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase"><tr><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Fechas</th><th className="px-4 py-3 text-center">Cant.</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {movements.map(m => (
-                                                <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
-                                                    <td className="px-4 py-3">
-                                                        <div className="font-bold text-slate-700">{store.getTypeLabel(m.typeId)}</div>
-                                                        <div className="text-slate-400 italic truncate max-w-[200px]">{m.reason || '-'}</div>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-slate-500 font-medium">
-                                                        {m.startDate.includes('T') ? new Date(m.startDate).toLocaleDateString() : m.startDate}{m.endDate && ` - ${new Date(m.endDate).toLocaleDateString()}`}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        {(() => {
-                                                            const isOvertime = store.isOvertimeRequest(m.typeId);
-                                                            const tid = m.typeId.toLowerCase();
-                                                            // Identificar si debe mostrar días (vacaciones, asuntos propios, canje, justificable)
-                                                            const isAbsence = (!isOvertime || tid.includes('canje') || tid.includes('vacac') || tid.includes('asuntos')) && !tid.includes('registro_horas') && !tid.includes('abono_en_nomina');
-                                                            
-                                                            let val = m.hours || 0;
-                                                            
-                                                            // Lógica de signo y cantidad
-                                                            if (isOvertime) {
-                                                                // Consumos de horas (canje o abono) deben ser negativos
-                                                                if (tid.includes('canje') || tid.includes('abono')) {
-                                                                    val = -Math.abs(val);
-                                                                }
-                                                                // Ganancias de horas (registro, festivo, ajuste) positivos (val ya lo es)
-                                                            } else if (isAbsence && !tid.includes('ajuste') && (!val || val === 0)) {
-                                                                // Cálculo automático de días para ausencias normales
-                                                                const start = new Date(m.startDate);
-                                                                const end = new Date(m.endDate || m.startDate);
-                                                                if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                                                                    const diff = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                                                                    val = -diff;
-                                                                }
-                                                            }
+                                            {movements.map(m => {
+                                                const tid = m.typeId.toLowerCase();
+                                                const isOvertime = store.isOvertimeRequest(m.typeId);
+                                                let val = m.hours || 0;
+                                                const isConsumption = tid.includes('canje') || tid.includes('abono') || tid.includes('vacac') || tid.includes('asuntos') || tid.includes('justific');
+                                                const isCanje = tid.includes('canje');
 
-                                                            // Si es un "Canje por días libres", la cantidad en días debe ser 0.0d según el requisito
-                                                            const displayVal = tid.includes('canje') && !isOvertime ? 0 : val;
-                                                            
-                                                            const colorClass = (val || 0) < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50';
-                                                            const unit = (isOvertime && !tid.includes('vacac') && !tid.includes('asuntos')) ? 'h' : 'd';
-                                                            
-                                                            return (
-                                                                <span className={`font-mono font-bold px-2 py-0.5 rounded ${colorClass}`}>
-                                                                    {val && val > 0 ? `+${val.toFixed(1)}` : (val ? val.toFixed(1) : '0.0')}{unit}
-                                                                </span>
-                                                            );
-                                                        })()}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${m.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : m.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{m.status}</span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => { setEditingRequestLocal(m); setShowCreateRequestModal(true); }} className="p-1.5 text-slate-300 hover:text-blue-600 hover:bg-white rounded shadow-sm border border-transparent hover:border-blue-100 transition-all"><Edit2 size={14}/></button>
-                                                            <button onClick={() => handleDeleteMovement(m.id)} className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-white rounded shadow-sm border border-transparent hover:border-blue-100 transition-all"><Trash2 size={14}/></button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                if (isOvertime && isConsumption) val = -Math.abs(val);
+                                                if (!isOvertime && isConsumption && !isCanje) {
+                                                    const start = new Date(m.startDate);
+                                                    const end = new Date(m.endDate || m.startDate);
+                                                    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                                                        val = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                                    }
+                                                }
+                                                const displayVal = isCanje && !isOvertime ? 0 : val;
+                                                const unit = (isOvertime && !tid.includes('vacac') && !tid.includes('asuntos')) ? 'h' : 'd';
+                                                
+                                                return (
+                                                    <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
+                                                        <td className="px-4 py-3 font-bold text-slate-700">{store.getTypeLabel(m.typeId)}</td>
+                                                        <td className="px-4 py-3 text-slate-500">{new Date(m.startDate).toLocaleDateString()}{m.endDate && ` - ${new Date(m.endDate).toLocaleDateString()}`}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`font-mono font-bold px-2 py-0.5 rounded ${val < 0 ? 'text-red-600 bg-red-50' : val > 0 ? 'text-green-600 bg-green-50' : 'text-slate-400 bg-slate-50'}`}>
+                                                                {val > 0 ? '+' : ''}{displayVal.toFixed(1)}{unit}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${m.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{m.status}</span></td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button onClick={() => { setEditingRequestLocal(m); setShowCreateRequestModal(true); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit2 size={14}/></button>
+                                                                <button onClick={() => handleDeleteMovement(m.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </form>
                 </div>
 
                 <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
                     <button type="button" onClick={onClose} className="px-6 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-all">Cancelar</button>
-                    <button form="userForm" disabled={isSaving} className="px-8 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 flex items-center gap-2 transition-all">
-                        {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-                        {editingUser ? 'Actualizar Ficha' : 'Crear Usuario'}
+                    <button form="userForm" disabled={isSaving} className="px-8 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 flex items-center gap-2">
+                        {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} {editingUser ? 'Actualizar' : 'Crear'}
                     </button>
                 </div>
             </div>
             {showCreateRequestModal && editingUser && (
-                <RequestFormModal 
-                    onClose={() => { setShowCreateRequestModal(false); setEditingRequestLocal(null); setRefresh(r=>r+1); }}
-                    user={store.currentUser!}
-                    targetUser={editingUser}
-                    initialTab="absence"
-                    editingRequest={editingRequestLocal}
-                />
+                <RequestFormModal onClose={() => { setShowCreateRequestModal(false); setEditingRequestLocal(null); setRefresh(r=>r+1); }} user={store.currentUser!} targetUser={editingUser} initialTab="absence" editingRequest={editingRequestLocal} />
             )}
         </div>
     );
@@ -592,126 +505,47 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
     const [showUserModal, setShowUserModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [refresh, setRefresh] = useState(0);
-
-    useEffect(() => {
-        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
-        return unsubscribe;
-    }, []);
-
+    useEffect(() => { const unsub = store.subscribe(() => setRefresh(prev => prev + 1)); return unsub; }, []);
     const users = useMemo(() => {
         let list = store.users;
         if (currentUser.role === Role.SUPERVISOR) {
-            const myDepts = store.departments.filter(d => d.supervisorIds.includes(currentUser.id)).map(d => d.id);
-            list = list.filter(u => myDepts.includes(u.departmentId));
+            const depts = store.departments.filter(d => d.supervisorIds.includes(currentUser.id)).map(d => d.id);
+            list = list.filter(u => depts.includes(u.departmentId));
         }
-        if (search) {
-            list = list.filter(u => 
-                u.name.toLowerCase().includes(search.toLowerCase()) || 
-                u.email.toLowerCase().includes(search.toLowerCase())
-            );
-        }
-        return list.sort((a,b) => a.name.localeCompare(b.name));
-    }, [search, currentUser.id, refresh]);
+        if (search) list = list.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+        return [...list].sort((a,b) => a.name.localeCompare(b.name));
+    }, [search, currentUser.id, refresh, store.users]);
 
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex gap-2 w-full md:w-auto p-1 bg-slate-100 rounded-xl">
-                    <button 
-                        onClick={() => setViewMode('list')}
-                        className={`flex-1 md:flex-none px-6 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}
-                    >
-                        Listado
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('shifts')}
-                        className={`flex-1 md:flex-none px-6 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${viewMode === 'shifts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}
-                    >
-                        Planificación
-                    </button>
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                    <button onClick={() => setViewMode('list')} className={`px-6 py-2 rounded-lg font-bold text-sm ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Listado</button>
+                    <button onClick={() => setViewMode('shifts')} className={`px-6 py-2 rounded-lg font-bold text-sm ${viewMode === 'shifts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Planificación</button>
                 </div>
-                {currentUser.role === Role.ADMIN && (
-                    <button 
-                        onClick={() => { setEditingUser(null); setShowUserModal(true); }}
-                        className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all"
-                    >
-                        <UserPlus size={18}/> Nuevo Empleado
-                    </button>
-                )}
+                {currentUser.role === Role.ADMIN && <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg"><UserPlus size={18}/> Nuevo Empleado</button>}
             </div>
-
             {viewMode === 'list' ? (
                 <div className="space-y-4">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                        <input 
-                            type="text" 
-                            placeholder="Buscar empleado..." 
-                            className="w-full pl-10 pr-4 py-2 border rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                        />
-                    </div>
-                    
+                    <div className="relative max-w-md"><Search className="absolute left-3 top-2.5 text-slate-400" size={18}/><input type="text" placeholder="Buscar empleado..." className="w-full pl-10 pr-4 py-2 border rounded-xl" value={search} onChange={e => setSearch(e.target.value)}/></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {users.map(u => (
                             <div key={u.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4 group">
                                 <div className="flex items-center gap-4">
-                                    <img src={u.avatar} className="w-14 h-14 rounded-full border-2 border-slate-50 shadow-sm object-cover" />
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="font-bold text-slate-800 truncate">{u.name}</h4>
-                                        <p className="text-xs text-slate-500 truncate">{u.email}</p>
-                                    </div>
-                                    {currentUser.role === Role.ADMIN && (
-                                        <button 
-                                            onClick={() => { setEditingUser(u); setShowUserModal(true); }}
-                                            className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                        >
-                                            <Edit2 size={16}/>
-                                        </button>
-                                    )}
+                                    <img src={u.avatar} className="w-14 h-14 rounded-full border-2 border-slate-50 object-cover" />
+                                    <div className="flex-1 min-w-0"><h4 className="font-bold text-slate-800 truncate">{u.name}</h4><p className="text-xs text-slate-500 truncate">{u.email}</p></div>
+                                    {currentUser.role === Role.ADMIN && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600"><Edit2 size={16}/></button>}
                                 </div>
-                                
                                 <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Vacaciones</p>
-                                        <p className="text-lg font-bold text-orange-600">
-                                            {u.daysAvailable.toFixed(1)} <span className="text-xs font-normal text-slate-400">días</span>
-                                        </p>
-                                    </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Horas Extra</p>
-                                        <p className="text-lg font-bold text-blue-600">
-                                            {u.overtimeHours} <span className="text-xs font-normal text-slate-400">h</span>
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex justify-between items-center pt-2 border-t border-slate-50">
-                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                                        {store.departments.find(d => d.id === u.departmentId)?.name || 'Sin Dept.'}
-                                    </span>
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                        u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 
-                                        u.role === Role.SUPERVISOR ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                    }`}>
-                                        {u.role}
-                                    </span>
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase">Vacaciones</p><p className="text-lg font-bold text-orange-600">{u.daysAvailable.toFixed(1)} <span className="text-xs font-normal text-slate-400">días</span></p></div>
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase">Horas Extra</p><p className="text-lg font-bold text-blue-600">{u.overtimeHours.toFixed(1)} <span className="text-xs font-normal text-slate-400">h</span></p></div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
-            ) : (
-                <ShiftScheduler users={users} />
-            )}
-
-            {showUserModal && (
-                <UserModal 
-                    onClose={() => setShowUserModal(false)} 
-                    editingUser={editingUser}
-                />
-            )}
+            ) : <ShiftScheduler users={users} />}
+            {showUserModal && <UserModal onClose={() => setShowUserModal(false)} editingUser={editingUser} />}
         </div>
     );
 };
@@ -719,87 +553,23 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
 export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => void }> = ({ onViewRequest }) => {
     const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm'>('users');
     const [refresh, setRefresh] = useState(0);
-    const currentUser = store.currentUser!;
-
-    useEffect(() => {
-        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
-        return unsubscribe;
-    }, []);
-
+    useEffect(() => { const unsub = store.subscribe(() => setRefresh(prev => prev + 1)); return unsub; }, []);
     const stats = useMemo(() => {
         const total = store.users.length;
-        
-        // Obtenemos la fecha de hoy en formato local YYYY-MM-DD para comparación segura
         const now = new Date();
-        const y = now.getFullYear();
-        const m = String(now.getMonth() + 1).padStart(2, '0');
-        const d = String(now.getDate()).padStart(2, '0');
-        const todayStr = `${y}-${m}-${d}`;
-
-        const absentCount = store.users.filter(u => 
-            store.requests.some(r => {
-                // Debe ser del mismo usuario y estar aprobada
-                if (r.userId !== u.id || r.status !== RequestStatus.APPROVED) return false;
-                
-                // Determinamos si es una solicitud que representa una ausencia física hoy
-                const tid = r.typeId.toLowerCase();
-                const absenceTypes = [
-                    RequestType.VACATION, 
-                    RequestType.SICKNESS, 
-                    RequestType.PERSONAL, 
-                    RequestType.OVERTIME_SPEND_DAYS, 
-                    RequestType.UNJUSTIFIED
-                ];
-
-                const leaveConfig = store.config.leaveTypes.find(t => t.id === r.typeId);
-                const isPhysicalAbsence = absenceTypes.includes(r.typeId as RequestType) || 
-                                          tid.includes('vacac') || tid.includes('asuntos') || tid.includes('canje') ||
-                                          (leaveConfig && leaveConfig.subtractsDays);
-
-                if (!isPhysicalAbsence) return false;
-
-                // Extraemos solo la parte YYYY-MM-DD de las fechas de la solicitud
-                const startStr = r.startDate.split('T')[0];
-                const endStr = (r.endDate || r.startDate).split('T')[0];
-
-                // Comprobamos si el día de hoy cae dentro del rango (inclusive)
-                return todayStr >= startStr && todayStr <= endStr;
-            })
-        ).length;
-
-        const percent = total > 0 ? ((absentCount / total) * 100).toFixed(1) : "0";
-        return { total, absent: absentCount, percent };
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const absentCount = store.users.filter(u => store.requests.some(r => r.userId === u.id && r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId) && todayStr >= r.startDate.split('T')[0] && todayStr <= (r.endDate || r.startDate).split('T')[0])).length;
+        return { total, absent: absentCount, percent: total > 0 ? ((absentCount / total) * 100).toFixed(1) : "0" };
     }, [refresh, store.users, store.requests]);
     
     return (
         <div className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Settings className="text-blue-600"/> Administración del Sistema</h2>
-            
-            {/* Estadísticas de Administración */}
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Settings className="text-blue-600"/> Administración</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
-                    <div className="bg-blue-50 p-4 rounded-xl text-blue-600 group-hover:scale-110 transition-transform"><Users size={32}/></div>
-                    <div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Empleados</p>
-                        <h4 className="text-3xl font-black text-slate-800">{stats.total}</h4>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
-                    <div className="bg-orange-50 p-4 rounded-xl text-orange-600 group-hover:scale-110 transition-transform"><Palmtree size={32}/></div>
-                    <div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Ausencias Hoy</p>
-                        <h4 className="text-3xl font-black text-slate-800">{stats.absent}</h4>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:shadow-md transition-all">
-                    <div className="bg-purple-50 p-4 rounded-xl text-purple-600 group-hover:scale-110 transition-transform"><TrendingUp size={32}/></div>
-                    <div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">% Plantilla Ausente</p>
-                        <h4 className="text-3xl font-black text-slate-800">{stats.percent}%</h4>
-                    </div>
-                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 transition-all hover:shadow-md"><div className="bg-blue-50 p-4 rounded-xl text-blue-600"><Users size={32}/></div><div><p className="text-sm font-bold text-slate-400 uppercase">Total Plantilla</p><h4 className="text-3xl font-black text-slate-800">{stats.total}</h4></div></div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 transition-all hover:shadow-md"><div className="bg-orange-50 p-4 rounded-xl text-orange-600"><Palmtree size={32}/></div><div><p className="text-sm font-bold text-slate-400 uppercase">Ausencias Hoy</p><h4 className="text-3xl font-black text-slate-800">{stats.absent}</h4></div></div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 transition-all hover:shadow-md"><div className="bg-purple-50 p-4 rounded-xl text-purple-600"><TrendingUp size={32}/></div><div><p className="text-sm font-bold text-slate-400 uppercase">% Ausentismo</p><h4 className="text-3xl font-black text-slate-800">{stats.percent}%</h4></div></div>
             </div>
-
             <div className="flex flex-wrap gap-2 border-b border-slate-200">
                 <button onClick={() => setAdminTab('users')} className={`px-4 py-3 font-bold text-sm transition-all border-b-2 ${adminTab === 'users' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Usuarios</button>
                 <button onClick={() => setAdminTab('depts')} className={`px-4 py-3 font-bold text-sm transition-all border-b-2 ${adminTab === 'depts' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Dptos</button>
@@ -808,7 +578,7 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 <button onClick={() => setAdminTab('comm')} className={`px-4 py-3 font-bold text-sm transition-all border-b-2 ${adminTab === 'comm' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Comunicaciones</button>
             </div>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[500px]">
-                {adminTab === 'users' && <UserManagement currentUser={currentUser} onViewRequest={onViewRequest} />}
+                {adminTab === 'users' && <UserManagement currentUser={store.currentUser!} onViewRequest={onViewRequest} />}
                 {adminTab === 'depts' && <DepartmentManager />}
                 {adminTab === 'config' && <HRConfigManager />}
                 {adminTab === 'ppe' && <PPEConfigManager />}

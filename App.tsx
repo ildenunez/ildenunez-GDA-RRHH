@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, ErrorInfo } from 'react';
+import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest, Notification } from './types';
 import Dashboard from './components/Dashboard';
@@ -44,11 +44,13 @@ interface ErrorBoundaryState {
 
 /**
  * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
- * Standard implementation using React.Component to ensure props and state are correctly typed and accessible.
+ * Standard implementation using Component to ensure props and state are correctly typed and accessible.
  */
+// Fix: Use React.Component for reliable type inference of state and props in TypeScript class components
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    // Fix: Explicitly initialize state on the class instance
     this.state = { hasError: false, error: null };
   }
 
@@ -61,6 +63,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
+    // Fix: Correctly access the component's state using 'this' context
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -76,6 +79,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                 {/* Visualizar error en modo desarrollo de Vite */}
                 {(import.meta as any).env.DEV && (
                     <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
+                        {/* Fix: Safely access the error property from this.state */}
                         {this.state.error?.toString()}
                     </pre>
                 )}
@@ -84,6 +88,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
     
+    // Fix: Correctly access the component's props using 'this' context
     return this.props.children;
   }
 }
