@@ -143,12 +143,15 @@ class Store {
       return [
           { id: 'request_created', label: 'Ausencia: Nueva Solicitud', subject: 'Nueva solicitud de {tipo} - {empleado}', body: 'Hola {supervisor},\n\nSe ha registrado una nueva solicitud de {tipo} para el empleado {empleado}.\n\nFechas: {fechas}.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
           { id: 'request_approved', label: 'Ausencia: Aprobada', subject: 'Solicitud Aprobada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido APROBADA.\n\nFechas: {fechas}.\nComentario: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
-          { id: 'request_rejected', label: 'Ausencia: Rechazada', subject: 'Solicitud Rechazada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido RECHAZADA.\n\nMotivo: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
+          { id: 'request_rejected', label: 'Ausencia: Rechazada', subject: 'Solicitud Rechazada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido RECHAZADA.\n\nFechas: {fechas}.\nMotivo del rechazo: {comentario_admin}\n\nContacta con {supervisor} para más detalles.', recipients: { worker: true, supervisor: false, admin: false } },
           { id: 'overtime_created', label: 'Horas: Registro', subject: 'Nuevo registro de horas - {empleado}', body: 'Hola {supervisor},\n\n{empleado} ha registrado {horas} horas extra.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
           { id: 'overtime_approved', label: 'Horas: Aprobada', subject: 'Registro de Horas Aprobado', body: 'Hola {empleado},\n\nSe ha aprobado tu registro de {horas} horas extra.', recipients: { worker: true, supervisor: false, admin: false } }
       ];
   }
 
+  /**
+   * Procesa una plantilla y envía los correos necesarios usando la función 'send-test-email'
+   */
   private async triggerEmailAutomation(templateId: string, request: LeaveRequest) {
     if (!this.config.smtpSettings.enabled) return;
 
@@ -161,6 +164,7 @@ class Store {
     const dept = this.departments.find(d => d.id === owner.departmentId);
     const typeLabel = this.getTypeLabel(request.typeId);
 
+    // Reemplazar placeholders de forma segura
     const replacePlaceholders = (text: string) => {
         if (!text) return '';
         const replacements: Record<string, string> = {
@@ -175,6 +179,7 @@ class Store {
             'horas': String(request.hours || 0),
             'motivo': request.reason || '-',
             'comentario': request.adminComment || '-',
+            'comentario_admin': request.adminComment || '-', // Alias común
             'estado': request.status
         };
 
