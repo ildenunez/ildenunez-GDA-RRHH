@@ -149,9 +149,6 @@ class Store {
       ];
   }
 
-  /**
-   * Procesa una plantilla y envía los correos necesarios usando la función 'send-test-email'
-   */
   private async triggerEmailAutomation(templateId: string, request: LeaveRequest) {
     if (!this.config.smtpSettings.enabled) return;
 
@@ -164,7 +161,6 @@ class Store {
     const dept = this.departments.find(d => d.id === owner.departmentId);
     const typeLabel = this.getTypeLabel(request.typeId);
 
-    // Reemplazar placeholders de forma segura
     const replacePlaceholders = (text: string) => {
         if (!text) return '';
         const replacements: Record<string, string> = {
@@ -184,8 +180,9 @@ class Store {
 
         let result = text;
         Object.entries(replacements).forEach(([key, val]) => {
-            const regex = new RegExp(`(\\{${key}\\}|\\{\\{${key}\\}\\}|\\[${key}\\])`, 'gi');
-            result = result.replace(regex, val);
+            // Regex mejorada: soporta { etiqueta }, {{ etiqueta }} o [ etiqueta ] con espacios opcionales
+            const regex = new RegExp(`(\\{\\s*${key}\\s*\\}|\\{\\{\\s*${key}\\s*\\}\\}|\\[\\s*${key}\\s*\\])`, 'gi');
+            result = result.replace(regex, String(val || ''));
         });
         return result;
     };
