@@ -1,5 +1,5 @@
 
-import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
+import React, { useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest, Notification } from './types';
 import Dashboard from './components/Dashboard';
@@ -44,10 +44,10 @@ interface ErrorBoundaryState {
 
 /**
  * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
- * Standard implementation using Component to ensure props and state are correctly typed and accessible.
+ * Standard implementation using React.Component to ensure props and state are correctly typed and accessible.
  */
-// Fix: Use the imported Component class instead of React.Component for better type recognition in some environments
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Explicitly use React.Component to resolve type errors for state and props
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -62,7 +62,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Fix: access state properties after ensuring Component generics are properly applied
+    // Fix: Using this.state correctly after extending React.Component
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -85,7 +85,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       );
     }
     
-    // Fix: access props properties after ensuring Component generics are properly applied
+    // Fix: Using this.props correctly after extending React.Component
     return this.props.children;
   }
 }

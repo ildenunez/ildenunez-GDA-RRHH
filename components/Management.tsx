@@ -3,7 +3,7 @@ import { User, RequestStatus, Role, LeaveRequest, RequestType, Department, Email
 import { store } from '../services/store';
 import ShiftScheduler from './ShiftScheduler';
 import RequestFormModal from './RequestFormModal';
-import { User as UserIcon, Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus, Terminal, Megaphone, History, Palmtree } from 'lucide-react';
+import { User as UserIcon, Check, X, Users, Edit2, Shield, Trash2, AlertTriangle, Briefcase, FileText, Activity, Clock, CalendarDays, ExternalLink, UserPlus, MessageSquare, PieChart, Calendar, Filter, Paintbrush, Plus, CalendarClock, Search, CheckCircle, FileWarning, Printer, CheckSquare, Square, Lock as LockIcon, Sparkles, Loader2, Settings, List, ToggleLeft, ToggleRight, ShieldCheck, Mail, HardHat, Save, Send, XCircle, TrendingUp, UserMinus, UserCheck, CalendarPlus, Terminal, Megaphone, History, Palmtree, Play } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR ADMIN ---
 
@@ -187,7 +187,45 @@ const CommunicationsManager: React.FC = () => {
                     <div className="flex flex-col h-full"><div className="flex border-b border-slate-100 overflow-x-auto">{[{ id: 'request_created', label: 'Ausencia: Crea' }, { id: 'request_approved', label: 'Ausencia: OK' }, { id: 'request_rejected', label: 'Ausencia: KO' }, { id: 'overtime_created', label: 'Horas: Reg' }, { id: 'overtime_approved', label: 'Horas: OK' }, { id: 'overtime_consumed', label: 'Horas: Canje' }, { id: 'adjustment_applied', label: 'Regularización' }].map(type => ( <button key={type.id} onClick={() => setSelectedTemplateId(type.id)} className={`px-4 py-4 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${selectedTemplateId === type.id ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>{type.label}</button> ))}</div><div className="p-8 flex-1 overflow-y-auto animate-fade-in"><div className="grid grid-cols-2 gap-6 mb-4"><div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Asunto</label><input className="w-full p-3 border rounded-xl text-sm font-medium" value={activeTemplate.subject} onChange={e => handleTemplateChange('subject', e.target.value)}/></div><div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200"><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Destinatarios</label><div className="flex gap-6"><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={activeTemplate.recipients.worker} onChange={e => handleRecipientChange('worker', e.target.checked)} className="rounded text-blue-600"/> Empleado</label><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={activeTemplate.recipients.supervisor} onChange={e => handleRecipientChange('supervisor', e.target.checked)} className="rounded text-blue-600"/> Supervisor</label><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={activeTemplate.recipients.admin} onChange={e => handleRecipientChange('admin', e.target.checked)} className="rounded text-blue-600"/> Admins</label></div></div></div><div className="mb-4"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cuerpo</label><textarea className="w-full p-4 border rounded-xl h-64 text-sm font-mono text-slate-700 leading-relaxed resize-none" value={activeTemplate.body} onChange={e => handleTemplateChange('body', e.target.value)}/></div><div className="flex justify-end"><button onClick={saveTemplates} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg"><Save size={18}/> Guardar Plantilla</button></div></div></div>
                 )}
                 {subTab === 'smtp' && (
-                    <div className="p-8 animate-fade-in max-w-lg mx-auto w-full overflow-y-auto"><h2 className="text-lg font-bold text-slate-800 mb-6 text-center">SMTP</h2><form onSubmit={handleSaveSmtp} className="space-y-4"><div><label className="text-sm font-semibold">Host</label><input className="w-full p-3 border rounded-xl text-sm" value={smtp.host} onChange={e => setSmtp({...smtp, host: e.target.value})}/></div><div className="grid grid-cols-2 gap-4"><div><label className="text-sm font-semibold">Puerto</label><input type="number" className="w-full p-3 border rounded-xl text-sm" value={smtp.port} onChange={e => setSmtp({...smtp, port: parseInt(e.target.value)})}/></div><div className="flex items-end pb-3"><label className="flex items-center gap-2 cursor-pointer font-semibold"><input type="checkbox" checked={smtp.enabled} onChange={e => setSmtp({...smtp, enabled: e.target.checked})} className="w-5 h-5 rounded text-blue-600"/> Activar</label></div></div><div><label className="text-sm font-semibold">Usuario</label><input className="w-full p-3 border rounded-xl text-sm" value={smtp.user} onChange={e => setSmtp({...smtp, user: e.target.value})}/></div><div><label className="text-sm font-semibold">Pass</label><input type="password" className="w-full p-3 border rounded-xl text-sm" value={smtp.password} onChange={e => setSmtp({...smtp, password: e.target.value})}/></div><button type="submit" className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold">Guardar</button></form></div>
+                    <div className="p-8 animate-fade-in max-w-lg mx-auto w-full overflow-y-auto">
+                        <h2 className="text-lg font-bold text-slate-800 mb-6 text-center">Servidor SMTP</h2>
+                        <form onSubmit={handleSaveSmtp} className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-500 uppercase">Host</label><input className="w-full p-3 border rounded-xl text-sm" value={smtp.host} onChange={e => setSmtp({...smtp, host: e.target.value})}/></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Puerto</label><input type="number" className="w-full p-3 border rounded-xl text-sm" value={smtp.port} onChange={e => setSmtp({...smtp, port: parseInt(e.target.value)})}/></div>
+                                <div className="flex items-end pb-3"><label className="flex items-center gap-2 cursor-pointer font-bold text-sm text-slate-700"><input type="checkbox" checked={smtp.enabled} onChange={e => setSmtp({...smtp, enabled: e.target.checked})} className="w-5 h-5 rounded text-blue-600"/> Activar</label></div>
+                            </div>
+                            <div><label className="text-xs font-bold text-slate-500 uppercase">Usuario / Email</label><input className="w-full p-3 border rounded-xl text-sm" value={smtp.user} onChange={e => setSmtp({...smtp, user: e.target.value})}/></div>
+                            <div><label className="text-xs font-bold text-slate-500 uppercase">Contraseña / Token</label><input type="password" className="w-full p-3 border rounded-xl text-sm" value={smtp.password} onChange={e => setSmtp({...smtp, password: e.target.value})}/></div>
+                            <button type="submit" className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg">Guardar Configuración</button>
+                        </form>
+
+                        <div className="mt-8 pt-8 border-t border-slate-100">
+                            <h3 className="text-sm font-bold text-slate-800 mb-4">Prueba de envío</h3>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="email" 
+                                    placeholder="email@destino.com" 
+                                    className="flex-1 p-3 border rounded-xl text-sm"
+                                    value={testEmail}
+                                    onChange={e => setTestEmail(e.target.value)}
+                                />
+                                <button 
+                                    onClick={handleTestConnection}
+                                    disabled={isTesting}
+                                    className="bg-slate-800 text-white px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-900 disabled:opacity-50"
+                                >
+                                    {isTesting ? <Loader2 className="animate-spin" size={18}/> : <Play size={18}/>}
+                                    Probar
+                                </button>
+                            </div>
+                            {showDebug && (
+                                <div className="mt-4 p-4 bg-slate-900 rounded-xl font-mono text-[10px] text-slate-300 max-h-40 overflow-y-auto">
+                                    {testLogs.map((log, i) => <div key={i}>{log}</div>)}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
                 {subTab === 'message' && (
                     <div className="p-8 animate-fade-in flex flex-col h-full"><h2 className="text-lg font-bold text-slate-800 mb-4">Mensaje Masivo</h2><div className="flex-1 flex gap-6 min-h-0"><div className="flex-1 flex flex-col"><label className="text-sm font-semibold">Mensaje</label><textarea className="flex-1 w-full p-4 border rounded-xl text-sm resize-none" placeholder="Escribe..." value={msgBody} onChange={e => setMsgBody(e.target.value)}/><div className="mt-4 flex justify-end"><button onClick={handleSendMessage} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Send size={18}/> Enviar</button></div></div><div className="w-64 border rounded-xl overflow-hidden flex flex-col"><div className="bg-slate-50 p-3 border-b flex items-center justify-between"><span className="font-bold text-sm">Destinatarios</span><span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{selectedUsers.length}</span></div><div className="p-2 border-b bg-slate-50/50"><label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={selectAll} onChange={toggleSelectAll} className="rounded text-blue-600" /> Todos</label></div><div className="overflow-y-auto p-2 space-y-1 flex-1">{store.users.map(u => ( <label key={u.id} className="flex items-center gap-2 text-sm p-2 hover:bg-slate-50 rounded cursor-pointer"><input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggleUser(u.id)} className="rounded text-blue-600"/><span className="truncate">{u.name}</span></label> ))}</div></div></div></div>
