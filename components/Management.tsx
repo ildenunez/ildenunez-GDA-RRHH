@@ -173,7 +173,7 @@ const CommunicationsManager: React.FC = () => {
     const handleTestConnection = async (e: React.MouseEvent) => { e.preventDefault(); if(!testEmail) return alert("Introduce un email para la prueba."); setIsTesting(true); setShowDebug(true); setTestLogs([]); addLog("Iniciando prueba..."); if (!smtp.host || !smtp.user || !smtp.password) { addLog("❌ Error: Faltan datos."); setIsTesting(false); return; } try { await store.sendTestEmail(testEmail); addLog("✅ Éxito."); } catch (err: any) { addLog("❌ ERROR: " + err.message); } finally { setIsTesting(false); } };
     const handleSendMessage = async () => { if (!msgBody) return alert('Escribe un mensaje.'); if (selectedUsers.length === 0) return alert('Selecciona destinatarios.'); await store.sendMassNotification(selectedUsers, msgBody); alert('Enviado.'); setMsgBody(''); setSelectedUsers([]); setSelectAll(false); };
     const handlePostNews = async () => { if (!newsTitle || !newsContent) return alert('Completa título y contenido.'); await store.createNewsPost(newsTitle, newsContent, store.currentUser!.id); alert('Anuncio publicado en el muro.'); setNewsTitle(''); setNewsContent(''); };
-    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u !== id)); else setSelectedUsers([...selectedUsers, id]); };
+    const toggleUser = (id: string) => { if (selectedUsers.includes(id)) setSelectedUsers(selectedUsers.filter(u => u.id !== id)); else { const found = store.users.find(u => u.id === id); if (found) setSelectedUsers([...selectedUsers, found.id]); } };
     const toggleSelectAll = () => { if (selectAll) setSelectedUsers([]); else setSelectedUsers(store.users.map(u => u.id)); setSelectAll(!selectAll); };
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-[600px]">
@@ -510,20 +510,38 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                                                     <td className="px-4 py-3 text-center">
                                                         {(() => {
                                                             const isOvertime = store.isOvertimeRequest(m.typeId);
-                                                            const isAbsence = !isOvertime;
-                                                            let val = m.hours;
-                                                            // FIX: Si el valor es 0 o indefinido y es una ausencia, calculamos los días entre fechas
-                                                            if ((!val || val === 0) && isAbsence && m.typeId !== RequestType.ADJUSTMENT_DAYS) {
+                                                            const tid = m.typeId.toLowerCase();
+                                                            // Identificar si debe mostrar días (vacaciones, asuntos propios, canje, justificable)
+                                                            const isAbsence = (!isOvertime || tid.includes('canje') || tid.includes('vacac') || tid.includes('asuntos')) && !tid.includes('registro_horas') && !tid.includes('abono_en_nomina');
+                                                            
+                                                            let val = m.hours || 0;
+                                                            
+                                                            // Lógica de signo y cantidad
+                                                            if (isOvertime) {
+                                                                // Consumos de horas (canje o abono) deben ser negativos
+                                                                if (tid.includes('canje') || tid.includes('abono')) {
+                                                                    val = -Math.abs(val);
+                                                                }
+                                                                // Ganancias de horas (registro, festivo, ajuste) positivos (val ya lo es)
+                                                            } else if (isAbsence && !tid.includes('ajuste') && (!val || val === 0)) {
+                                                                // Cálculo automático de días para ausencias normales
                                                                 const start = new Date(m.startDate);
                                                                 const end = new Date(m.endDate || m.startDate);
-                                                                const diff = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                                                                val = -diff;
+                                                                if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                                                                    const diff = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                                                    val = -diff;
+                                                                }
                                                             }
-                                                            const colorClass = val < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50';
-                                                            const unit = (isOvertime || m.typeId.includes('horas') || m.typeId.includes('overtime')) ? 'h' : 'd';
+
+                                                            // Si es un "Canje por días libres", la cantidad en días debe ser 0.0d según el requisito
+                                                            const displayVal = tid.includes('canje') && !isOvertime ? 0 : val;
+                                                            
+                                                            const colorClass = (val || 0) < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50';
+                                                            const unit = (isOvertime && !tid.includes('vacac') && !tid.includes('asuntos')) ? 'h' : 'd';
+                                                            
                                                             return (
                                                                 <span className={`font-mono font-bold px-2 py-0.5 rounded ${colorClass}`}>
-                                                                    {val > 0 ? `+${val.toFixed(1)}` : val.toFixed(1)}{unit}
+                                                                    {val && val > 0 ? `+${val.toFixed(1)}` : (val ? val.toFixed(1) : '0.0')}{unit}
                                                                 </span>
                                                             );
                                                         })()}
@@ -724,6 +742,7 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 if (r.userId !== u.id || r.status !== RequestStatus.APPROVED) return false;
                 
                 // Determinamos si es una solicitud que representa una ausencia física hoy
+                const tid = r.typeId.toLowerCase();
                 const absenceTypes = [
                     RequestType.VACATION, 
                     RequestType.SICKNESS, 
@@ -733,7 +752,9 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 ];
 
                 const leaveConfig = store.config.leaveTypes.find(t => t.id === r.typeId);
-                const isPhysicalAbsence = absenceTypes.includes(r.typeId as RequestType) || (leaveConfig && leaveConfig.subtractsDays);
+                const isPhysicalAbsence = absenceTypes.includes(r.typeId as RequestType) || 
+                                          tid.includes('vacac') || tid.includes('asuntos') || tid.includes('canje') ||
+                                          (leaveConfig && leaveConfig.subtractsDays);
 
                 if (!isPhysicalAbsence) return false;
 

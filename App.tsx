@@ -42,16 +42,21 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fix: Using the imported 'Component' type directly to ensure 'this.props' is correctly recognized by TypeScript
+// Fixed: Correctly extending Component and using standard props access to avoid TypeScript error
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false, error: null };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
+
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("React Error:", error, errorInfo);
   }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -75,7 +80,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    // Fix: Accessing children from this.props which is now correctly recognized via Component extension
+    
     return this.props.children;
   }
 }

@@ -50,6 +50,11 @@ class Store {
       const dynamic = this.config.leaveTypes.find(t => t.id === typeId);
       if (dynamic) return dynamic.label;
       if (map[typeId]) return map[typeId];
+      // Búsqueda insensible a mayúsculas como último recurso
+      const tid = typeId.toLowerCase();
+      const fallback = Object.entries(map).find(([key]) => key.toLowerCase() === tid);
+      if (fallback) return fallback[1];
+      
       return typeId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
@@ -86,7 +91,7 @@ class Store {
         }
 
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData.map((s: any) => ({ id: s.id, name: String(s.name || ''), color: String(s.color || '#cccccc'), segments: s.segments || [] }));
-        if (shiftAssignmentsData) this.config.shiftAssignments = shiftAssignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: String(a.date || ''), shiftTypeId: a.shift_type_id }));
+        if (shiftAssignmentsData) this.config.shiftAssignments = shiftAssignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: String(a.date || ''), shift_type_id: a.shift_type_id, shiftTypeId: a.shift_type_id }));
         if (holidaysData) this.config.holidays = holidaysData.map((h: any) => ({ id: h.id, date: String(h.date || ''), name: String(h.name || '') }));
         if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: String(p.name || ''), sizes: p.sizes || [] }));
         if (ppeRequests) this.config.ppeRequests = ppeRequests.map((r: any) => ({ id: r.id, userId: r.user_id, typeId: r.type_id, type_id: r.type_id, size: String(r.size || ''), status: r.status, createdAt: String(r.created_at || ''), deliveryDate: r.delivery_date }));
@@ -181,14 +186,30 @@ class Store {
 
   logout() { this.currentUser = null; localStorage.removeItem('gda_session'); this.notify(); }
 
+  isOvertimeRequest(typeId: string) {
+    const tid = typeId.toLowerCase();
+    // Identificar tipos de horas extra por ID o palabra clave
+    return [
+        RequestType.OVERTIME_EARN, RequestType.OVERTIME_PAY, RequestType.OVERTIME_SPEND_DAYS, 
+        RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME
+    ].includes(typeId as RequestType) || tid.includes('hora') || tid.includes('overtime') || tid.includes('festivo_trabajado');
+  }
+
   private calculateRequestImpact(typeId: string, startDate: string, endDate?: string, hours?: number) {
       let deltaDays = 0; let deltaHours = 0;
-      const leaveType = this.config.leaveTypes.find(t => t.id === typeId);
+      const tid = typeId.toLowerCase();
+      const leaveType = this.config.leaveTypes.find(t => t.id === typeId || t.id.toLowerCase() === tid);
       
-      // FIX: Asegurar que tipos base siempre restan días, incluso si el leaveType no se cargó correctamente
-      const isBaseAbsence = [RequestType.VACATION, RequestType.PERSONAL, RequestType.OVERTIME_SPEND_DAYS, RequestType.UNJUSTIFIED].includes(typeId as RequestType);
+      // Identificación robusta de ausencias que restan días del saldo anual
+      const isVacation = tid.includes('vacac');
+      const isPersonal = tid.includes('asuntos');
+      const isSpendHoursForDays = tid.includes('canje');
+      const isUnjustified = tid.includes('justific') || tid.includes('unjustified');
       
-      if (isBaseAbsence || (leaveType && leaveType.subtractsDays)) {
+      // FIX: El canje de horas NO debe restar días del saldo de vacaciones, solo horas.
+      const isPhysicalAbsence = (isVacation || isPersonal || isUnjustified || (leaveType && leaveType.subtractsDays)) && !isSpendHoursForDays;
+      
+      if (isPhysicalAbsence) {
           const start = new Date(startDate); const end = new Date(endDate || startDate);
           if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             start.setHours(0,0,0,0); end.setHours(0,0,0,0);
@@ -196,28 +217,49 @@ class Store {
             deltaDays = -diffDays;
           }
       }
-      switch (typeId) {
-          case RequestType.OVERTIME_EARN: deltaHours = +(hours || 0); break;
-          case RequestType.OVERTIME_PAY:
-          case RequestType.OVERTIME_SPEND_DAYS: deltaHours = -(hours || 0); break;
-          case RequestType.ADJUSTMENT_DAYS: deltaDays = +(hours || 0); break;
-          case RequestType.ADJUSTMENT_OVERTIME: deltaHours = +(hours || 0); break;
-          case RequestType.WORKED_HOLIDAY: deltaDays = +1; deltaHours = +4; break; 
+
+      // Cálculo de impacto en saldo de horas
+      if (isSpendHoursForDays || tid.includes('overtime_spend') || tid.includes('canje_horas')) {
+          deltaHours = -(hours || 0);
+          // Aseguramos que deltaDays sea 0 para canjes, independientemente de lo anterior
+          deltaDays = 0;
+      } else if (tid.includes('registro_horas') || tid.includes('overtime_earn')) {
+          deltaHours = +(hours || 0);
+      } else if (tid.includes('abono') || tid.includes('overtime_pay')) {
+          deltaHours = -(hours || 0);
+      } else if (tid.includes('ajuste_dias') || tid.includes('adjustment_days')) {
+          deltaDays = +(hours || 0);
+      } else if (tid.includes('ajuste_horas') || tid.includes('adjustment_overtime')) {
+          deltaHours = +(hours || 0);
+      } else if (tid.includes('festivo_trabajado') || tid.includes('worked_holiday')) {
+          // Festivo trabajado suma 1 día y 4 horas
+          deltaDays = +1;
+          deltaHours = +4;
       }
+
       return { deltaDays, deltaHours };
   }
 
   async createRequest(data: any, userId: string, status: RequestStatus = RequestStatus.PENDING) {
-    let label = data.label || this.config.leaveTypes.find(t => t.id === data.typeId)?.label || data.typeId;
+    let label = data.label || this.getTypeLabel(data.typeId);
     const { data: inserted } = await supabase.from('requests').insert({
       id: crypto.randomUUID(), user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
       hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(), overtime_usage: data.overtimeUsage, is_justified: data.isJustified, reported_to_admin: data.reportedToAdmin
     }).select().single();
+    
     if (inserted) {
       this.requests.push(this.mapRequestsFromDB([inserted])[0]);
+      
+      // Aplicar impacto al saldo inmediatamente si es consumo (siempre se descuenta al pedir) 
+      // o si es ganancia y se crea como APROBADO.
       if (status === RequestStatus.PENDING || status === RequestStatus.APPROVED) {
           const { deltaDays, deltaHours } = this.calculateRequestImpact(data.typeId, data.startDate, data.endDate, data.hours);
-          const isEarning = [RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_DAYS, RequestType.ADJUSTMENT_OVERTIME].includes(data.typeId);
+          
+          const tid = data.typeId.toLowerCase();
+          const isEarning = tid.includes('registro') || tid.includes('festivo') || tid.includes('ajuste');
+          
+          // Si no es ganancia (es consumo de vacaciones/horas), descontar ya en PENDING.
+          // Si es ganancia, solo descontar si está APROBADO directamente.
           if (!isEarning || status === RequestStatus.APPROVED) {
              const u = this.users.find(usr => usr.id === userId);
              if (u) await this.updateUserBalance(userId, u.daysAvailable + deltaDays, u.overtimeHours + deltaHours);
@@ -228,7 +270,7 @@ class Store {
   }
 
   async updateRequest(id: string, data: any) {
-    let label = data.label || this.config.leaveTypes.find(t => t.id === data.typeId)?.label || data.typeId;
+    let label = data.label || this.getTypeLabel(data.typeId);
     const { data: updated } = await supabase.from('requests').update({
       type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate, hours: data.hours, reason: data.reason, is_justified: data.is_justified, reported_to_admin: data.reported_to_admin, overtime_usage: data.overtimeUsage
     }).eq('id', id).select().single();
@@ -244,15 +286,46 @@ class Store {
     if (!oldReq) return;
     const oldStatus = oldReq.status;
     const { deltaDays, deltaHours } = this.calculateRequestImpact(oldReq.typeId, oldReq.startDate, oldReq.endDate, oldReq.hours);
-    const isEarning = [RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(oldReq.typeId as RequestType);
-    let applyChange = false; let multiplier = 0;
-    if (oldStatus === RequestStatus.PENDING && newStatus === RequestStatus.APPROVED) { if (isEarning) { applyChange = true; multiplier = 1; } } 
-    else if ((oldStatus === RequestStatus.PENDING || oldStatus === RequestStatus.APPROVED) && newStatus === RequestStatus.REJECTED) { if (!isEarning || oldStatus === RequestStatus.APPROVED) { applyChange = true; multiplier = -1; } }
-    else if (oldStatus === RequestStatus.REJECTED && (newStatus === RequestStatus.APPROVED || newStatus === RequestStatus.PENDING)) { if (!isEarning || newStatus === RequestStatus.APPROVED) { applyChange = true; multiplier = 1; } }
-    if (applyChange) { const u = this.users.find(usr => usr.id === oldReq.userId); if (u) await this.updateUserBalance(u.id, u.daysAvailable + (deltaDays * multiplier), u.overtimeHours + (deltaHours * multiplier)); }
+    
+    const tid = oldReq.typeId.toLowerCase();
+    const isEarning = tid.includes('registro') || tid.includes('festivo') || tid.includes('ajuste');
+    
+    let applyChange = false; 
+    let multiplier = 0;
+
+    if (oldStatus === RequestStatus.PENDING && newStatus === RequestStatus.APPROVED) { 
+        if (isEarning) { 
+            applyChange = true; 
+            multiplier = 1; 
+        } 
+        // Para consumo (vacaciones), ya se restó al crear, no hacemos nada más.
+    } 
+    else if ((oldStatus === RequestStatus.PENDING || oldStatus === RequestStatus.APPROVED) && newStatus === RequestStatus.REJECTED) { 
+        // Si se rechaza algo que estaba restado (o aprobado), devolvemos al saldo.
+        if (!isEarning || oldStatus === RequestStatus.APPROVED) { 
+            applyChange = true; 
+            multiplier = -1; // -1 * deltaNegativo = Suma
+        } 
+    }
+    else if (oldStatus === RequestStatus.REJECTED && (newStatus === RequestStatus.APPROVED || newStatus === RequestStatus.PENDING)) { 
+        // Si rehabilitamos algo rechazado, volvemos a restar.
+        if (!isEarning || newStatus === RequestStatus.APPROVED) { 
+            applyChange = true; 
+            multiplier = 1; 
+        } 
+    }
+
+    if (applyChange) { 
+        const u = this.users.find(usr => usr.id === oldReq.userId); 
+        if (u) await this.updateUserBalance(u.id, u.daysAvailable + (deltaDays * multiplier), u.overtimeHours + (deltaHours * multiplier)); 
+    }
+
     await supabase.from('requests').update({ status: newStatus, admin_comment: adminComment }).eq('id', id);
     const idx = this.requests.findIndex(r => r.id === id);
-    if (idx !== -1) { this.requests[idx].status = newStatus; this.requests[idx].adminComment = adminComment; }
+    if (idx !== -1) { 
+        this.requests[idx].status = newStatus; 
+        this.requests[idx].adminComment = adminComment; 
+    }
     this.notify();
   }
 
@@ -270,15 +343,17 @@ class Store {
 
   async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { const updateData: any = { name: data.name, email: data.email.trim().toLowerCase(), avatar: data.avatar }; if (data.password) updateData.password = data.password; const { data: updated } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
 
-  async deleteRequest(id: string) { const req = this.requests.find(r => r.id === id); if (!req) return; if (req.status === RequestStatus.APPROVED || req.status === RequestStatus.PENDING) { const { deltaDays, deltaHours } = this.calculateRequestImpact(req.typeId, req.startDate, req.endDate, req.hours); const isEarning = [RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(req.typeId as RequestType); if (!isEarning || req.status === RequestStatus.APPROVED) { const u = this.users.find(usr => usr.id === req.userId); if (u) await this.updateUserBalance(u.id, u.daysAvailable - deltaDays, u.overtimeHours - deltaHours); } } await supabase.from('requests').delete().eq('id', id); this.requests = this.requests.filter(r => r.id !== id); this.notify(); }
+  async deleteRequest(id: string) { const req = this.requests.find(r => r.id === id); if (!req) return; if (req.status === RequestStatus.APPROVED || req.status === RequestStatus.PENDING) { const { deltaDays, deltaHours } = this.calculateRequestImpact(req.typeId, req.startDate, req.endDate, req.hours); 
+    const tid = req.typeId.toLowerCase();
+    const isEarning = tid.includes('registro') || tid.includes('festivo') || tid.includes('ajuste');
+    if (!isEarning || req.status === RequestStatus.APPROVED) { const u = this.users.find(usr => usr.id === req.userId); if (u) await this.updateUserBalance(u.id, u.daysAvailable - deltaDays, u.overtimeHours - deltaHours); } } await supabase.from('requests').delete().eq('id', id); this.requests = this.requests.filter(r => r.id !== id); this.notify(); }
 
   getMyRequests() { if (!this.currentUser) return []; return this.requests.filter(r => r.userId === this.currentUser!.id).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || '')); }
   getAllUsers() { return this.users; }
   getNotificationsForUser(userId: string) { return this.notifications.filter(n => n.userId === userId).sort((a,b) => (b.date || '').localeCompare(a.date || '')); }
   getPendingApprovalsForUser(userId: string) { const u = this.users.find(usr => usr.id === userId); if (!u) return []; const depts = u.role === Role.ADMIN ? this.departments.map(d => d.id) : this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id); return this.requests.filter(r => r.status === RequestStatus.PENDING && depts.includes(this.users.find(usr => usr.id === r.userId)?.departmentId || '')); }
-  isOvertimeRequest(typeId: string) { return [RequestType.OVERTIME_EARN, RequestType.OVERTIME_PAY, RequestType.OVERTIME_SPEND_DAYS, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME].includes(typeId as RequestType); }
-  getAvailableOvertimeRecords(userId: string) { return this.requests.filter(r => r.userId === userId && r.status === RequestStatus.APPROVED && (r.typeId === RequestType.OVERTIME_EARN || r.typeId === RequestType.WORKED_HOLIDAY) && (Number(r.hours || 0) - Number(r.consumedHours || 0)) > 0.01); }
-  getCalendarRequests(userId: string, deptId?: string) { return this.requests.filter(r => { if (this.isOvertimeRequest(r.typeId) && r.typeId !== RequestType.WORKED_HOLIDAY) return false; if (deptId) return this.users.find(u => u.id === r.userId)?.departmentId === deptId; return true; }); }
+  getAvailableOvertimeRecords(userId: string) { return this.requests.filter(r => r.userId === userId && r.status === RequestStatus.APPROVED && (r.typeId.toLowerCase().includes('registro') || r.typeId.toLowerCase().includes('festivo')) && (Number(r.hours || 0) - Number(r.consumedHours || 0)) > 0.01); }
+  getCalendarRequests(userId: string, deptId?: string) { return this.requests.filter(r => { if (this.isOvertimeRequest(r.typeId) && !r.typeId.toLowerCase().includes('festivo')) return false; if (deptId) return this.users.find(u => u.id === r.userId)?.departmentId === deptId; return true; }); }
   getShiftForUserDate(userId: string, date: string) { const a = this.config.shiftAssignments.find(as => as.userId === userId && as.date === date); if (!a) return undefined; return this.config.shiftTypes.find(s => s.id === a.shiftTypeId); }
   getNextShift(userId: string) { const today = new Date().toISOString().split('T')[0]; const a = this.config.shiftAssignments.filter(as => as.userId === userId && as.date >= today).sort((a,b) => (a.date || '').localeCompare(b.date || ''))[0]; if (!a) return null; const shift = this.config.shiftTypes.find(s => s.id === a.shiftTypeId); if (!shift) return null; return { date: a.date, shift }; }
 
@@ -354,11 +429,14 @@ class Store {
   getRequestConflicts(request: LeaveRequest) {
     const user = this.users.find(u => u.id === request.userId);
     if (!user) return [];
-    const nonAbsenceTypes = [RequestType.OVERTIME_EARN, RequestType.OVERTIME_PAY, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_DAYS, RequestType.ADJUSTMENT_OVERTIME];
-    if (nonAbsenceTypes.includes(request.typeId as RequestType)) return [];
+    const tid = request.typeId.toLowerCase();
+    const isAbsence = tid.includes('vacac') || tid.includes('asuntos') || tid.includes('canje') || tid.includes('unjustified') || tid.includes('justific');
+    if (!isAbsence) return [];
     return this.requests.filter(r => {
         if (r.id === request.id) return false;
-        if (nonAbsenceTypes.includes(r.typeId as RequestType)) return false; 
+        const rTid = r.typeId.toLowerCase();
+        const rIsAbsence = rTid.includes('vacac') || rTid.includes('asuntos') || rTid.includes('canje') || rTid.includes('unjustified') || rTid.includes('justific');
+        if (!rIsAbsence) return false; 
         if (r.status === RequestStatus.REJECTED) return false;
         const otherUser = this.users.find(u => u.id === r.userId);
         if (!otherUser || otherUser.departmentId !== user.departmentId) return false;
