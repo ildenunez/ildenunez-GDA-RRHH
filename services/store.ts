@@ -56,10 +56,6 @@ class Store {
       return typeId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
-  /**
-   * Carga todos los datos desde Supabase y actualiza el estado local.
-   * Se puede llamar repetidamente para sincronizar.
-   */
   async refresh() {
     try {
         const { data: usersData, error: usersError } = await supabase.from('users').select('*');
@@ -107,7 +103,6 @@ class Store {
             } else this.config.emailTemplates = this.getDefaultEmailTemplates();
         } else this.config.emailTemplates = this.getDefaultEmailTemplates();
         
-        // Actualizar el objeto currentUser si ya existe una sesión
         if (this.currentUser) {
             const freshUser = this.users.find(u => u.id === this.currentUser!.id);
             if (freshUser) {
@@ -146,9 +141,89 @@ class Store {
 
   private getDefaultEmailTemplates(): EmailTemplate[] {
       return [
-          { id: 'request_created', label: 'Ausencia: Nueva Solicitud', subject: 'Nueva solicitud de {tipo} - {empleado}', body: 'Hola,\n\nSe ha registrado una nueva solicitud de {tipo} para el empleado {empleado}.', recipients: { worker: true, supervisor: true, admin: false } },
-          { id: 'request_approved', label: 'Ausencia: Aprobada', subject: 'Solicitud Aprobada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido APROBADA.', recipients: { worker: true, supervisor: false, admin: false } }
+          { id: 'request_created', label: 'Ausencia: Nueva Solicitud', subject: 'Nueva solicitud de {tipo} - {empleado}', body: 'Hola {supervisor},\n\nSe ha registrado una nueva solicitud de {tipo} para el empleado {empleado}.\n\nFechas: {fechas}.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
+          { id: 'request_approved', label: 'Ausencia: Aprobada', subject: 'Solicitud Aprobada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido APROBADA.\n\nFechas: {fechas}.\nComentario: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
+          { id: 'request_rejected', label: 'Ausencia: Rechazada', subject: 'Solicitud Rechazada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido RECHAZADA.\n\nMotivo: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
+          { id: 'overtime_created', label: 'Horas: Registro', subject: 'Nuevo registro de horas - {empleado}', body: 'Hola {supervisor},\n\n{empleado} ha registrado {horas} horas extra.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
+          { id: 'overtime_approved', label: 'Horas: Aprobada', subject: 'Registro de Horas Aprobado', body: 'Hola {empleado},\n\nSe ha aprobado tu registro de {horas} horas extra.', recipients: { worker: true, supervisor: false, admin: false } }
       ];
+  }
+
+  /**
+   * Procesa una plantilla y envía los correos necesarios usando la función 'send-test-email'
+   */
+  private async triggerEmailAutomation(templateId: string, request: LeaveRequest) {
+    if (!this.config.smtpSettings.enabled) return;
+
+    const template = this.config.emailTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const owner = this.users.find(u => u.id === request.userId);
+    if (!owner) return;
+
+    const dept = this.departments.find(d => d.id === owner.departmentId);
+    const typeLabel = this.getTypeLabel(request.typeId);
+
+    // Reemplazar placeholders de forma segura
+    const replacePlaceholders = (text: string) => {
+        if (!text) return '';
+        const replacements: Record<string, string> = {
+            'empleado': owner.name,
+            'tipo': typeLabel,
+            'desde': new Date(request.startDate).toLocaleDateString(),
+            'hasta': request.endDate ? new Date(request.endDate).toLocaleDateString() : '-',
+            'fechas': request.endDate && request.endDate !== request.startDate 
+                ? `${new Date(request.startDate).toLocaleDateString()} al ${new Date(request.endDate).toLocaleDateString()}` 
+                : new Date(request.startDate).toLocaleDateString(),
+            'supervisor': dept ? dept.supervisorIds.map(sid => this.users.find(u => u.id === sid)?.name).filter(Boolean).join(', ') : 'Responsable',
+            'horas': String(request.hours || 0),
+            'motivo': request.reason || '-',
+            'comentario': request.adminComment || '-',
+            'estado': request.status
+        };
+
+        let result = text;
+        Object.entries(replacements).forEach(([key, val]) => {
+            const regex = new RegExp(`(\\{${key}\\}|\\{\\{${key}\\}\\}|\\[${key}\\])`, 'gi');
+            result = result.replace(regex, val);
+        });
+        return result;
+    };
+
+    const finalSubject = replacePlaceholders(template.subject);
+    const finalBody = replacePlaceholders(template.body);
+
+    const recipients = new Set<string>();
+    if (template.recipients.worker && owner.email) recipients.add(owner.email);
+    
+    if (template.recipients.supervisor && dept) {
+        dept.supervisorIds.forEach(sid => {
+            const s = this.users.find(u => u.id === sid);
+            if (s && s.email) recipients.add(s.email);
+        });
+    }
+    
+    if (template.recipients.admin) {
+        this.users.filter(u => u.role === Role.ADMIN).forEach(a => {
+            if (a.email) recipients.add(a.email);
+        });
+    }
+
+    for (const email of recipients) {
+        try {
+            await supabase.functions.invoke('send-test-email', {
+                body: { 
+                    to: email, 
+                    subject: finalSubject, 
+                    message: finalBody,
+                    html: finalBody.replace(/\n/g, '<br>'),
+                    config: this.config.smtpSettings 
+                }
+            });
+        } catch (err) {
+            console.error(`Error enviando email a ${email}:`, err);
+        }
+    }
   }
 
   private mapUsersFromDB(data: any[]): User[] {
@@ -169,7 +244,7 @@ class Store {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: String(r.label || 'Solicitud'), startDate: String(r.start_date || ''), endDate: r.end_date,
           hours: r.hours, reason: r.reason, status: r.status as RequestStatus, createdAt: String(r.created_at || ''), adminComment: r.admin_comment, createdByAdmin: !!r.created_by_admin, 
-          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reported_to_admin: !!r.reported_to_admin
+          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reportedToAdmin: !!r.reported_to_admin
       }));
   }
 
@@ -241,11 +316,16 @@ class Store {
     let label = data.label || this.getTypeLabel(data.typeId);
     const { data: inserted } = await supabase.from('requests').insert({
       id: crypto.randomUUID(), user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
-      hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(), overtime_usage: data.overtimeUsage, is_justified: data.isJustified, reported_to_admin: data.reportedToAdmin
+      hours: data.hours, reason: data.reason, status, created_at: new Date().toISOString(), overtime_usage: data.overtime_usage || data.overtimeUsage, is_justified: data.is_justified || data.isJustified, reported_to_admin: data.reported_to_admin || data.reportedToAdmin
     }).select().single();
     
     if (inserted) {
-      this.requests.push(this.mapRequestsFromDB([inserted])[0]);
+      const mapped = this.mapRequestsFromDB([inserted])[0];
+      this.requests.push(mapped);
+      
+      const templateId = this.isOvertimeRequest(data.typeId) ? 'overtime_created' : 'request_created';
+      this.triggerEmailAutomation(templateId, mapped);
+
       if (status === RequestStatus.PENDING || status === RequestStatus.APPROVED) {
           const { deltaDays, deltaHours } = this.calculateRequestImpact(data.typeId, data.startDate, data.endDate, data.hours);
           const tid = data.typeId.toLowerCase();
@@ -285,7 +365,18 @@ class Store {
 
     await supabase.from('requests').update({ status: newStatus, admin_comment: adminComment }).eq('id', id);
     const idx = this.requests.findIndex(r => r.id === id);
-    if (idx !== -1) { this.requests[idx].status = newStatus; this.requests[idx].adminComment = adminComment; }
+    if (idx !== -1) { 
+        this.requests[idx].status = newStatus; 
+        this.requests[idx].adminComment = adminComment; 
+        
+        let templateId = '';
+        if (newStatus === RequestStatus.APPROVED) templateId = this.isOvertimeRequest(oldReq.typeId) ? 'overtime_approved' : 'request_approved';
+        if (newStatus === RequestStatus.REJECTED) templateId = 'request_rejected';
+        
+        if (templateId) {
+            this.triggerEmailAutomation(templateId, this.requests[idx]);
+        }
+    }
     this.notify();
   }
 

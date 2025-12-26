@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, ErrorInfo } from 'react';
+import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest, Notification } from './types';
 import Dashboard from './components/Dashboard';
@@ -46,11 +46,15 @@ interface ErrorBoundaryState {
  * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
  * Standard implementation using React.Component to ensure props and state are correctly typed and accessible.
  */
-// Fix: Explicitly use React.Component to resolve type errors for state and props
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Use explicitly imported Component and generic parameters to resolve Property 'state' and 'props' errors
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Explicitly define the state and props properties on the class for improved type checking
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  props: ErrorBoundaryProps;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.props = props;
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -62,7 +66,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
-    // Fix: Using this.state correctly after extending React.Component
+    // Fix: Access this.state safely now that it is recognized on the class instance
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -85,7 +89,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
     
-    // Fix: Using this.props correctly after extending React.Component
+    // Fix: Access this.props safely now that it is recognized on the class instance
     return this.props.children;
   }
 }
