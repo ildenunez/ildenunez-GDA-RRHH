@@ -245,7 +245,7 @@ class Store {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: String(r.label || 'Solicitud'), startDate: String(r.start_date || ''), endDate: r.end_date,
           hours: r.hours, reason: r.reason, status: r.status as RequestStatus, createdAt: String(r.created_at || ''), adminComment: r.admin_comment, createdByAdmin: !!r.created_by_admin, 
-          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reportedToAdmin: !!r.reported_to_admin
+          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reported_to_admin: !!r.reported_to_admin
       }));
   }
 
@@ -424,11 +424,95 @@ class Store {
       this.notify(); 
   }
 
-  async createUser(user: Partial<User>, password: string) { const { data } = await supabase.from('users').insert({ id: crypto.randomUUID(), name: user.name, email: user.email?.trim().toLowerCase(), role: user.role, department_id: user.departmentId, days_available: user.daysAvailable || 0, overtime_hours: user.overtimeHours || 0, password: password || '123456', birthdate: user.birthdate, avatar: user.avatar }).select().single(); if (data) { this.users = [...this.users, this.mapUsersFromDB([data])[0]]; this.notify(); } }
+  async createUser(user: Partial<User>, password: string) { 
+    // Construcción explícita del objeto para evitar problemas de tipos o campos undefined
+    const insertData: any = { 
+        id: crypto.randomUUID(), 
+        name: user.name, 
+        email: user.email?.trim().toLowerCase(), 
+        role: user.role, 
+        department_id: user.departmentId, 
+        days_available: Number(user.daysAvailable || 0), 
+        overtime_hours: Number(user.overtimeHours || 0), 
+        password: password || '123456', 
+        birthdate: user.birthdate || null, 
+        avatar: user.avatar || null 
+    };
+    
+    const { data, error } = await supabase.from('users').insert(insertData).select().single(); 
+    if (error) {
+        console.error("Error creating user:", error);
+        return;
+    }
+    if (data) { 
+        this.users = [...this.users, this.mapUsersFromDB([data])[0]]; 
+        this.notify(); 
+    } 
+  }
+
   async deleteUser(id: string) { await supabase.from('users').delete().eq('id', id); this.users = this.users.filter(u => u.id !== id); this.notify(); }
-  async updateUserAdmin(userId: string, data: Partial<User>) { const { data: updated } = await supabase.from('users').update({ name: data.name, email: data.email?.trim().toLowerCase(), department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
+
+  async updateUserAdmin(userId: string, data: Partial<User>) { 
+    // Mismo patrón robusto que updateUserProfile pero con campos extendidos
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email.trim().toLowerCase();
+    if (data.departmentId !== undefined) updateData.department_id = data.departmentId || null;
+    if (data.birthdate !== undefined) updateData.birthdate = data.birthdate || null;
+    if (data.avatar !== undefined) updateData.avatar = data.avatar || null;
+
+    const { data: updated, error } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); 
+    
+    if (error) {
+        console.error("Error updating user from admin:", error);
+        return;
+    }
+
+    if (updated) { 
+        const idx = this.users.findIndex(u => u.id === userId); 
+        if (idx !== -1) { 
+            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
+            this.users = [...this.users]; 
+            if (this.currentUser?.id === userId) { 
+                this.currentUser = { ...this.users[idx] }; 
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
+            } 
+        } 
+        this.notify(); 
+    } 
+  }
+
   async updateUserRole(userId: string, role: Role) { const { data: updated } = await supabase.from('users').update({ role }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx].role = role; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser.role = role; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
-  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { const updateData: any = { name: data.name, email: data.email.trim().toLowerCase(), avatar: data.avatar }; if (data.password) updateData.password = data.password; const { data: updated } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
+  
+  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { 
+    const updateData: any = { 
+        name: data.name, 
+        email: data.email.trim().toLowerCase(), 
+        avatar: data.avatar || null 
+    }; 
+    if (data.password) updateData.password = data.password; 
+    
+    const { data: updated, error } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); 
+    
+    if (error) {
+        console.error("Error updating user profile:", error);
+        return;
+    }
+
+    if (updated) { 
+        const idx = this.users.findIndex(u => u.id === userId); 
+        if (idx !== -1) { 
+            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
+            this.users = [...this.users]; 
+            if (this.currentUser?.id === userId) { 
+                this.currentUser = { ...this.users[idx] }; 
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
+            } 
+        } 
+        this.notify(); 
+    } 
+  }
+
   getMyRequests() { if (!this.currentUser) return []; return this.requests.filter(r => r.userId === this.currentUser!.id).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || '')); }
   getNotificationsForUser(userId: string) { return this.notifications.filter(n => n.userId === userId).sort((a,b) => (b.date || '').localeCompare(a.date || '')); }
   getPendingApprovalsForUser(userId: string) { const u = this.users.find(usr => usr.id === userId); if (!u) return []; const depts = u.role === Role.ADMIN ? this.departments.map(d => d.id) : this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id); return this.requests.filter(r => r.status === RequestStatus.PENDING && depts.includes(this.users.find(usr => usr.id === r.userId)?.departmentId || '')); }
