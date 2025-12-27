@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, 
   Calendar, 
@@ -26,7 +26,8 @@ import {
   Palmtree, 
   TrendingUp,
   History,
-  CalendarCheck
+  CalendarCheck,
+  Camera
 } from 'lucide-react';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType } from '../types';
@@ -166,6 +167,7 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
     const [days, setDays] = useState(editingUser?.daysAvailable || 0);
     const [hours, setHours] = useState(editingUser?.overtimeHours || 0);
     const [pass, setPass] = useState('');
+    const [avatar, setAvatar] = useState(editingUser?.avatar || '');
     const [birthdate, setBirthdate] = useState(editingUser?.birthdate || '');
     const [isSaving, setIsSaving] = useState(false);
     const [adjDays, setAdjDays] = useState(0);
@@ -175,22 +177,32 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
     const [showCreateRequestModal, setShowCreateRequestModal] = useState(false);
     const [editingRequestLocal, setEditingRequestLocal] = useState<LeaveRequest | null>(null);
     const [refresh, setRefresh] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const movements = useMemo(() => {
         if (!editingUser) return [];
         return store.requests.filter(r => r.userId === editingUser.id).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }, [editingUser?.id, store.requests, refresh]);
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => { setAvatar(reader.result as string); };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault(); setIsSaving(true);
         if (editingUser) {
-            await store.updateUserAdmin(editingUser.id, { name, email, departmentId: deptId, birthdate });
+            await store.updateUserAdmin(editingUser.id, { name, email, departmentId: deptId, birthdate, avatar });
             if (editingUser.role !== role) await store.updateUserRole(editingUser.id, role);
-            if (pass) await store.updateUserProfile(editingUser.id, { name, email, password: pass });
+            if (pass) await store.updateUserProfile(editingUser.id, { name, email, password: pass, avatar });
             if (adjDays !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: adjDays, reason: adjDaysReason || 'Ajuste manual', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
             if (adjHours !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: adjHours, reason: adjHoursReason || 'Ajuste manual', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
         } else {
-            await store.createUser({ name, email, role, departmentId: deptId, daysAvailable: days, overtimeHours: hours, birthdate }, pass || '123456');
+            await store.createUser({ name, email, role, departmentId: deptId, daysAvailable: days, overtimeHours: hours, birthdate, avatar }, pass || '123456');
         }
         setIsSaving(false); onClose();
     };
@@ -221,6 +233,18 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                     <form id="userForm" onSubmit={handleSubmit} className="flex flex-col gap-10">
                         <div className="space-y-4">
                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><UserIcon size={14}/> Perfil</h4>
+                            
+                            <div className="flex flex-col items-center mb-6">
+                                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                    <img src={avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random`} className="w-24 h-24 rounded-full border-4 border-white shadow-lg object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Camera className="text-white" size={24}/>
+                                    </div>
+                                </div>
+                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange}/>
+                                <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Click para cambiar foto</p>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nombre</label><input required className="w-full p-2.5 border rounded-xl bg-slate-50" value={name} onChange={e=>setName(e.target.value)}/></div>
                                 <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" required className="w-full p-2.5 border rounded-xl bg-slate-50" value={email} onChange={e=>setEmail(e.target.value)}/></div>
