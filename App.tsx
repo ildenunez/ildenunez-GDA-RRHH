@@ -42,13 +42,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-/**
- * ErrorBoundary component to catch rendering errors in its child components and display a fallback UI.
- * Standard implementation using React.Component to ensure props and state are correctly typed and accessible.
- */
-// Fix: Use explicitly imported Component and generic parameters to resolve Property 'state' and 'props' errors
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Explicitly define the state and props properties on the class for improved type checking
   state: ErrorBoundaryState = { hasError: false, error: null };
   props: ErrorBoundaryProps;
 
@@ -66,7 +60,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Fix: Access this.state safely now that it is recognized on the class instance
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -88,8 +81,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    
-    // Fix: Access this.props safely now that it is recognized on the class instance
     return this.props.children;
   }
 }
@@ -188,13 +179,9 @@ export default function App() {
     }
   }, [user, user?.id, store.notifications]);
 
-  /**
-   * Cambia la pestaña y sincroniza con la DB de forma silenciosa
-   */
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     setMobileMenuOpen(false);
-    // Sincronización silenciosa cada vez que el usuario navega
     store.refresh();
   };
 
@@ -228,20 +215,20 @@ export default function App() {
 
   return (
     <div className="flex h-screen h-[100dvh] bg-slate-50 overflow-hidden">
-      <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-64 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl`}>
-        <div className="p-6 flex flex-col items-center border-b border-slate-800 shrink-0">
-            <div className="w-20 h-20 bg-white rounded-xl p-2 mb-3 flex items-center justify-center"><img src={LOGO_URL} className="w-full h-full object-contain" /></div>
-            <h1 className="text-xl font-extrabold">GdA <span className="text-blue-500">RRHH</span></h1>
+      <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-64 xl:w-60 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl`}>
+        <div className="p-6 xl:p-5 flex flex-col items-center border-b border-slate-800 shrink-0">
+            <div className="w-20 h-20 xl:w-16 xl:h-16 bg-white rounded-xl p-2 mb-3 flex items-center justify-center"><img src={LOGO_URL} className="w-full h-full object-contain" /></div>
+            <h1 className="text-xl xl:text-lg font-extrabold">GdA <span className="text-blue-500">RRHH</span></h1>
         </div>
         
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto min-h-0">
+        <nav className="p-4 xl:p-3 space-y-1.5 flex-1 overflow-y-auto min-h-0">
           <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
           <NavItem id="calendar" icon={CalendarDays} label="Calendario" />
           <NavItem id="notifications" icon={Bell} label="Notificaciones" badgeCount={unreadCount} />
           <NavItem id="epis" icon={HardHat} label="EPIS" />
           {isSupervisor && (
             <>
-              <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase">Gestión</div>
+              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase">Gestión</div>
               <NavItem id="approvals" icon={ShieldCheck} label="Aprobaciones" badgeCount={pendingCount} />
               <NavItem id="team" icon={UsersIcon} label="Mi Equipo" />
               <NavItem id="upcoming" icon={CalendarClock} label="Próximas Ausencias" />
@@ -249,18 +236,18 @@ export default function App() {
           )}
           {isAdmin && (
             <>
-              <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase">Admin</div>
+              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase">Admin</div>
               <NavItem id="settings" icon={Settings} label="Administración" />
             </>
           )}
           <div className="pt-4 border-t border-slate-800 mt-4"><NavItem id="help" icon={HelpCircle} label="Ayuda" /></div>
         </nav>
 
-        <div className="p-4 border-t border-slate-800 shrink-0 bg-slate-900 z-50">
+        <div className="p-4 xl:p-3 border-t border-slate-800 shrink-0 bg-slate-900 z-50">
           <div className="flex items-center gap-3 mb-4 p-2 cursor-pointer hover:bg-slate-800 rounded-lg" onClick={() => handleTabChange('profile')}>
-            <img src={user.avatar} className="w-10 h-10 rounded-full border-2 border-slate-700 object-cover" />
+            <img src={user.avatar} className="w-10 h-10 xl:w-9 xl:h-9 rounded-full border-2 border-slate-700 object-cover" />
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{user.name}</p>
+                <p className="text-sm xl:text-xs font-medium truncate">{user.name}</p>
                 <p className="text-[10px] text-slate-400 truncate uppercase">{deptName || 'Sin Dpto.'}</p>
             </div>
           </div>
@@ -268,13 +255,13 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-64 flex flex-col h-screen h-[100dvh]">
-        <header className="h-16 bg-white border-b flex items-center justify-between px-6 z-30 shrink-0">
+      <main className="flex-1 md:ml-64 xl:ml-60 flex flex-col h-screen h-[100dvh]">
+        <header className="h-16 xl:h-14 bg-white border-b flex items-center justify-between px-6 xl:px-5 z-30 shrink-0">
           <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-600"><Menu/></button>
-          <h2 className="text-lg font-semibold text-slate-800 capitalize">{activeTab}</h2>
-          <button onClick={() => {setModalInitialTab('absence'); setEditingRequest(null); setShowRequestModal(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={16} /> Nueva Solicitud</button>
+          <h2 className="text-lg xl:text-base font-semibold text-slate-800 capitalize">{activeTab}</h2>
+          <button onClick={() => {setModalInitialTab('absence'); setEditingRequest(null); setShowRequestModal(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-medium flex items-center gap-2 shadow-lg"><Plus size={16} /> Nueva Solicitud</button>
         </header>
-        <div className="flex-1 overflow-auto p-4 md:p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8 xl:p-6 2xl:p-8">
            <ErrorBoundary>
              {activeTab === 'dashboard' && <Dashboard user={user} onNewRequest={t => {setModalInitialTab(t); setShowRequestModal(true);}} onEditRequest={r => {setEditingRequest(r); setShowRequestModal(true);}} onViewRequest={setViewingRequest} />}
              {activeTab === 'calendar' && <CalendarView user={user} />}
