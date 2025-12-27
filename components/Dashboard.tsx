@@ -229,7 +229,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
              </div>
 
              <div className="bg-blue-600 p-6 xl:p-5 rounded-2xl shadow-lg text-white">
-                 <Quote className="text-white/20 mb-2" size={32} xl:size={24}/>
+                 <Quote className="text-white/20 mb-2 w-8 h-8 xl:w-6 xl:h-6" size={32} />
                  <p className="italic font-medium leading-relaxed text-sm xl:text-xs">"El talento gana partidos, pero el trabajo en equipo y la inteligencia ganan campeonatos."</p>
                  <p className="text-right text-xs font-bold mt-4 xl:mt-2 text-blue-200 uppercase tracking-widest">— Michael Jordan</p>
              </div>

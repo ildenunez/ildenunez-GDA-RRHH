@@ -517,10 +517,10 @@ const CommunicationsManager = () => {
     return (
         <div className="space-y-6 animate-fade-in xl:space-y-4">
             <div className="flex gap-2 p-1 bg-slate-100 rounded-xl w-fit">
-                <button onClick={() => setTab('news')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'news' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>Muro</button>
-                <button onClick={() => setTab('mass')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'mass' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>Notif. Masiva</button>
-                <button onClick={() => setTab('smtp')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'smtp' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>SMTP</button>
-                <button onClick={() => setTab('templates')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'templates' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>Plantillas</button>
+                <button onClick={() => setTab('news')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'news' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Muro</button>
+                <button onClick={() => setTab('mass')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'mass' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Notif. Masiva</button>
+                <button onClick={() => setTab('smtp')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'smtp' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>SMTP</button>
+                <button onClick={() => setTab('templates')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-bold transition-all ${tab === 'templates' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Plantillas</button>
             </div>
             <div className="bg-white border border-slate-200 rounded-2xl p-6 xl:p-4 min-h-[400px] xl:min-h-[350px]">
                 {tab === 'news' && (
@@ -788,8 +788,8 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
         <div className="space-y-6 xl:space-y-4 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 xl:gap-3">
                 <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                    <button onClick={() => setViewMode('list')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>Listado</button>
-                    <button onClick={() => setViewMode('shifts')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs ${viewMode === 'shifts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-50' && 'text-slate-500'}`}>Planificación</button>
+                    <button onClick={() => setViewMode('list')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Listado</button>
+                    <button onClick={() => setViewMode('shifts')} className={`px-6 xl:px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs ${viewMode === 'shifts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Planificación</button>
                 </div>
                 <div className="flex items-center gap-3 xl:gap-2 w-full md:w-auto">
                     {currentUser.role === Role.ADMIN && (
