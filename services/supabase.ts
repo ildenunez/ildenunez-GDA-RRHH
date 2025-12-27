@@ -17,15 +17,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  *     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
  * );
  * 
- * -- 2. Añadir columna avatar a la tabla de usuarios
- * ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
- * 
- * -- 3. Añadir columnas de control de justificantes si no existen
+ * -- 2. Añadir columnas de control de justificantes si no existen
  * ALTER TABLE requests 
  * ADD COLUMN IF NOT EXISTS is_justified BOOLEAN DEFAULT FALSE,
  * ADD COLUMN IF NOT EXISTS reported_to_admin BOOLEAN DEFAULT FALSE;
  * 
- * -- 4. Asegurar que las columnas de trazabilidad existen
+ * -- 3. Asegurar que las columnas de trazabilidad existen
  * ALTER TABLE requests
  * ADD COLUMN IF NOT EXISTS is_consumed BOOLEAN DEFAULT FALSE,
  * ADD COLUMN IF NOT EXISTS consumed_hours FLOAT DEFAULT 0,

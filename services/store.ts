@@ -1,3 +1,4 @@
+
 import { User, Role, Department, LeaveRequest, RequestStatus, AppConfig, Notification, LeaveTypeConfig, EmailTemplate, ShiftType, ShiftAssignment, Holiday, PPEType, PPERequest, RequestType, OvertimeUsage, DateRange, NewsPost } from '../types';
 import { supabase } from './supabase';
 
@@ -241,11 +242,12 @@ class Store {
       }));
   }
 
+  // Fix: Assign typeId and reportedToAdmin correctly to match LeaveRequest interface
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: String(r.label || 'Solicitud'), startDate: String(r.start_date || ''), endDate: r.end_date,
           hours: r.hours, reason: r.reason, status: r.status as RequestStatus, createdAt: String(r.created_at || ''), adminComment: r.admin_comment, createdByAdmin: !!r.created_by_admin, 
-          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reported_to_admin: !!r.reported_to_admin
+          isConsumed: !!r.is_consumed, consumedHours: r.consumed_hours, overtimeUsage: r.overtime_usage, isJustified: !!r.is_justified, reportedToAdmin: !!r.reported_to_admin
       }));
   }
 
@@ -332,7 +334,7 @@ class Store {
           const tid = data.typeId.toLowerCase();
           const isEarning = tid.includes('registro') || tid.includes('festivo') || tid.includes('ajuste');
           if (!isEarning || status === RequestStatus.APPROVED) {
-             const u = this.users.find(usr => usr.id === userId);
+             const u = this.users.find(u => u.id === userId);
              if (u) await this.updateUserBalance(userId, u.daysAvailable + deltaDays, u.overtimeHours + deltaHours);
           }
       }
@@ -360,7 +362,7 @@ class Store {
     }
 
     if (applyChange) { 
-        const u = this.users.find(usr => usr.id === oldReq.userId); 
+        const u = this.users.find(u => u.id === oldReq.userId); 
         if (u) await this.updateUserBalance(u.id, u.daysAvailable + (deltaDays * multiplier), u.overtimeHours + (deltaHours * multiplier)); 
     }
 
@@ -415,7 +417,7 @@ class Store {
           const tid = req.typeId.toLowerCase();
           const isEarning = tid.includes('registro') || tid.includes('festivo') || tid.includes('ajuste');
           if (!isEarning || req.status === RequestStatus.APPROVED) { 
-              const u = this.users.find(usr => usr.id === req.userId); 
+              const u = this.users.find(u => u.id === req.userId); 
               if (u) await this.updateUserBalance(u.id, u.daysAvailable - deltaDays, u.overtimeHours - deltaHours); 
           } 
       } 
@@ -424,98 +426,14 @@ class Store {
       this.notify(); 
   }
 
-  async createUser(user: Partial<User>, password: string) { 
-    // Construcción explícita del objeto para evitar problemas de tipos o campos undefined
-    const insertData: any = { 
-        id: crypto.randomUUID(), 
-        name: user.name, 
-        email: user.email?.trim().toLowerCase(), 
-        role: user.role, 
-        department_id: user.departmentId, 
-        days_available: Number(user.daysAvailable || 0), 
-        overtime_hours: Number(user.overtimeHours || 0), 
-        password: password || '123456', 
-        birthdate: user.birthdate || null, 
-        avatar: user.avatar || null 
-    };
-    
-    const { data, error } = await supabase.from('users').insert(insertData).select().single(); 
-    if (error) {
-        console.error("Error creating user:", error);
-        return;
-    }
-    if (data) { 
-        this.users = [...this.users, this.mapUsersFromDB([data])[0]]; 
-        this.notify(); 
-    } 
-  }
-
+  async createUser(user: Partial<User>, password: string) { const { data } = await supabase.from('users').insert({ id: crypto.randomUUID(), name: user.name, email: user.email?.trim().toLowerCase(), role: user.role, department_id: user.departmentId, days_available: user.daysAvailable || 0, overtime_hours: user.overtimeHours || 0, password: password || '123456', birthdate: user.birthdate, avatar: user.avatar }).select().single(); if (data) { this.users = [...this.users, this.mapUsersFromDB([data])[0]]; this.notify(); } }
   async deleteUser(id: string) { await supabase.from('users').delete().eq('id', id); this.users = this.users.filter(u => u.id !== id); this.notify(); }
-
-  async updateUserAdmin(userId: string, data: Partial<User>) { 
-    // Mismo patrón robusto que updateUserProfile pero con campos extendidos
-    const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.email !== undefined) updateData.email = data.email.trim().toLowerCase();
-    if (data.departmentId !== undefined) updateData.department_id = data.departmentId || null;
-    if (data.birthdate !== undefined) updateData.birthdate = data.birthdate || null;
-    if (data.avatar !== undefined) updateData.avatar = data.avatar || null;
-
-    const { data: updated, error } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); 
-    
-    if (error) {
-        console.error("Error updating user from admin:", error);
-        return;
-    }
-
-    if (updated) { 
-        const idx = this.users.findIndex(u => u.id === userId); 
-        if (idx !== -1) { 
-            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
-            this.users = [...this.users]; 
-            if (this.currentUser?.id === userId) { 
-                this.currentUser = { ...this.users[idx] }; 
-                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
-            } 
-        } 
-        this.notify(); 
-    } 
-  }
-
+  async updateUserAdmin(userId: string, data: Partial<User>) { const { data: updated } = await supabase.from('users').update({ name: data.name, email: data.email?.trim().toLowerCase(), department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
   async updateUserRole(userId: string, role: Role) { const { data: updated } = await supabase.from('users').update({ role }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx].role = role; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser.role = role; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
-  
-  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { 
-    const updateData: any = { 
-        name: data.name, 
-        email: data.email.trim().toLowerCase(), 
-        avatar: data.avatar || null 
-    }; 
-    if (data.password) updateData.password = data.password; 
-    
-    const { data: updated, error } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); 
-    
-    if (error) {
-        console.error("Error updating user profile:", error);
-        return;
-    }
-
-    if (updated) { 
-        const idx = this.users.findIndex(u => u.id === userId); 
-        if (idx !== -1) { 
-            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
-            this.users = [...this.users]; 
-            if (this.currentUser?.id === userId) { 
-                this.currentUser = { ...this.users[idx] }; 
-                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
-            } 
-        } 
-        this.notify(); 
-    } 
-  }
-
+  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { const updateData: any = { name: data.name, email: data.email.trim().toLowerCase(), avatar: data.avatar }; if (data.password) updateData.password = data.password; const { data: updated } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
   getMyRequests() { if (!this.currentUser) return []; return this.requests.filter(r => r.userId === this.currentUser!.id).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || '')); }
   getNotificationsForUser(userId: string) { return this.notifications.filter(n => n.userId === userId).sort((a,b) => (b.date || '').localeCompare(a.date || '')); }
-  getPendingApprovalsForUser(userId: string) { const u = this.users.find(usr => usr.id === userId); if (!u) return []; const depts = u.role === Role.ADMIN ? this.departments.map(d => d.id) : this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id); return this.requests.filter(r => r.status === RequestStatus.PENDING && depts.includes(this.users.find(usr => usr.id === r.userId)?.departmentId || '')); }
+  getPendingApprovalsForUser(userId: string) { const u = this.users.find(u => u.id === userId); if (!u) return []; const depts = u.role === Role.ADMIN ? this.departments.map(d => d.id) : this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id); return this.requests.filter(r => r.status === RequestStatus.PENDING && depts.includes(this.users.find(u => u.id === r.userId)?.departmentId || '')); }
   getAvailableOvertimeRecords(userId: string) { return this.requests.filter(r => r.userId === userId && r.status === RequestStatus.APPROVED && (r.typeId.toLowerCase().includes('registro') || r.typeId.toLowerCase().includes('festivo')) && (Number(r.hours || 0) - Number(r.consumedHours || 0)) > 0.01); }
   getShiftForUserDate(userId: string, date: string) { const a = this.config.shiftAssignments.find(as => as.userId === userId && as.date === date); if (!a) return undefined; return this.config.shiftTypes.find(s => s.id === a.shiftTypeId); }
   getNextShift(userId: string) { const today = new Date().toISOString().split('T')[0]; const a = this.config.shiftAssignments.filter(as => as.userId === userId && as.date >= today).sort((a,b) => (a.date || '').localeCompare(b.date || ''))[0]; if (!a) return null; const shift = this.config.shiftTypes.find(s => s.id === a.shiftTypeId); return shift ? { date: a.date, shift } : null; }
@@ -537,6 +455,7 @@ class Store {
   async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) { const { data } = await supabase.from('leave_types').update({ label, subtracts_days: subtractsDays, fixed_range: fixedRanges || null }).eq('id', id).select().single(); if(data) { const idx = this.config.leaveTypes.findIndex(t => t.id === id); if (idx !== -1) this.config.leaveTypes[idx] = { id: data.id, label: data.label, subtractsDays: !!data.subtracts_days, fixedRanges: fixedRanges || undefined }; this.notify(); } }
   async deleteLeaveType(id: string) { await supabase.from('leave_types').delete().eq('id', id); this.config.leaveTypes = this.config.leaveTypes.filter(t => t.id !== id); this.notify(); }
   async createShiftType(name: string, color: string, start: string, end: string) { const { data } = await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name, color, segments: [{start, end}] }).select().single(); if (data) { this.config.shiftTypes.push({ id: data.id, name: data.name, color: data.color, segments: data.segments }); this.notify(); } }
+  async updateShiftType(id: string, name: string, color: string, start: string, end: string) { const { data: updated } = await supabase.from('shift_types').update({ name, color, segments: [{start, end}] }).eq('id', id).select().single(); if (updated) { const idx = this.config.shiftTypes.findIndex(s => s.id === id); if (idx !== -1) this.config.shiftTypes[idx] = { id: updated.id, name: updated.name, color: updated.color, segments: updated.segments }; this.notify(); } }
   async deleteShiftType(id: string) { await supabase.from('shift_types').delete().eq('id', id); this.config.shiftTypes = this.config.shiftTypes.filter(s => s.id !== id); this.notify(); }
   async createPPEType(name: string, sizes: string[]) { const { data } = await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes }).select().single(); if(data) { this.config.ppeTypes.push({ id: data.id, name: data.name, sizes: data.sizes }); this.notify(); } }
   async updatePPEType(id: string, name: string, sizes: string[]) { const { data } = await supabase.from('ppe_types').update({ name, sizes }).eq('id', id).select().single(); if (data) { const idx = this.config.ppeTypes.findIndex(p => p.id === id); if (idx !== -1) this.config.ppeTypes[idx] = { id: data.id, name: data.name, sizes: data.sizes }; this.notify(); } }
