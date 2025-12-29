@@ -16,7 +16,7 @@ import {
   Users, 
   Plus, 
   User as UserIcon, 
-  PieChart, 
+  PieChart as PieIcon, 
   Edit2, 
   Trash2, 
   Loader2, 
@@ -54,8 +54,26 @@ import {
   Eye,
   Eraser,
   List,
-  SearchCode
+  SearchCode,
+  BarChart2,
+  Activity,
+  Target
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType, Department, Holiday, PPEType, ShiftType, EmailTemplate, DateRange, ShiftSegment } from '../types';
 import RequestFormModal from './RequestFormModal';
@@ -261,6 +279,243 @@ const AbsenceQueryManager = () => {
                             })}
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AdminStats = () => {
+    const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+    const [period, setPeriod] = useState<'30' | '90' | '365'>('365');
+    
+    const COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+    const filteredUsers = useMemo(() => {
+        return selectedDeptId ? store.users.filter(u => u.departmentId === selectedDeptId) : store.users;
+    }, [selectedDeptId, store.users]);
+
+    // 1. Distribución de plantilla por dpto
+    const deptDistribution = useMemo(() => {
+        return store.departments.map(d => ({
+            name: d.name,
+            value: store.users.filter(u => u.departmentId === d.id).length
+        })).filter(d => d.value > 0);
+    }, [store.departments, store.users]);
+
+    // 2. Ausencias por dpto (Días totales aprobados)
+    const absenceDistribution = useMemo(() => {
+        const results = store.departments.map(d => {
+            const users = store.users.filter(u => u.departmentId === d.id);
+            const userIds = users.map(u => u.id);
+            const days = store.requests.reduce((acc, r) => {
+                if (userIds.includes(r.userId) && r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId)) {
+                    const s = new Date(r.startDate);
+                    const e = new Date(r.endDate || r.startDate);
+                    const diff = Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    return acc + diff;
+                }
+                return acc;
+            }, 0);
+            return { name: d.name, value: days };
+        }).filter(d => d.value > 0);
+        return results;
+    }, [store.departments, store.requests, store.users]);
+
+    // 3. Ausencias por día de la semana (El dato "sorprendente")
+    const weekdayImpact = useMemo(() => {
+        const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const impact = [0, 0, 0, 0, 0, 0, 0];
+        
+        store.requests.forEach(r => {
+            const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
+            const isPhysical = !store.isOvertimeRequest(r.typeId) || isCanje;
+
+            if (r.status === RequestStatus.APPROVED && isPhysical) {
+                const u = store.users.find(usr => usr.id === r.userId);
+                if (selectedDeptId && u?.departmentId !== selectedDeptId) return;
+
+                let current = new Date(r.startDate);
+                const end = new Date(r.endDate || r.startDate);
+                while (current <= end) {
+                    impact[current.getDay()]++;
+                    current.setDate(current.getDate() + 1);
+                }
+            }
+        });
+
+        return days.map((name, i) => ({ name, value: impact[i] })).filter((_, i) => i !== 0 && i !== 6); // Solo laborales
+    }, [store.requests, selectedDeptId]);
+
+    // 4. Consumo de vacaciones vs Pendiente
+    const vacationStats = useMemo(() => {
+        const totalPossible = filteredUsers.reduce((acc, u) => acc + (u.daysAvailable + 22), 0); // Estimando 22 de base
+        const currentBalance = filteredUsers.reduce((acc, u) => acc + u.daysAvailable, 0);
+        const consumed = Math.max(0, totalPossible - currentBalance);
+
+        return [
+            { name: 'Consumido', value: consumed, color: '#3b82f6' },
+            { name: 'Pendiente', value: currentBalance, color: '#e2e8f0' }
+        ];
+    }, [filteredUsers]);
+
+    return (
+        <div className="space-y-8 animate-fade-in xl:space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-6 xl:p-4 rounded-3xl border border-slate-100 shadow-sm">
+                <div>
+                    <h3 className="text-xl xl:text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <BarChart2 className="text-blue-600"/> Inteligencia de RRHH
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Análisis visual de la operatividad y ausentismo.</p>
+                </div>
+                <div className="flex gap-2 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-64">
+                        <Filter className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                        <select 
+                            className="w-full pl-9 pr-4 py-2 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none appearance-none font-bold text-slate-700"
+                            value={selectedDeptId}
+                            onChange={(e) => setSelectedDeptId(e.target.value)}
+                        >
+                            <option value="">Toda la Empresa</option>
+                            {store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-6">
+                {/* Gráfico 1: Headcount por Depto */}
+                <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
+                            <Users size={18} className="text-blue-500"/> Distribución Plantilla
+                        </h4>
+                        <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded-lg uppercase">Por Departamento</span>
+                    </div>
+                    <div className="h-[300px] xl:h-[250px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={deptDistribution}
+                                    innerRadius={60}
+                                    outerRadius={100}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                >
+                                    {deptDistribution.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Gráfico 2: Presión de Ausencias */}
+                <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
+                            <Activity size={18} className="text-red-500"/> Impacto de Ausencias
+                        </h4>
+                        <span className="text-[10px] font-black bg-red-50 text-red-600 px-2 py-1 rounded-lg uppercase">Días totales</span>
+                    </div>
+                    <div className="h-[300px] xl:h-[250px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={absenceDistribution}
+                                    innerRadius={60}
+                                    outerRadius={100}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label={({ name, value }) => `${name} ${value}d`}
+                                >
+                                    {absenceDistribution.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Gráfico 3: Análisis Semanal (Mito del Lunes) */}
+                <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
+                            <Target size={18} className="text-orange-500"/> Frecuencia Semanal
+                        </h4>
+                        <div className="text-right">
+                             <p className="text-[10px] font-bold text-slate-400 uppercase">Dato de interés:</p>
+                             <p className="text-xs font-black text-slate-700">Picos de ausencia por día</p>
+                        </div>
+                    </div>
+                    <div className="h-[300px] xl:h-[250px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={weekdayImpact}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={12} tick={{fill: '#64748b'}} />
+                                <YAxis hide />
+                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                                <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40}>
+                                    {weekdayImpact.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.value === Math.max(...weekdayImpact.map(v => v.value)) ? '#ef4444' : '#3b82f6'} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <p className="text-[10px] text-center text-slate-400 mt-4 italic">El color <span className="text-red-500 font-bold">Rojo</span> indica el día con mayor incidencia histórica.</p>
+                </div>
+
+                {/* Gráfico 4: Burn Rate de Vacaciones */}
+                <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
+                            <Palmtree size={18} className="text-green-500"/> Salud Vacacional
+                        </h4>
+                        <span className="text-[10px] font-black bg-green-50 text-green-600 px-2 py-1 rounded-lg uppercase">Consumo Global</span>
+                    </div>
+                    <div className="flex-1 flex items-center">
+                        <div className="w-1/2 h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={vacationStats}
+                                        innerRadius={50}
+                                        outerRadius={70}
+                                        dataKey="value"
+                                        stroke="none"
+                                    >
+                                        {vacationStats.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="w-1/2 space-y-4 px-4 border-l border-slate-100">
+                            {vacationStats.map((stat, i) => (
+                                <div key={i}>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{stat.name}</p>
+                                    <p className="text-2xl font-black text-slate-800 leading-none">{stat.value.toFixed(1)} <span className="text-xs font-normal text-slate-400 uppercase">Días</span></p>
+                                </div>
+                            ))}
+                            <div className="pt-2">
+                                <div className="text-[9px] font-black text-blue-600 uppercase mb-1">Ratio de disfrute</div>
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div 
+                                        className="bg-blue-500 h-full transition-all duration-1000" 
+                                        style={{ width: `${(vacationStats[0].value / (vacationStats[0].value + vacationStats[1].value) * 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -948,7 +1203,7 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
 };
 
 export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => void }> = ({ onViewRequest }) => {
-    const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm' | 'query'>('users');
+    const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm' | 'query' | 'stats'>('users');
     const [refresh, setRefresh] = useState(0);
     useEffect(() => { const unsub = store.subscribe(() => setRefresh(prev => prev + 1)); return unsub; }, []);
     
@@ -982,13 +1237,14 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 <div className="group relative bg-white p-6 xl:p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 transition-all hover:shadow-md"><div className="bg-orange-50 p-4 xl:p-3 rounded-xl text-orange-600"><Palmtree size={28}/></div><div><p className="text-xs font-bold text-slate-400 uppercase">Ausencias Hoy</p><h4 className="text-3xl xl:text-2xl font-bold text-slate-800">{stats.absent}</h4></div>{stats.absentNames.length > 0 && (<div className="absolute top-full left-0 mt-2 w-full bg-white p-3 rounded-xl shadow-xl border border-slate-100 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ausentes:</p><div className="flex flex-wrap gap-1">{stats.absentNames.map(name => (<span key={name} className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[9px] rounded-full font-bold">{name}</span>))}</div></div>)}</div>
                 <div className="bg-white p-6 xl:p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 transition-all hover:shadow-md"><div className="bg-purple-50 p-4 xl:p-3 rounded-xl text-purple-600"><TrendingUp size={28}/></div><div><p className="text-xs font-bold text-slate-400 uppercase">% Ausentismo</p><h4 className="text-3xl xl:text-2xl font-bold text-slate-800">{stats.percent}%</h4></div></div>
             </div>
-            <div className="flex flex-wrap gap-2 xl:gap-1.5 border-b border-slate-200">
+            <div className="flex flex-wrap gap-2 xl:gap-1.5 border-b border-slate-200 overflow-x-auto whitespace-nowrap scrollbar-hide">
                 <button onClick={() => setAdminTab('users')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'users' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Usuarios</button>
                 <button onClick={() => setAdminTab('depts')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'depts' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Dptos</button>
                 <button onClick={() => setAdminTab('config')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'config' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>RRHH</button>
                 <button onClick={() => setAdminTab('ppe')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'ppe' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>EPIs</button>
                 <button onClick={() => setAdminTab('comm')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'comm' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Comunicaciones</button>
                 <button onClick={() => setAdminTab('query')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'query' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Consultas</button>
+                <button onClick={() => setAdminTab('stats')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'stats' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Estadísticas</button>
             </div>
             <div className="bg-white p-6 xl:p-4 rounded-2xl shadow-sm border border-slate-100 min-h-[500px] xl:min-h-[400px]">
                 {adminTab === 'users' && <UserManagement currentUser={store.currentUser!} onViewRequest={onViewRequest} />}
@@ -997,6 +1253,7 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 {adminTab === 'ppe' && <PPEConfigManager />}
                 {adminTab === 'comm' && <CommunicationsManager />}
                 {adminTab === 'query' && <AbsenceQueryManager />}
+                {adminTab === 'stats' && <AdminStats />}
             </div>
         </div>
     );
