@@ -76,7 +76,16 @@ class Store {
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, author_id: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
+        if (newsData) {
+            this.config.news = newsData.map((n: any) => ({ 
+                id: n.id, 
+                title: n.title, 
+                content: n.content, 
+                authorId: n.author_id, 
+                createdAt: n.created_at, 
+                pinned: n.pinned 
+            }));
+        }
         
         if (typesData) {
             this.config.leaveTypes = typesData.map((t: any) => {
@@ -420,25 +429,138 @@ class Store {
       this.notify(); 
   }
 
-  async createUser(user: Partial<User>, password: string) { const { data } = await supabase.from('users').insert({ id: crypto.randomUUID(), name: user.name, email: user.email?.trim().toLowerCase(), role: user.role, department_id: user.departmentId, days_available: user.daysAvailable || 0, overtime_hours: user.overtimeHours || 0, password: password || '123456', birthdate: user.birthdate, avatar: user.avatar }).select().single(); if (data) { this.users = [...this.users, this.mapUsersFromDB([data])[0]]; this.notify(); } }
-  async deleteUser(id: string) { await supabase.from('users').delete().eq('id', id); this.users = this.users.filter(u => u.id !== id); this.notify(); }
-  async updateUserAdmin(userId: string, data: Partial<User>) { const { data: updated } = await supabase.from('users').update({ name: data.name, email: data.email?.trim().toLowerCase(), department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
-  async updateUserRole(userId: string, role: Role) { const { data: updated } = await supabase.from('users').update({ role }).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx].role = role; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser.role = role; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
-  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { const updateData: any = { name: data.name, email: data.email.trim().toLowerCase(), avatar: data.avatar }; if (data.password) updateData.password = data.password; const { data: updated } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); if (updated) { const idx = this.users.findIndex(u => u.id === userId); if (idx !== -1) { this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; this.users = [...this.users]; if (this.currentUser?.id === userId) { this.currentUser = { ...this.users[idx] }; localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); } } this.notify(); } }
+  async createUser(user: Partial<User>, password: string) { 
+    const { data } = await supabase.from('users').insert({ 
+        id: crypto.randomUUID(), name: user.name, email: user.email?.trim().toLowerCase(), 
+        role: user.role, department_id: user.departmentId, days_available: user.daysAvailable || 0, 
+        overtime_hours: user.overtimeHours || 0, password: password || '123456', 
+        birthdate: user.birthdate, avatar: user.avatar 
+    }).select().single(); 
+    if (data) { 
+        this.users = [...this.users, this.mapUsersFromDB([data])[0]]; 
+        this.notify(); 
+    } 
+  }
+
+  async deleteUser(id: string) { 
+    await supabase.from('users').delete().eq('id', id); 
+    this.users = this.users.filter(u => u.id !== id); 
+    this.notify(); 
+  }
+
+  async updateUserAdmin(userId: string, data: Partial<User>) { 
+    const { data: updated } = await supabase.from('users').update({ 
+        name: data.name, email: data.email?.trim().toLowerCase(), 
+        department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar 
+    }).eq('id', userId).select().single(); 
+    if (updated) { 
+        const idx = this.users.findIndex(u => u.id === userId); 
+        if (idx !== -1) { 
+            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
+            this.users = [...this.users]; 
+            if (this.currentUser?.id === userId) { 
+                this.currentUser = { ...this.users[idx] }; 
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
+            } 
+        } 
+        this.notify(); 
+    } 
+  }
+
+  async updateUserRole(userId: string, role: Role) { 
+    const { data: updated } = await supabase.from('users').update({ role }).eq('id', userId).select().single(); 
+    if (updated) { 
+        const idx = this.users.findIndex(u => u.id === userId); 
+        if (idx !== -1) { 
+            this.users[idx].role = role; 
+            this.users = [...this.users]; 
+            if (this.currentUser?.id === userId) { 
+                this.currentUser.role = role; 
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
+            } 
+        } 
+        this.notify(); 
+    } 
+  }
+
+  async updateUserProfile(userId: string, data: { name: string; email: string; password?: string; avatar?: string }) { 
+    const updateData: any = { name: data.name, email: data.email.trim().toLowerCase(), avatar: data.avatar }; 
+    if (data.password) updateData.password = data.password; 
+    const { data: updated } = await supabase.from('users').update(updateData).eq('id', userId).select().single(); 
+    if (updated) { 
+        const idx = this.users.findIndex(u => u.id === userId); 
+        if (idx !== -1) { 
+            this.users[idx] = { ...this.users[idx], ...this.mapUsersFromDB([updated])[0] }; 
+            this.users = [...this.users]; 
+            if (this.currentUser?.id === userId) { 
+                this.currentUser = { ...this.users[idx] }; 
+                localStorage.setItem('gda_session', JSON.stringify(this.currentUser)); 
+            } 
+        } 
+        this.notify(); 
+    } 
+  }
+
   getMyRequests() { if (!this.currentUser) return []; return this.requests.filter(r => r.userId === this.currentUser!.id).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || '')); }
   getNotificationsForUser(userId: string) { return this.notifications.filter(n => n.userId === userId).sort((a,b) => (b.date || '').localeCompare(a.date || '')); }
   getPendingApprovalsForUser(userId: string) { const u = this.users.find(u => u.id === userId); if (!u) return []; const depts = u.role === Role.ADMIN ? this.departments.map(d => d.id) : this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id); return this.requests.filter(r => r.status === RequestStatus.PENDING && depts.includes(this.users.find(u => u.id === r.userId)?.departmentId || '')); }
   getAvailableOvertimeRecords(userId: string) { return this.requests.filter(r => r.userId === userId && r.status === RequestStatus.APPROVED && (r.typeId.toLowerCase().includes('registro') || r.typeId.toLowerCase().includes('festivo')) && (Number(r.hours || 0) - Number(r.consumedHours || 0)) > 0.01); }
   getShiftForUserDate(userId: string, date: string) { const a = this.config.shiftAssignments.find(as => as.userId === userId && as.date === date); if (!a) return undefined; return this.config.shiftTypes.find(s => s.id === a.shiftTypeId); }
   getNextShift(userId: string) { const today = new Date().toISOString().split('T')[0]; const a = this.config.shiftAssignments.filter(as => as.userId === userId && as.date >= today).sort((a,b) => (a.date || '').localeCompare(b.date || ''))[0]; if (!a) return null; const shift = this.config.shiftTypes.find(s => s.id === a.shiftTypeId); return shift ? { date: a.date, shift } : null; }
-  async assignShift(user_id: string, date: string, shift_type_id: string) { if (!shift_type_id) { await supabase.from('shift_assignments').delete().match({ user_id, date }); this.config.shiftAssignments = this.config.shiftAssignments.filter(a => !(a.userId === user_id && a.date === date)); } else { const { data } = await supabase.from('shift_assignments').upsert({ user_id, date, shift_type_id }).select().single(); if (data) { const idx = this.config.shiftAssignments.findIndex(a => a.userId === user_id && a.date === date); const m = { id: data.id, userId: data.user_id, date: data.date, shiftTypeId: data.shift_type_id }; if (idx !== -1) this.config.shiftAssignments[idx] = m; else this.config.shiftAssignments.push(m); } } this.notify(); }
+  
+  async assignShift(user_id: string, date: string, shift_type_id: string) { 
+    if (!shift_type_id) { 
+        await supabase.from('shift_assignments').delete().match({ user_id, date }); 
+        this.config.shiftAssignments = this.config.shiftAssignments.filter(a => !(a.userId === user_id && a.date === date)); 
+    } else { 
+        const { data } = await supabase.from('shift_assignments').upsert({ user_id, date, shift_type_id }).select().single(); 
+        if (data) { 
+            const idx = this.config.shiftAssignments.findIndex(a => a.userId === user_id && a.date === date); 
+            const m = { id: data.id, userId: data.user_id, date: data.date, shiftTypeId: data.shift_type_id }; 
+            if (idx !== -1) this.config.shiftAssignments[idx] = m; else this.config.shiftAssignments.push(m); 
+        } 
+    } 
+    this.notify(); 
+  }
+
   async markNotificationAsRead(id: string) { await supabase.from('notifications').update({ read: true }).eq('id', id); const n = this.notifications.find(notif => notif.id === id); if (n) n.read = true; this.notify(); }
   async markAllNotificationsAsRead(userId: string) { await supabase.from('notifications').update({ read: true }).eq('user_id', userId); this.notifications.forEach(n => { if (n.userId === userId) n.read = true; }); this.notify(); }
   async deleteNotification(id: string) { await supabase.from('notifications').delete().eq('id', id); this.notifications = this.notifications.filter(n => n.id !== id); this.notify(); }
-  async createPPERequest(userId: string, typeId: string, size: string) { const { data } = await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() }).select().single(); if (data) { this.config.ppeRequests.push({ id: data.id, userId: data.user_id, type_id: data.type_id, typeId: data.type_id, size: data.size, status: data.status, createdAt: data.created_at, deliveryDate: data.delivery_date }); this.notify(); } }
-  async deliverPPERequest(id: string) { const d = new Date().toISOString(); await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: d }).eq('id', id); const req = this.config.ppeRequests.find(r => r.id === id); if (req) { req.status = 'ENTREGADO'; req.deliveryDate = d; this.notify(); } }
-  async deletePPERequest(id: string) { const { error } = await supabase.from('ppe_requests').delete().eq('id', id); if (!error) { this.config.ppeRequests = this.config.ppeRequests.filter(r => r.id !== id); this.notify(); } }
-  async createNewsPost(title: string, content: string, authorId: string) { const { data } = await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() }).select().single(); if(data) { this.config.news.unshift({ id: data.id, title: data.title, content: data.content, authorId: data.author_id, createdAt: data.created_at }); this.notify(); } }
+  
+  async createPPERequest(userId: string, typeId: string, size: string) { 
+    const { data } = await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() }).select().single(); 
+    if (data) { 
+        this.config.ppeRequests.push({ id: data.id, userId: data.user_id, type_id: data.type_id, typeId: data.type_id, size: data.size, status: data.status, createdAt: data.created_at, deliveryDate: data.delivery_date }); 
+        this.notify(); 
+    } 
+  }
+
+  async deliverPPERequest(id: string) { 
+    const d = new Date().toISOString(); 
+    await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: d }).eq('id', id); 
+    const req = this.config.ppeRequests.find(r => r.id === id); 
+    if (req) { 
+        req.status = 'ENTREGADO'; req.deliveryDate = d; 
+        this.notify(); 
+    } 
+  }
+
+  async deletePPERequest(id: string) { 
+    const { error } = await supabase.from('ppe_requests').delete().eq('id', id); 
+    if (!error) { 
+        this.config.ppeRequests = this.config.ppeRequests.filter(r => r.id !== id); 
+        this.notify(); 
+    } 
+  }
+
+  async createNewsPost(title: string, content: string, authorId: string) { 
+    const { data } = await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() }).select().single(); 
+    if(data) { 
+        this.config.news.unshift({ id: data.id, title: data.title, content: data.content, authorId: data.author_id, createdAt: data.created_at }); 
+        this.notify(); 
+    } 
+  }
+
   async deleteNewsPost(id: string) { await supabase.from('news').delete().eq('id', id); this.config.news = this.config.news.filter(n => n.id !== id); this.notify(); }
   async createDepartment(name: string, supervisorIds: string[]) { const { data } = await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds }).select().single(); if(data) { this.departments.push({ id: data.id, name: data.name, supervisorIds: data.supervisor_ids }); this.notify(); } }
   async updateDepartment(id: string, name: string, supervisorIds: string[]) { await supabase.from('departments').update({ name, supervisor_ids: supervisorIds }).eq('id', id); const d = this.departments.find(dep => dep.id === id); if(d) { d.name = name; d.supervisorIds = supervisorIds; this.notify(); } }
@@ -453,12 +575,13 @@ class Store {
   async updateShiftType(id: string, name: string, color: string, start: string, end: string) { const { data: updated } = await supabase.from('shift_types').update({ name, color, segments: [{start, end}] }).eq('id', id).select().single(); if (updated) { const idx = this.config.shiftTypes.findIndex(s => s.id === id); if (idx !== -1) this.config.shiftTypes[idx] = { id: updated.id, name: updated.name, color: updated.color, segments: updated.segments }; this.notify(); } }
   async deleteShiftType(id: string) { await supabase.from('shift_types').delete().eq('id', id); this.config.shiftTypes = this.config.shiftTypes.filter(s => s.id !== id); this.notify(); }
   async createPPEType(name: string, sizes: string[]) { const { data } = await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes }).select().single(); if(data) { this.config.ppeTypes.push({ id: data.id, name: data.name, sizes: data.sizes }); this.notify(); } }
-  async updatePPEType(id: string, name: string, sizes: string[]) { const { data } = await supabase.from('ppe_types').update({ name, sizes }).eq('id', id).select().single(); if (data) { const idx = this.config.ppeTypes.findIndex(p => p.id === id); if (idx !== -1) this.config.ppeTypes[idx] = { id: data.id, name: data.name, sizes: data.sizes }; this.notify(); } }
+  async updatePPEType(id: string, name: string, sizes: string[]) { const { data: updated } = await supabase.from('ppe_types').update({ name, sizes }).eq('id', id).select().single(); if (updated) { const idx = this.config.ppeTypes.findIndex(p => p.id === id); if (idx !== -1) this.config.ppeTypes[idx] = { id: updated.id, name: updated.name, sizes: updated.sizes }; this.notify(); } }
   async deletePPEType(id: string) { await supabase.from('ppe_types').delete().eq('id', id); this.config.ppeTypes = this.config.ppeTypes.filter(p => p.id !== id); this.notify(); }
   async saveSmtpSettings(settings: AppConfig['smtpSettings']) { await supabase.from('settings').upsert({ key: 'smtp', value: settings }); this.config.smtpSettings = settings; this.notify(); }
   async saveEmailTemplates(templates: EmailTemplate[]) { await supabase.from('settings').upsert({ key: 'email_templates', value: templates }); this.config.emailTemplates = templates; this.notify(); }
   async sendMassNotification(userIds: string[], message: string) { const { error } = await supabase.from('notifications').insert(userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, created_at: new Date().toISOString(), type: 'admin' }))); if(!error) { userIds.forEach(uid => { this.notifications.push({ id: crypto.randomUUID(), userId: uid, message, read: false, date: new Date().toISOString(), type: 'admin' }); }); this.notify(); } }
   async sendTestEmail(to: string) { try { const { data, error } = await supabase.functions.invoke('send-test-email', { body: { to, config: this.config.smtpSettings } }); if (error) throw error; return true; } catch (err: any) { throw err; } }
+  
   getRequestConflicts(request: LeaveRequest) {
     const user = this.users.find(u => u.id === request.userId);
     if (!user) return [];
