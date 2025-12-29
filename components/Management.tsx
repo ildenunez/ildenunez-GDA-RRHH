@@ -57,7 +57,8 @@ import {
   SearchCode,
   BarChart2,
   Activity,
-  Target
+  Target,
+  HardHat
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -77,6 +78,7 @@ import {
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType, Department, Holiday, PPEType, ShiftType, EmailTemplate, DateRange, ShiftSegment } from '../types';
 import RequestFormModal from './RequestFormModal';
+import PPERequestModal from './PPERequestModal';
 import ShiftScheduler from './ShiftScheduler';
 
 const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
@@ -191,10 +193,6 @@ const AbsenceQueryManager = () => {
         const summary: Record<string, { userId: string, totalDays: number, types: Set<string> }> = {};
 
         store.requests.forEach(r => {
-            // Solo ausencias reales aprobadas.
-            // Una ausencia física es cualquier LeaveType que no sea overtime, 
-            // O el canje de horas (ya que el empleado no viene a trabajar), 
-            // siempre que no sea un ajuste administrativo de saldo.
             const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
             const isPhysicalAbsence = (!store.isOvertimeRequest(r.typeId) || isCanje) && r.typeId !== RequestType.ADJUSTMENT_DAYS && r.typeId !== RequestType.ADJUSTMENT_OVERTIME;
             
@@ -203,9 +201,7 @@ const AbsenceQueryManager = () => {
             const reqStartStr = r.startDate.split('T')[0];
             const reqEndStr = (r.endDate || r.startDate).split('T')[0];
 
-            // Verificar solapamiento con el rango seleccionado
             if (reqStartStr <= endDate && reqEndStr >= startDate) {
-                // Calcular días efectivos dentro del rango
                 const effectiveStart = reqStartStr > startDate ? reqStartStr : startDate;
                 const effectiveEnd = reqEndStr < endDate ? reqEndStr : endDate;
                 
@@ -287,15 +283,12 @@ const AbsenceQueryManager = () => {
 
 const AdminStats = () => {
     const [selectedDeptId, setSelectedDeptId] = useState<string>('');
-    const [period, setPeriod] = useState<'30' | '90' | '365'>('365');
-    
     const COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
     const filteredUsers = useMemo(() => {
         return selectedDeptId ? store.users.filter(u => u.departmentId === selectedDeptId) : store.users;
     }, [selectedDeptId, store.users]);
 
-    // 1. Distribución de plantilla por dpto
     const deptDistribution = useMemo(() => {
         return store.departments.map(d => ({
             name: d.name,
@@ -303,7 +296,6 @@ const AdminStats = () => {
         })).filter(d => d.value > 0);
     }, [store.departments, store.users]);
 
-    // 2. Ausencias por dpto (Días totales aprobados)
     const absenceDistribution = useMemo(() => {
         const results = store.departments.map(d => {
             const users = store.users.filter(u => u.departmentId === d.id);
@@ -322,7 +314,6 @@ const AdminStats = () => {
         return results;
     }, [store.departments, store.requests, store.users]);
 
-    // 3. Ausencias por día de la semana (El dato "sorprendente")
     const weekdayImpact = useMemo(() => {
         const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
         const impact = [0, 0, 0, 0, 0, 0, 0];
@@ -344,12 +335,11 @@ const AdminStats = () => {
             }
         });
 
-        return days.map((name, i) => ({ name, value: impact[i] })).filter((_, i) => i !== 0 && i !== 6); // Solo laborales
+        return days.map((name, i) => ({ name, value: impact[i] })).filter((_, i) => i !== 0 && i !== 6);
     }, [store.requests, selectedDeptId]);
 
-    // 4. Consumo de vacaciones vs Pendiente
     const vacationStats = useMemo(() => {
-        const totalPossible = filteredUsers.reduce((acc, u) => acc + (u.daysAvailable + 22), 0); // Estimando 22 de base
+        const totalPossible = filteredUsers.reduce((acc, u) => acc + (u.daysAvailable + 22), 0);
         const currentBalance = filteredUsers.reduce((acc, u) => acc + u.daysAvailable, 0);
         const consumed = Math.max(0, totalPossible - currentBalance);
 
@@ -384,7 +374,6 @@ const AdminStats = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-6">
-                {/* Gráfico 1: Headcount por Depto */}
                 <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-center mb-6">
                         <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -413,7 +402,6 @@ const AdminStats = () => {
                     </div>
                 </div>
 
-                {/* Gráfico 2: Presión de Ausencias */}
                 <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-center mb-6">
                         <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -442,7 +430,6 @@ const AdminStats = () => {
                     </div>
                 </div>
 
-                {/* Gráfico 3: Análisis Semanal (Mito del Lunes) */}
                 <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-center mb-6">
                         <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -471,7 +458,6 @@ const AdminStats = () => {
                     <p className="text-[10px] text-center text-slate-400 mt-4 italic">El color <span className="text-red-500 font-bold">Rojo</span> indica el día con mayor incidencia histórica.</p>
                 </div>
 
-                {/* Gráfico 4: Burn Rate de Vacaciones */}
                 <div className="bg-white p-8 xl:p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
                     <div className="flex justify-between items-center mb-6">
                         <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -1004,8 +990,6 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
     const today = new Date().toISOString().split('T')[0];
     const teamIds = useMemo(() => { if (user.role === Role.ADMIN) return store.users.map(u => u.id); const myDepts = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id); return store.users.filter(u => myDepts.includes(u.departmentId)).map(u => u.id); }, [user]);
-    
-    // Filtrar solicitudes que implican no asistir: Ausencias normales y Canjes de horas.
     const absences = store.requests.filter(r => {
         const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
         const isPhysicalAbsence = !store.isOvertimeRequest(r.typeId) || isCanje;
@@ -1037,6 +1021,7 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onVie
     const [adjHours, setAdjHours] = useState(0);
     const [adjHoursReason, setAdjHoursReason] = useState('');
     const [showCreateRequestModal, setShowCreateRequestModal] = useState(false);
+    const [showPPERequestModal, setShowPPERequestModal] = useState(false);
     const [editingRequestLocal, setEditingRequestLocal] = useState<LeaveRequest | null>(null);
     const [refresh, setRefresh] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1069,7 +1054,16 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onVie
                 <div className="p-6 xl:p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <div className="flex items-center gap-3"><div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Users size={20}/></div><h3 className="text-xl xl:text-lg font-bold text-slate-800">{editingUser ? 'Ficha' : 'Nuevo Empleado'}</h3></div>
                     <div className="flex gap-2">
-                        {editingUser && (<button type="button" onClick={() => { setEditingRequestLocal(null); setShowCreateRequestModal(true); }} className="px-4 py-2 xl:py-1.5 bg-blue-50 text-blue-700 font-bold rounded-xl hover:bg-blue-100 text-sm xl:text-xs flex items-center gap-2"><Plus size={18}/> Nueva Solicitud</button>)}
+                        {editingUser && (
+                            <>
+                                <button type="button" onClick={() => setShowPPERequestModal(true)} className="px-4 py-2 xl:py-1.5 bg-orange-50 text-orange-700 font-bold rounded-xl hover:bg-orange-100 text-sm xl:text-xs flex items-center gap-2">
+                                    <HardHat size={18}/> Solicitar EPI
+                                </button>
+                                <button type="button" onClick={() => { setEditingRequestLocal(null); setShowCreateRequestModal(true); }} className="px-4 py-2 xl:py-1.5 bg-blue-50 text-blue-700 font-bold rounded-xl hover:bg-blue-100 text-sm xl:text-xs flex items-center gap-2">
+                                    <Plus size={18}/> Nueva Solicitud
+                                </button>
+                            </>
+                        )}
                         <button type="button" onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                 </div>
@@ -1131,6 +1125,9 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onVie
             {showCreateRequestModal && editingUser && (
                 <RequestFormModal onClose={() => { setShowCreateRequestModal(false); setEditingRequestLocal(null); setRefresh(r=>r+1); }} user={store.currentUser!} targetUser={editingUser} initialTab="absence" editingRequest={editingRequestLocal} />
             )}
+            {showPPERequestModal && editingUser && (
+                <PPERequestModal onClose={() => setShowPPERequestModal(false)} userId={editingUser.id} />
+            )}
         </div>
     );
 };
@@ -1142,7 +1139,6 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
     const [showUserModal, setShowUserModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [refresh, setRefresh] = useState(0);
-    const [isBulkLoading, setIsBulkLoading] = useState(false);
 
     useEffect(() => { const unsub = store.subscribe(() => setRefresh(prev => prev + 1)); return unsub; }, []);
 
@@ -1210,22 +1206,11 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
     const stats = useMemo(() => {
         const total = store.users.length; const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        
-        // Solo ausencias físicas reales aprobadas (Excluyendo ajustes manuales de días y horas)
-        // Incluye canje de horas ya que representa tiempo libre solicitado.
         const absentUsers = store.users.filter(u => store.requests.some(r => {
             const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
             const isPhysicalAbsence = (!store.isOvertimeRequest(r.typeId) || isCanje);
-            
-            return r.userId === u.id && 
-                   r.status === RequestStatus.APPROVED && 
-                   isPhysicalAbsence &&
-                   r.typeId !== RequestType.ADJUSTMENT_DAYS &&
-                   r.typeId !== RequestType.ADJUSTMENT_OVERTIME &&
-                   todayStr >= r.startDate.split('T')[0] && 
-                   todayStr <= (r.endDate || r.startDate).split('T')[0];
+            return r.userId === u.id && r.status === RequestStatus.APPROVED && isPhysicalAbsence && r.typeId !== RequestType.ADJUSTMENT_DAYS && r.typeId !== RequestType.ADJUSTMENT_OVERTIME && todayStr >= r.startDate.split('T')[0] && todayStr <= (r.endDate || r.startDate).split('T')[0];
         }));
-        
         return { total, absent: absentUsers.length, absentNames: absentUsers.map(u => u.name), percent: total > 0 ? ((absentUsers.length / total) * 100).toFixed(1) : "0" };
     }, [refresh, store.users, store.requests]);
     
