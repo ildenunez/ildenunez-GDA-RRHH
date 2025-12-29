@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { store } from '../services/store';
-import { HardHat, Check, Clock, Package, Plus, FileText } from 'lucide-react';
+import { HardHat, Check, Clock, Package, Plus, FileText, Trash2 } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 import PPEReportModal from './PPEReportModal';
 
@@ -32,6 +32,12 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
       if(confirm('¿Confirmar entrega de EPI al empleado?')) {
           await store.deliverPPERequest(reqId);
           window.location.reload(); 
+      }
+  };
+
+  const handleDelete = async (reqId: string) => {
+      if(confirm('¿Seguro que deseas eliminar esta solicitud de EPI?')) {
+          await store.deletePPERequest(reqId);
       }
   };
 
@@ -117,14 +123,23 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                        </td>
                                        {isManager && (
                                             <td className="px-6 py-4 text-right">
-                                                {req.status === 'PENDIENTE' && (
+                                                <div className="flex justify-end gap-2">
+                                                    {req.status === 'PENDIENTE' && (
+                                                        <button 
+                                                            onClick={() => handleDeliver(req.id)}
+                                                            className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                                                        >
+                                                            Marcar Entregado
+                                                        </button>
+                                                    )}
                                                     <button 
-                                                        onClick={() => handleDeliver(req.id)}
-                                                        className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                                                        onClick={() => handleDelete(req.id)}
+                                                        className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                                                        title="Eliminar solicitud"
                                                     >
-                                                        Marcar Entregado
+                                                        <Trash2 size={16}/>
                                                     </button>
-                                                )}
+                                                </div>
                                             </td>
                                        )}
                                    </tr>

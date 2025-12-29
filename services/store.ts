@@ -76,7 +76,7 @@ class Store {
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, authorId: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
+        if (newsData) this.config.news = newsData.map((n: any) => ({ id: n.id, title: n.title, content: n.content, author_id: n.author_id, createdAt: n.created_at, pinned: n.pinned }));
         
         if (typesData) {
             this.config.leaveTypes = typesData.map((t: any) => {
@@ -149,9 +149,6 @@ class Store {
       ];
   }
 
-  /**
-   * Procesa una plantilla y envía los correos necesarios usando la función 'send-test-email'
-   */
   private async triggerEmailAutomation(templateId: string, request: LeaveRequest) {
     if (!this.config.smtpSettings.enabled) return;
 
@@ -164,7 +161,6 @@ class Store {
     const dept = this.departments.find(d => d.id === owner.departmentId);
     const typeLabel = this.getTypeLabel(request.typeId);
 
-    // Reemplazar placeholders de forma segura
     const replacePlaceholders = (text: string) => {
         if (!text) return '';
         const replacements: Record<string, string> = {
@@ -179,13 +175,12 @@ class Store {
             'horas': String(request.hours || 0),
             'motivo': request.reason || '-',
             'comentario': request.adminComment || '-',
-            'comentario_admin': request.adminComment || '-', // Alias común
+            'comentario_admin': request.adminComment || '-', 
             'estado': request.status
         };
 
         let result = text;
         Object.entries(replacements).forEach(([key, val]) => {
-            // Regex mejorada: soporta { etiqueta }, {{ etiqueta }} o [ etiqueta ] con espacios opcionales
             const regex = new RegExp(`(\\{\\s*${key}\\s*\\}|\\{\\{\\s*${key}\\s*\\}\\}|\\[\\s*${key}\\s*\\])`, 'gi');
             result = result.replace(regex, String(val || ''));
         });
@@ -242,7 +237,6 @@ class Store {
       }));
   }
 
-  // Fix: Assign typeId and reportedToAdmin correctly to match LeaveRequest interface
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: String(r.label || 'Solicitud'), startDate: String(r.start_date || ''), endDate: r.end_date,
@@ -443,6 +437,7 @@ class Store {
   async deleteNotification(id: string) { await supabase.from('notifications').delete().eq('id', id); this.notifications = this.notifications.filter(n => n.id !== id); this.notify(); }
   async createPPERequest(userId: string, typeId: string, size: string) { const { data } = await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() }).select().single(); if (data) { this.config.ppeRequests.push({ id: data.id, userId: data.user_id, type_id: data.type_id, typeId: data.type_id, size: data.size, status: data.status, createdAt: data.created_at, deliveryDate: data.delivery_date }); this.notify(); } }
   async deliverPPERequest(id: string) { const d = new Date().toISOString(); await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: d }).eq('id', id); const req = this.config.ppeRequests.find(r => r.id === id); if (req) { req.status = 'ENTREGADO'; req.deliveryDate = d; this.notify(); } }
+  async deletePPERequest(id: string) { const { error } = await supabase.from('ppe_requests').delete().eq('id', id); if (!error) { this.config.ppeRequests = this.config.ppeRequests.filter(r => r.id !== id); this.notify(); } }
   async createNewsPost(title: string, content: string, authorId: string) { const { data } = await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() }).select().single(); if(data) { this.config.news.unshift({ id: data.id, title: data.title, content: data.content, authorId: data.author_id, createdAt: data.created_at }); this.notify(); } }
   async deleteNewsPost(id: string) { await supabase.from('news').delete().eq('id', id); this.config.news = this.config.news.filter(n => n.id !== id); this.notify(); }
   async createDepartment(name: string, supervisorIds: string[]) { const { data } = await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds }).select().single(); if(data) { this.departments.push({ id: data.id, name: data.name, supervisorIds: data.supervisor_ids }); this.notify(); } }
