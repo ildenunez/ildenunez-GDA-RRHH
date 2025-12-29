@@ -53,7 +53,8 @@ import {
   Code,
   Eye,
   Eraser,
-  List
+  List,
+  SearchCode
 } from 'lucide-react';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType, Department, Holiday, PPEType, ShiftType, EmailTemplate, DateRange, ShiftSegment } from '../types';
@@ -157,6 +158,110 @@ const HtmlEditor: React.FC<{ value: string, onChange: (val: string) => void }> =
             </div>
             <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-200 flex justify-between items-center">
                 <span className="text-[9px] text-slate-400 uppercase font-bold">Usa {'{empleado}'}, {'{tipo}'}, {'{fechas}'} para autocompletar</span>
+            </div>
+        </div>
+    );
+};
+
+const AbsenceQueryManager = () => {
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const userStats = useMemo(() => {
+        if (!startDate || !endDate) return [];
+        
+        const summary: Record<string, { userId: string, totalDays: number, types: Set<string> }> = {};
+
+        store.requests.forEach(r => {
+            // Solo ausencias reales aprobadas.
+            // Una ausencia física es cualquier LeaveType que no sea overtime, 
+            // O el canje de horas (ya que el empleado no viene a trabajar), 
+            // siempre que no sea un ajuste administrativo de saldo.
+            const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
+            const isPhysicalAbsence = (!store.isOvertimeRequest(r.typeId) || isCanje) && r.typeId !== RequestType.ADJUSTMENT_DAYS && r.typeId !== RequestType.ADJUSTMENT_OVERTIME;
+            
+            if (!isPhysicalAbsence || r.status !== RequestStatus.APPROVED) return;
+
+            const reqStartStr = r.startDate.split('T')[0];
+            const reqEndStr = (r.endDate || r.startDate).split('T')[0];
+
+            // Verificar solapamiento con el rango seleccionado
+            if (reqStartStr <= endDate && reqEndStr >= startDate) {
+                // Calcular días efectivos dentro del rango
+                const effectiveStart = reqStartStr > startDate ? reqStartStr : startDate;
+                const effectiveEnd = reqEndStr < endDate ? reqEndStr : endDate;
+                
+                const s = new Date(effectiveStart);
+                const e = new Date(effectiveEnd);
+                const diffTime = Math.max(0, e.getTime() - s.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+                if (!summary[r.userId]) {
+                    summary[r.userId] = { userId: r.userId, totalDays: 0, types: new Set() };
+                }
+                summary[r.userId].totalDays += diffDays;
+                summary[r.userId].types.add(store.getTypeLabel(r.typeId));
+            }
+        });
+
+        return Object.values(summary).sort((a, b) => b.totalDays - a.totalDays);
+    }, [startDate, endDate, store.requests]);
+
+    return (
+        <div className="space-y-6 animate-fade-in xl:space-y-4">
+            <div className="bg-slate-50 p-6 xl:p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-4 items-end shadow-sm">
+                <div className="flex-1 w-full">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Fecha Inicio Rango</label>
+                    <input type="date" className="w-full p-2.5 xl:p-2 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                </div>
+                <div className="flex-1 w-full">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Fecha Fin Rango</label>
+                    <input type="date" className="w-full p-2.5 xl:p-2 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                            <tr>
+                                <th className="px-6 py-4 xl:py-3 border-b">Empleado</th>
+                                <th className="px-6 py-4 xl:py-3 border-b">Tipos Detectados</th>
+                                <th className="px-6 py-4 xl:py-3 text-center border-b">Total Días en Rango</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {userStats.length === 0 ? (
+                                <tr>
+                                    <td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic">
+                                        {(!startDate || !endDate) ? 'Define un rango de fechas para realizar la consulta' : 'No se encontraron ausencias aprobadas en este periodo'}
+                                    </td>
+                                </tr>
+                            ) : userStats.map(stat => {
+                                const u = store.users.find(usr => usr.id === stat.userId);
+                                return (
+                                    <tr key={stat.userId} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 xl:py-3">
+                                            <div className="font-bold text-slate-700">{u?.name || 'Desconocido'}</div>
+                                            <div className="text-[10px] text-slate-400 uppercase">{store.departments.find(d => d.id === u?.departmentId)?.name || 'Sin Dpto.'}</div>
+                                        </td>
+                                        <td className="px-6 py-4 xl:py-3">
+                                            <div className="flex flex-wrap gap-1">
+                                                {Array.from(stat.types).map(type => (
+                                                    <span key={type} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium border border-slate-200">{type}</span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 xl:py-3 text-center">
+                                            <span className="text-lg font-black text-blue-600">{stat.totalDays}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">Días</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -644,14 +749,24 @@ export const Approvals: React.FC<{ user: User, onViewRequest: (req: LeaveRequest
 export const UpcomingAbsences: React.FC<{ user: User, onViewRequest: (req: LeaveRequest) => void }> = ({ user, onViewRequest }) => {
     const today = new Date().toISOString().split('T')[0];
     const teamIds = useMemo(() => { if (user.role === Role.ADMIN) return store.users.map(u => u.id); const myDepts = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id); return store.users.filter(u => myDepts.includes(u.departmentId)).map(u => u.id); }, [user]);
-    const absences = store.requests.filter(r => (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && !store.isOvertimeRequest(r.typeId) && (r.endDate || r.startDate) >= today && teamIds.includes(r.userId) ).sort((a,b) => a.startDate.localeCompare(b.startDate));
+    
+    // Filtrar solicitudes que implican no asistir: Ausencias normales y Canjes de horas.
+    const absences = store.requests.filter(r => {
+        const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
+        const isPhysicalAbsence = !store.isOvertimeRequest(r.typeId) || isCanje;
+        return (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
+               isPhysicalAbsence && 
+               (r.endDate || r.startDate) >= today && 
+               teamIds.includes(r.userId);
+    }).sort((a,b) => a.startDate.localeCompare(b.startDate));
+
     const handleAction = async (e: React.MouseEvent, req: LeaveRequest, status: RequestStatus) => { e.stopPropagation(); const comment = prompt(status === RequestStatus.APPROVED ? 'Comentario:' : 'Motivo del rechazo:'); if (comment === null) return; if (status === RequestStatus.REJECTED && !comment.trim()) { alert("Obligatorio."); return; } await store.updateRequestStatus(req.id, status, user.id, comment || undefined); };
     return (
         <div className="space-y-6 xl:space-y-4 animate-fade-in print:bg-white print:p-0 print:m-0 print:w-full"><div className="flex justify-between items-center print:hidden"><h2 className="text-2xl xl:text-xl font-bold text-slate-800 flex items-center gap-2"><CalendarClock className="text-blue-600"/> Próximas Ausencias</h2><button onClick={() => window.print()} className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 xl:py-1.5 rounded-lg font-bold text-slate-600 shadow-sm text-sm xl:text-xs"><Printer size={18}/> Imprimir</button></div>{absences.length === 0 ? ( <p className="text-slate-500 italic text-sm">No hay ausencias programadas.</p> ) : ( <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-left text-sm print:text-xs"><thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]"><tr><th className="px-6 py-4 xl:py-3">Empleado</th><th className="px-6 py-4 xl:py-3">Tipo</th><th className="px-6 py-4 xl:py-3">Fechas</th><th className="px-6 py-4 xl:py-3">Días</th><th className="px-6 py-4 xl:py-3">Estado</th><th className="px-6 py-4 xl:py-3 print:hidden text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{absences.map(req => { const u = store.users.find(usr => usr.id === req.userId); const start = new Date(req.startDate); const end = new Date(req.endDate || req.startDate); const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1; const conflicts = store.getRequestConflicts(req); return ( <tr key={req.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => onViewRequest(req)}><td className="px-6 py-4 xl:py-3"><div className="font-bold text-slate-700 text-sm xl:text-xs">{u?.name}</div>{conflicts.length > 0 && (<div className="mt-1 flex flex-col animate-pulse"><div className="text-[9px] text-red-600 font-bold flex items-center gap-1 uppercase tracking-tight"><AlertTriangle size={10}/> Conflicto ({conflicts.length})</div></div>)}</td><td className="px-6 py-4 xl:py-3 text-sm xl:text-xs">{store.getTypeLabel(req.typeId)}</td><td className="px-6 py-4 xl:py-3 text-slate-500 text-xs">{start.toLocaleDateString()} - {end.toLocaleDateString()}</td><td className="px-6 py-4 xl:py-3 font-mono font-bold text-blue-600 text-sm xl:text-xs">{diff}</td><td className="px-6 py-4 xl:py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${req.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{req.status}</span></td><td className="px-6 py-4 xl:py-3 print:hidden text-right" onClick={e => e.stopPropagation()}><div className="flex justify-end gap-2">{req.status === RequestStatus.PENDING && ( <button onClick={(e) => handleAction(e, req, RequestStatus.APPROVED)} className="p-1.5 bg-green-50 text-green-600 rounded border border-green-200"><Check size={14}/></button> )}<button onClick={(e) => handleAction(e, req, RequestStatus.REJECTED)} className="p-1.5 bg-red-50 text-red-600 rounded border border-red-200"><X size={14}/></button></div></td></tr> ) })}</tbody></table></div> )}</div>
     );
 };
 
-const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = ({ onClose, editingUser }) => {
+const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onViewRequest: (req: LeaveRequest) => void }> = ({ onClose, editingUser, onViewRequest }) => {
     const [name, setName] = useState(editingUser?.name || '');
     const [email, setEmail] = useState(editingUser?.email || '');
     const [role, setRole] = useState<Role>(editingUser?.role || Role.WORKER);
@@ -699,8 +814,8 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                 <div className="p-6 xl:p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <div className="flex items-center gap-3"><div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><Users size={20}/></div><h3 className="text-xl xl:text-lg font-bold text-slate-800">{editingUser ? 'Ficha' : 'Nuevo Empleado'}</h3></div>
                     <div className="flex gap-2">
-                        {editingUser && (<button onClick={() => { setEditingRequestLocal(null); setShowCreateRequestModal(true); }} className="px-4 py-2 xl:py-1.5 bg-blue-50 text-blue-700 font-bold rounded-xl hover:bg-blue-100 text-sm xl:text-xs flex items-center gap-2"><Plus size={18}/> Nueva Solicitud</button>)}
-                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                        {editingUser && (<button type="button" onClick={() => { setEditingRequestLocal(null); setShowCreateRequestModal(true); }} className="px-4 py-2 xl:py-1.5 bg-blue-50 text-blue-700 font-bold rounded-xl hover:bg-blue-100 text-sm xl:text-xs flex items-center gap-2"><Plus size={18}/> Nueva Solicitud</button>)}
+                        <button type="button" onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-8 xl:p-5 space-y-10 xl:space-y-6">
@@ -746,7 +861,7 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null }> = (
                                                     const s = new Date(m.startDate); const e = new Date(m.endDate || m.startDate);
                                                     val = -(Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
                                                 }
-                                                return (<tr key={m.id} className="hover:bg-slate-50 transition-colors group"><td className="px-4 py-3 xl:py-2 font-bold text-slate-700">{store.getTypeLabel(m.typeId)}</td><td className="px-4 py-3 xl:py-2 text-center"><span className={`font-mono font-bold px-2 py-0.5 rounded ${val < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>{val > 0 ? '+' : ''}{val.toFixed(1)}{(isOvertime && !tid.includes('vacac')) ? 'h' : 'd'}</span></td><td className="px-4 py-3 xl:py-2"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${m.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{m.status}</span></td><td className="px-4 py-3 xl:py-2 text-right"><div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100"><button onClick={() => { setEditingRequestLocal(m); setShowCreateRequestModal(true); }} className="p-1 text-blue-400 hover:bg-blue-50 rounded"><Edit2 size={12}/></button><button onClick={() => {if(confirm('Eliminar?')) store.deleteRequest(m.id); setRefresh(r=>r+1);}} className="p-1 text-red-400 hover:bg-red-50 rounded"><Trash2 size={12}/></button></div></td></tr>);
+                                                return (<tr key={m.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => onViewRequest(m)}><td className="px-4 py-3 xl:py-2 font-bold text-slate-700">{store.getTypeLabel(m.typeId)}</td><td className="px-4 py-3 xl:py-2 text-center"><span className={`font-mono font-bold px-2 py-0.5 rounded ${val < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>{val > 0 ? '+' : ''}{val.toFixed(1)}{(isOvertime && !tid.includes('vacac')) ? 'h' : 'd'}</span></td><td className="px-4 py-3 xl:py-2"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${m.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{m.status}</span></td><td className="px-4 py-3 xl:py-2 text-right"><div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><button type="button" onClick={() => onViewRequest(m)} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded"><ExternalLink size={12}/></button><button type="button" onClick={() => { setEditingRequestLocal(m); setShowCreateRequestModal(true); }} className="p-1 text-blue-400 hover:bg-blue-50 rounded"><Edit2 size={12}/></button><button type="button" onClick={() => {if(confirm('Eliminar?')) store.deleteRequest(m.id); setRefresh(r=>r+1);}} className="p-1 text-red-400 hover:bg-red-50 rounded"><Trash2 size={12}/></button></div></td></tr>);
                                             })}
                                 </tbody></table></div>
                             </div>
@@ -827,20 +942,35 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
                     </div>
                 </div>
             ) : <ShiftScheduler users={users} />}
-            {showUserModal && <UserModal onClose={() => setShowUserModal(false)} editingUser={editingUser} />}
+            {showUserModal && <UserModal onClose={() => setShowUserModal(false)} editingUser={editingUser} onViewRequest={onViewRequest} />}
         </div>
     );
 };
 
 export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => void }> = ({ onViewRequest }) => {
-    const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm'>('users');
+    const [adminTab, setAdminTab] = useState<'users' | 'depts' | 'config' | 'ppe' | 'comm' | 'query'>('users');
     const [refresh, setRefresh] = useState(0);
     useEffect(() => { const unsub = store.subscribe(() => setRefresh(prev => prev + 1)); return unsub; }, []);
     
     const stats = useMemo(() => {
         const total = store.users.length; const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const absentUsers = store.users.filter(u => store.requests.some(r => r.userId === u.id && r.status === RequestStatus.APPROVED && (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) && todayStr >= r.startDate.split('T')[0] && todayStr <= (r.endDate || r.startDate).split('T')[0]));
+        
+        // Solo ausencias físicas reales aprobadas (Excluyendo ajustes manuales de días y horas)
+        // Incluye canje de horas ya que representa tiempo libre solicitado.
+        const absentUsers = store.users.filter(u => store.requests.some(r => {
+            const isCanje = r.typeId === RequestType.OVERTIME_SPEND_DAYS || store.getTypeLabel(r.typeId).toLowerCase().includes('canje');
+            const isPhysicalAbsence = (!store.isOvertimeRequest(r.typeId) || isCanje);
+            
+            return r.userId === u.id && 
+                   r.status === RequestStatus.APPROVED && 
+                   isPhysicalAbsence &&
+                   r.typeId !== RequestType.ADJUSTMENT_DAYS &&
+                   r.typeId !== RequestType.ADJUSTMENT_OVERTIME &&
+                   todayStr >= r.startDate.split('T')[0] && 
+                   todayStr <= (r.endDate || r.startDate).split('T')[0];
+        }));
+        
         return { total, absent: absentUsers.length, absentNames: absentUsers.map(u => u.name), percent: total > 0 ? ((absentUsers.length / total) * 100).toFixed(1) : "0" };
     }, [refresh, store.users, store.requests]);
     
@@ -858,6 +988,7 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 <button onClick={() => setAdminTab('config')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'config' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>RRHH</button>
                 <button onClick={() => setAdminTab('ppe')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'ppe' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>EPIs</button>
                 <button onClick={() => setAdminTab('comm')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'comm' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Comunicaciones</button>
+                <button onClick={() => setAdminTab('query')} className={`px-4 xl:px-3 py-3 xl:py-2.5 font-bold text-sm xl:text-xs transition-all border-b-2 ${adminTab === 'query' ? 'text-blue-600 border-blue-600 bg-blue-50/50' : 'text-slate-500 border-transparent hover:bg-slate-50'}`}>Consultas</button>
             </div>
             <div className="bg-white p-6 xl:p-4 rounded-2xl shadow-sm border border-slate-100 min-h-[500px] xl:min-h-[400px]">
                 {adminTab === 'users' && <UserManagement currentUser={store.currentUser!} onViewRequest={onViewRequest} />}
@@ -865,6 +996,7 @@ export const AdminSettings: React.FC<{ onViewRequest: (req: LeaveRequest) => voi
                 {adminTab === 'config' && <HRConfigManager />}
                 {adminTab === 'ppe' && <PPEConfigManager />}
                 {adminTab === 'comm' && <CommunicationsManager />}
+                {adminTab === 'query' && <AbsenceQueryManager />}
             </div>
         </div>
     );
