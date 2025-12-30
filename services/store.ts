@@ -445,9 +445,23 @@ class Store {
   }
 
   async deleteUser(id: string) { 
-    await supabase.from('users').delete().eq('id', id); 
-    this.users = this.users.filter(u => u.id !== id); 
-    this.notify(); 
+    // Primero eliminamos todos los registros asociados para evitar errores de clave foránea
+    await supabase.from('requests').delete().eq('user_id', id);
+    await supabase.from('shift_assignments').delete().eq('user_id', id);
+    await supabase.from('ppe_requests').delete().eq('user_id', id);
+    await supabase.from('notifications').delete().eq('user_id', id);
+    
+    // Ahora eliminamos al usuario
+    const { error } = await supabase.from('users').delete().eq('id', id); 
+    
+    if (!error) {
+        this.users = this.users.filter(u => u.id !== id); 
+        this.requests = this.requests.filter(r => r.userId !== id);
+        this.config.shiftAssignments = this.config.shiftAssignments.filter(a => a.userId !== id);
+        this.config.ppeRequests = this.config.ppeRequests.filter(r => r.userId !== id);
+        this.notifications = this.notifications.filter(n => n.userId !== id);
+        this.notify(); 
+    }
   }
 
   async updateUserAdmin(userId: string, data: Partial<User>) { 
