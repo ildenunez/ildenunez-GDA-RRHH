@@ -106,11 +106,24 @@ class Store {
         if (settingsData) {
             const smtp = settingsData.find(s => s.key === 'smtp');
             if (smtp) this.config.smtpSettings = smtp.value;
-            const templates = settingsData.find(s => s.key === 'email_templates');
-            if (templates && Array.isArray(templates.value)) {
-                this.config.emailTemplates = templates.value;
-            } else this.config.emailTemplates = this.getDefaultEmailTemplates();
-        } else this.config.emailTemplates = this.getDefaultEmailTemplates();
+            const templatesSetting = settingsData.find(s => s.key === 'email_templates');
+            const defaults = this.getDefaultEmailTemplates();
+            if (templatesSetting && Array.isArray(templatesSetting.value)) {
+                // Merge logic: keep DB templates but ensure all default IDs exist
+                const dbTemplates = templatesSetting.value;
+                const merged = [...dbTemplates];
+                defaults.forEach(dt => {
+                    if (!merged.find(m => m.id === dt.id)) {
+                        merged.push(dt);
+                    }
+                });
+                this.config.emailTemplates = merged;
+            } else {
+                this.config.emailTemplates = defaults;
+            }
+        } else {
+            this.config.emailTemplates = this.getDefaultEmailTemplates();
+        }
         
         if (this.currentUser) {
             const freshUser = this.users.find(u => u.id === this.currentUser!.id);
@@ -151,6 +164,7 @@ class Store {
   private getDefaultEmailTemplates(): EmailTemplate[] {
       return [
           { id: 'request_created', label: 'Ausencia: Nueva Solicitud', subject: 'Nueva solicitud de {tipo} - {empleado}', body: 'Hola {supervisor},\n\nSe ha registrado una nueva solicitud de {tipo} para el empleado {empleado}.\n\nFechas: {fechas}.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
+          { id: 'sickness_created', label: 'Ausencia: Baja Médica (Aviso)', subject: 'Notificación de Baja Médica: {empleado}', body: 'Hola,\n\nSe ha registrado una nueva Baja Médica para el empleado {empleado}.\n\nFechas: {fechas}.\nMotivo: {motivo}\n\nPor favor, asegúrese de solicitar el justificante correspondiente si aún no ha sido entregado.', recipients: { worker: false, supervisor: true, admin: true } },
           { id: 'request_approved', label: 'Ausencia: Aprobada', subject: 'Solicitud Aprobada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido APROBADA.\n\nFechas: {fechas}.\nComentario: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
           { id: 'request_rejected', label: 'Ausencia: Rechazada', subject: 'Solicitud Rechazada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido RECHAZADA.\n\nFechas: {fechas}.\nMotivo del rechazo: {comentario_admin}\n\nContacta con {supervisor} para más detalles.', recipients: { worker: true, supervisor: false, admin: false } },
           { id: 'overtime_created', label: 'Horas: Registro', subject: 'Nuevo registro de horas - {empleado}', body: 'Hola {supervisor},\n\n{empleado} ha registrado {horas} horas extra.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
@@ -331,7 +345,13 @@ class Store {
       const mapped = this.mapRequestsFromDB([inserted])[0];
       this.requests.push(mapped);
       
-      const templateId = this.isOvertimeRequest(data.typeId) ? 'overtime_created' : 'request_created';
+      let templateId = 'request_created';
+      if (data.typeId === RequestType.SICKNESS) {
+          templateId = 'sickness_created';
+      } else if (this.isOvertimeRequest(data.typeId)) {
+          templateId = 'overtime_created';
+      }
+      
       this.triggerEmailAutomation(templateId, mapped);
 
       if (status === RequestStatus.PENDING || status === RequestStatus.APPROVED) {
@@ -445,15 +465,11 @@ class Store {
   }
 
   async deleteUser(id: string) { 
-    // Primero eliminamos todos los registros asociados para evitar errores de clave foránea
     await supabase.from('requests').delete().eq('user_id', id);
     await supabase.from('shift_assignments').delete().eq('user_id', id);
     await supabase.from('ppe_requests').delete().eq('user_id', id);
     await supabase.from('notifications').delete().eq('user_id', id);
-    
-    // Ahora eliminamos al usuario
     const { error } = await supabase.from('users').delete().eq('id', id); 
-    
     if (!error) {
         this.users = this.users.filter(u => u.id !== id); 
         this.requests = this.requests.filter(r => r.userId !== id);
