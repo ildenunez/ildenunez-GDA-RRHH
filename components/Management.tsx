@@ -58,7 +58,8 @@ import {
   BarChart2,
   Activity,
   Target,
-  HardHat
+  HardHat,
+  RotateCcw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -1150,6 +1151,18 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
         return [...list].sort((a,b) => a.name.localeCompare(b.name));
     }, [search, currentUser.id, selectedDeptId, refresh, store.users]);
 
+    const handleAnnualReset = async () => {
+        const year = prompt('Introduce el año para la nueva carga de vacaciones (ej: 2026):');
+        if (!year || !/^\d{4}$/.test(year)) {
+            if (year) alert('Año no válido.');
+            return;
+        }
+        if (confirm(`¿Estás seguro de que quieres añadir 31 días de vacaciones a TODOS los empleados para el año ${year}?`)) {
+            await store.resetAnnualVacations(year);
+            alert('Carga de vacaciones completada.');
+        }
+    };
+
     return (
         <div className="space-y-6 xl:space-y-4 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 xl:gap-3">
@@ -1163,6 +1176,9 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
                     )}
                     {currentUser.role === Role.ADMIN && (
                         <div className="flex gap-2">
+                            <button onClick={handleAnnualReset} className="bg-slate-800 text-white px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs shadow-lg flex items-center gap-2 hover:bg-black">
+                                <RotateCcw size={18}/> Reinicio Anual
+                            </button>
                             <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="bg-blue-600 text-white px-4 py-2 xl:py-1.5 rounded-lg font-bold text-sm xl:text-xs shadow-lg flex items-center gap-2 hover:bg-blue-700"><UserPlus size={18}/> Nuevo</button>
                         </div>
                     )}

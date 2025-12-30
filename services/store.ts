@@ -154,7 +154,7 @@ class Store {
           { id: 'request_approved', label: 'Ausencia: Aprobada', subject: 'Solicitud Aprobada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido APROBADA.\n\nFechas: {fechas}.\nComentario: {comentario}', recipients: { worker: true, supervisor: false, admin: false } },
           { id: 'request_rejected', label: 'Ausencia: Rechazada', subject: 'Solicitud Rechazada: {tipo}', body: 'Hola {empleado},\n\nTu solicitud de {tipo} ha sido RECHAZADA.\n\nFechas: {fechas}.\nMotivo del rechazo: {comentario_admin}\n\nContacta con {supervisor} para más detalles.', recipients: { worker: true, supervisor: false, admin: false } },
           { id: 'overtime_created', label: 'Horas: Registro', subject: 'Nuevo registro de horas - {empleado}', body: 'Hola {supervisor},\n\n{empleado} ha registrado {horas} horas extra.\nMotivo: {motivo}', recipients: { worker: true, supervisor: true, admin: false } },
-          { id: 'overtime_approved', label: 'Horas: Aprobada', subject: 'Registro de Horas Aprobado', body: 'Hola {empleado},\n\nSe ha aprobado tu registro de {horas} horas extra.', recipients: { worker: true, supervisor: false, admin: false } }
+          { id: 'overtime_approved', label: 'Horas: Aprobada', subject: 'Registro de Horas Aprobado', body: 'Hola {empleado},\n\nSe ha aprobado tu registro de {horas} horas extra.\n\nSaldo actual: {saldo_horas}h', recipients: { worker: true, supervisor: false, admin: false } }
       ];
   }
 
@@ -185,7 +185,9 @@ class Store {
             'motivo': request.reason || '-',
             'comentario': request.adminComment || '-',
             'comentario_admin': request.adminComment || '-', 
-            'estado': request.status
+            'estado': request.status,
+            'saldo_horas': String(owner.overtimeHours || 0),
+            'saldo_dias': String(owner.daysAvailable || 0)
         };
 
         let result = text;
@@ -582,6 +584,23 @@ class Store {
   async sendMassNotification(userIds: string[], message: string) { const { error } = await supabase.from('notifications').insert(userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, created_at: new Date().toISOString(), type: 'admin' }))); if(!error) { userIds.forEach(uid => { this.notifications.push({ id: crypto.randomUUID(), userId: uid, message, read: false, date: new Date().toISOString(), type: 'admin' }); }); this.notify(); } }
   async sendTestEmail(to: string) { try { const { data, error } = await supabase.functions.invoke('send-test-email', { body: { to, config: this.config.smtpSettings } }); if (error) throw error; return true; } catch (err: any) { throw err; } }
   
+  async resetAnnualVacations(year: string) {
+    for (const u of this.users) {
+        const newBalance = u.daysAvailable + 31;
+        await this.updateUserBalance(u.id, newBalance, u.overtimeHours);
+        await this.createRequest({
+            typeId: RequestType.ADJUSTMENT_DAYS,
+            startDate: `${year}-01-01`,
+            hours: 31,
+            reason: `Carga inicial Vacaciones año ${year}`,
+            label: `Vacaciones año ${year}`,
+            isJustified: true,
+            reportedToAdmin: true
+        }, u.id, RequestStatus.APPROVED);
+    }
+    this.notify();
+  }
+
   getRequestConflicts(request: LeaveRequest) {
     const user = this.users.find(u => u.id === request.userId);
     if (!user) return [];
