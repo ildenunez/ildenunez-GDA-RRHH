@@ -28,4 +28,18 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  * ADD COLUMN IF NOT EXISTS consumed_hours FLOAT DEFAULT 0,
  * ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE,
  * ADD COLUMN IF NOT EXISTS admin_comment TEXT;
+ * 
+ * --------------------------------------------------------------------------
+ * -- SENTENCIA DE CORRECCIÓN DE EMERGENCIA (REINICIO ANUAL DUPLICADO):
+ * --------------------------------------------------------------------------
+ * -- Ejecuta estas líneas para arreglar el error de los 62 días:
+ * 
+ * -- A) Restar 31 días a todos (limpiar el exceso de 62 -> 31)
+ * UPDATE users SET days_available = days_available - 31;
+ * 
+ * -- B) Borrar los registros mal generados (para poder volver a lanzarlo si se desea)
+ * DELETE FROM requests 
+ * WHERE type_id = 'ajuste_dias' 
+ * AND reason LIKE 'Carga inicial Vacaciones año%';
+ * 
  */

@@ -46,7 +46,7 @@ import {
   Italic,
   Underline,
   Link,
-  Image as ImageIcon,
+  ImageIcon,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -1157,9 +1157,24 @@ export const UserManagement: React.FC<{ currentUser: User, onViewRequest: (req: 
             if (year) alert('Año no válido.');
             return;
         }
-        if (confirm(`¿Estás seguro de que quieres añadir 31 días de vacaciones a TODOS los empleados para el año ${year}?`)) {
+
+        // VISTA PREVIA DETALLADA: Cálculo de nuevos saldos
+        const previewLines = users.map(u => {
+            const current = u.daysAvailable;
+            const next = current + 31;
+            return `• ${u.name}: ${current.toFixed(1)} -> ${next.toFixed(1)} días`;
+        });
+
+        const previewText = previewLines.join('\n');
+        const truncatedPreview = previewLines.length > 20 
+            ? previewLines.slice(0, 20).join('\n') + `\n... y ${previewLines.length - 20} empleados más.`
+            : previewText;
+
+        const confirmMessage = `CONFIRMACIÓN CARGA ANUAL ${year} (SIN NOTIFICACIONES)\n\nDetalles del proceso:\n- Concepto: "Vacaciones ${year}"\n- Cantidad: 31 días por empleado\n- Envío Email: DESACTIVADO para esta acción\n\nVISTA PREVIA DE SALDOS:\n${truncatedPreview}\n\n¿Estás seguro de que quieres aplicar estos cambios a los ${users.length} empleados?`;
+
+        if (confirm(confirmMessage)) {
             await store.resetAnnualVacations(year);
-            alert('Carga de vacaciones completada.');
+            alert(`Carga de vacaciones ${year} completada con éxito. No se han enviado notificaciones.`);
         }
     };
 

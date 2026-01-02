@@ -109,7 +109,6 @@ class Store {
             const templatesSetting = settingsData.find(s => s.key === 'email_templates');
             const defaults = this.getDefaultEmailTemplates();
             if (templatesSetting && Array.isArray(templatesSetting.value)) {
-                // Merge logic: keep DB templates but ensure all default IDs exist
                 const dbTemplates = templatesSetting.value;
                 const merged = [...dbTemplates];
                 defaults.forEach(dt => {
@@ -334,7 +333,7 @@ class Store {
       return { deltaDays, deltaHours };
   }
 
-  async createRequest(data: any, userId: string, status: RequestStatus = RequestStatus.PENDING) {
+  async createRequest(data: any, userId: string, status: RequestStatus = RequestStatus.PENDING, silent: boolean = false) {
     let label = data.label || this.getTypeLabel(data.typeId);
     const { data: inserted } = await supabase.from('requests').insert({
       id: crypto.randomUUID(), user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
@@ -345,14 +344,15 @@ class Store {
       const mapped = this.mapRequestsFromDB([inserted])[0];
       this.requests.push(mapped);
       
-      let templateId = 'request_created';
-      if (data.typeId === RequestType.SICKNESS) {
-          templateId = 'sickness_created';
-      } else if (this.isOvertimeRequest(data.typeId)) {
-          templateId = 'overtime_created';
+      if (!silent) {
+          let templateId = 'request_created';
+          if (data.typeId === RequestType.SICKNESS) {
+              templateId = 'sickness_created';
+          } else if (this.isOvertimeRequest(data.typeId)) {
+              templateId = 'overtime_created';
+          }
+          this.triggerEmailAutomation(templateId, mapped);
       }
-      
-      this.triggerEmailAutomation(templateId, mapped);
 
       if (status === RequestStatus.PENDING || status === RequestStatus.APPROVED) {
           const { deltaDays, deltaHours } = this.calculateRequestImpact(data.typeId, data.startDate, data.endDate, data.hours);
@@ -616,17 +616,16 @@ class Store {
   
   async resetAnnualVacations(year: string) {
     for (const u of this.users) {
-        const newBalance = u.daysAvailable + 31;
-        await this.updateUserBalance(u.id, newBalance, u.overtimeHours);
+        // MODO SILENCIOSO (SILENT: TRUE) para que no se envíen correos
         await this.createRequest({
             typeId: RequestType.ADJUSTMENT_DAYS,
             startDate: `${year}-01-01`,
             hours: 31,
             reason: `Carga inicial Vacaciones año ${year}`,
-            label: `Vacaciones año ${year}`,
+            label: `Vacaciones ${year}`,
             isJustified: true,
             reportedToAdmin: true
-        }, u.id, RequestStatus.APPROVED);
+        }, u.id, RequestStatus.APPROVED, true);
     }
     this.notify();
   }
