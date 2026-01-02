@@ -8,38 +8,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
- * SCRIPT SQL PARA ACTUALIZAR LA BASE DE DATOS (Ejecutar en Supabase SQL Editor):
- * 
- * -- 1. Tabla para configuraciones globales (SMTP, etc)
- * CREATE TABLE IF NOT EXISTS settings (
- *     key TEXT PRIMARY KEY,
- *     value JSONB NOT NULL,
- *     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
- * );
- * 
- * -- 2. Añadir columnas de control de justificantes si no existen
- * ALTER TABLE requests 
- * ADD COLUMN IF NOT EXISTS is_justified BOOLEAN DEFAULT FALSE,
- * ADD COLUMN IF NOT EXISTS reported_to_admin BOOLEAN DEFAULT FALSE;
- * 
- * -- 3. Asegurar que las columnas de trazabilidad existen
- * ALTER TABLE requests
- * ADD COLUMN IF NOT EXISTS is_consumed BOOLEAN DEFAULT FALSE,
- * ADD COLUMN IF NOT EXISTS consumed_hours FLOAT DEFAULT 0,
- * ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN DEFAULT FALSE,
- * ADD COLUMN IF NOT EXISTS admin_comment TEXT;
- * 
  * --------------------------------------------------------------------------
- * -- SENTENCIA DE CORRECCIÓN DE EMERGENCIA (REINICIO ANUAL DUPLICADO):
+ * SENTENCIA DE REPARACIÓN (EJECUTAR EN SQL EDITOR DE SUPABASE):
  * --------------------------------------------------------------------------
- * -- Ejecuta estas líneas para arreglar el error de los 62 días:
  * 
- * -- A) Restar 31 días a todos (limpiar el exceso de 62 -> 31)
+ * -- 1. Restamos los 31 días que se sumaron de más a todos los empleados
  * UPDATE users SET days_available = days_available - 31;
  * 
- * -- B) Borrar los registros mal generados (para poder volver a lanzarlo si se desea)
+ * -- 2. Borramos los registros del reinicio mal ejecutado para limpiar el historial
+ * --    (Ajustamos por el campo reason que es el identificador único de este proceso)
  * DELETE FROM requests 
- * WHERE type_id = 'ajuste_dias' 
- * AND reason LIKE 'Carga inicial Vacaciones año%';
+ * WHERE reason = 'Carga inicial Vacaciones año 2026';
  * 
  */

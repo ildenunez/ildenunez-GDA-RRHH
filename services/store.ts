@@ -181,7 +181,7 @@ class Store {
     if (!owner) return;
 
     const dept = this.departments.find(d => d.id === owner.departmentId);
-    const typeLabel = this.getTypeLabel(request.typeId);
+    const typeLabel = request.label || this.getTypeLabel(request.typeId);
 
     const replacePlaceholders = (text: string) => {
         if (!text) return '';
@@ -425,7 +425,7 @@ class Store {
 
   async updateRequest(id: string, data: any) {
     const { data: updated } = await supabase.from('requests').update({
-      type_id: data.typeId, label: this.getTypeLabel(data.typeId), start_date: data.startDate, end_date: data.endDate, hours: data.hours, reason: data.reason
+      type_id: data.typeId, label: data.label || this.getTypeLabel(data.typeId), start_date: data.startDate, end_date: data.endDate, hours: data.hours, reason: data.reason
     }).eq('id', id).select().single();
     if (updated) {
         const idx = this.requests.findIndex(r => r.id === id);
