@@ -452,15 +452,23 @@ class Store {
   }
 
   async createUser(user: Partial<User>, password: string) { 
-    const { data } = await supabase.from('users').insert({ 
+    const { data, error } = await supabase.from('users').insert({ 
         id: crypto.randomUUID(), name: user.name, email: user.email?.trim().toLowerCase(), 
         role: user.role, department_id: user.departmentId, days_available: user.daysAvailable || 0, 
         overtime_hours: user.overtimeHours || 0, password: password || '123456', 
-        birthdate: user.birthdate, avatar: user.avatar 
-    }).select().single(); 
-    if (data) { 
-        this.users = [...this.users, this.mapUsersFromDB([data])[0]]; 
+        birthdate: user.birthdate || null, avatar: user.avatar 
+    }).select(); 
+    
+    if (error) {
+        console.error("Supabase Error creating user:", error);
+        throw error;
+    }
+    
+    if (data && data.length > 0) { 
+        const newUser = this.mapUsersFromDB([data[0]])[0];
+        this.users = [...this.users, newUser]; 
         this.notify(); 
+        return newUser;
     } 
   }
 
@@ -483,7 +491,7 @@ class Store {
   async updateUserAdmin(userId: string, data: Partial<User>) { 
     const { data: updated } = await supabase.from('users').update({ 
         name: data.name, email: data.email?.trim().toLowerCase(), 
-        department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar 
+        department_id: data.departmentId, birthdate: data.birthdate || null, avatar: data.avatar 
     }).eq('id', userId).select().single(); 
     if (updated) { 
         const idx = this.users.findIndex(u => u.id === userId); 
@@ -601,7 +609,7 @@ class Store {
   async updateHoliday(id: string, date: string, name: string) { await supabase.from('holidays').update({ date, name }).eq('id', id); const h = this.config.holidays.find(ho => ho.id === id); if(h) { h.date = date; h.name = name; this.notify(); } }
   async deleteHoliday(id: string) { await supabase.from('holidays').delete().eq('id', id); this.config.holidays = this.config.holidays.filter(h => h.id !== id); this.notify(); }
   async createLeaveType(label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) { const { data } = await supabase.from('leave_types').insert({ id: crypto.randomUUID(), label, subtracts_days: subtractsDays, fixed_range: fixedRanges || null }).select().single(); if(data) { this.config.leaveTypes.push({ id: data.id, label: data.label, subtractsDays: !!data.subtracts_days, fixedRanges: fixedRanges || undefined }); this.notify(); } }
-  async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) { const { data } = await supabase.from('leave_types').update({ label, subtracts_days: subtractsDays, fixed_range: fixedRanges || null }).eq('id', id).select().single(); if(data) { const idx = this.config.leaveTypes.findIndex(t => t.id === id); if (idx !== -1) this.config.leaveTypes[idx] = { id: data.id, label: data.label, subtractsDays: !!data.subtracts_days, fixedRanges: fixedRanges || undefined }; this.notify(); } }
+  async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges?: DateRange[] | null) { const { data: updated } = await supabase.from('leave_types').update({ label, subtracts_days: subtractsDays, fixed_range: fixedRanges || null }).eq('id', id).select().single(); if(updated) { const idx = this.config.leaveTypes.findIndex(t => t.id === id); if (idx !== -1) this.config.leaveTypes[idx] = { id: updated.id, label: updated.label, subtractsDays: !!updated.subtracts_days, fixedRanges: fixedRanges || undefined }; this.notify(); } }
   async deleteLeaveType(id: string) { await supabase.from('leave_types').delete().eq('id', id); this.config.leaveTypes = this.config.leaveTypes.filter(t => t.id !== id); this.notify(); }
   async createShiftType(name: string, color: string, start: string, end: string) { const { data } = await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name, color, segments: [{start, end}] }).select().single(); if (data) { this.config.shiftTypes.push({ id: data.id, name: data.name, color: data.color, segments: data.segments }); this.notify(); } }
   async updateShiftType(id: string, name: string, color: string, start: string, end: string) { const { data: updated } = await supabase.from('shift_types').update({ name, color, segments: [{start, end}] }).eq('id', id).select().single(); if (updated) { const idx = this.config.shiftTypes.findIndex(s => s.id === id); if (idx !== -1) this.config.shiftTypes[idx] = { id: updated.id, name: updated.name, color: updated.color, segments: updated.segments }; this.notify(); } }
