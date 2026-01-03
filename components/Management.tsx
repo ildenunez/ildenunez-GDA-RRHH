@@ -1039,14 +1039,22 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onVie
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault(); setIsSaving(true);
-        if (editingUser) {
-            await store.updateUserAdmin(editingUser.id, { name, email, departmentId: deptId, birthdate, avatar });
-            if (editingUser.role !== role) await store.updateUserRole(editingUser.id, role);
-            if (pass) await store.updateUserProfile(editingUser.id, { name, email, password: pass, avatar });
-            if (adjDays !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: adjDays, reason: adjDaysReason || 'Ajuste', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
-            if (adjHours !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: adjHours, reason: adjHoursReason || 'Ajuste', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
-        } else { await store.createUser({ name, email, role, departmentId: deptId, daysAvailable: days, overtimeHours: hours, birthdate, avatar }, pass || '123456'); }
-        setIsSaving(false); onClose();
+        try {
+            if (editingUser) {
+                await store.updateUserAdmin(editingUser.id, { name, email, departmentId: deptId, birthdate, avatar });
+                if (editingUser.role !== role) await store.updateUserRole(editingUser.id, role);
+                if (pass) await store.updateUserProfile(editingUser.id, { name, email, password: pass, avatar });
+                if (adjDays !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: adjDays, reason: adjDaysReason || 'Ajuste', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
+                if (adjHours !== 0) await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: adjHours, reason: adjHoursReason || 'Ajuste', isJustified: true, reportedToAdmin: false }, editingUser.id, RequestStatus.APPROVED);
+            } else { 
+                await store.createUser({ name, email, role, departmentId: deptId, daysAvailable: days, overtimeHours: hours, birthdate, avatar }, pass || '123456'); 
+            }
+            setIsSaving(false); onClose();
+        } catch (err) {
+            console.error("Error saving user:", err);
+            alert("Error al guardar el empleado. Revisa los datos e inténtalo de nuevo.");
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -1084,18 +1092,36 @@ const UserModal: React.FC<{ onClose: () => void, editingUser: User | null, onVie
                                 <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" required className="w-full p-2.5 border rounded-xl bg-slate-50 text-sm" value={email} onChange={e=>setEmail(e.target.value)}/></div>
                                 <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Rol</label><select className="w-full p-2.5 border rounded-xl bg-slate-50 text-sm" value={role} onChange={e=>setRole(e.target.value as Role)}><option value={Role.WORKER}>Trabajador</option><option value={Role.SUPERVISOR}>Supervisor</option><option value={Role.ADMIN}>Administrador</option></select></div>
                                 <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dpto</label><select required className="w-full p-2.5 border rounded-xl bg-slate-50 text-sm" value={deptId} onChange={e=>setDeptId(e.target.value)}><option value="">Seleccionar...</option>{store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Fecha Nacimiento</label><input type="date" className="w-full p-2.5 border rounded-xl bg-slate-50 text-sm" value={birthdate} onChange={e=>setBirthdate(e.target.value)}/></div>
+                                {!editingUser && (
+                                    <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contraseña</label><input type="password" required className="w-full p-2.5 border rounded-xl bg-slate-50 text-sm" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Mín. 6 caracteres"/></div>
+                                )}
                             </div>
                         </div>
                         <div className="space-y-4 xl:space-y-3">
                             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Saldo y Ajustes</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-3">
                                 <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-4 xl:p-3 flex flex-col justify-between">
-                                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-bold text-orange-400 uppercase">Días disponibles</span><span className="text-3xl xl:text-2xl font-black text-orange-600 leading-none">{editingUser ? editingUser.daysAvailable.toFixed(1) : days}</span></div>
-                                    {editingUser && (<div className="flex gap-2"><input type="number" step="0.5" className="w-16 xl:w-14 p-2 border rounded-xl text-center font-bold text-sm" value={adjDays || ''} onChange={e=>setAdjDays(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-[10px]" placeholder="Motivo ajuste..." value={adjDaysReason} onChange={e=>setAdjDaysReason(e.target.value)}/></div>)}
+                                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-bold text-orange-400 uppercase">Días disponibles</span><span className="text-3xl xl:text-2xl font-black text-orange-600 leading-none">{editingUser ? editingUser.daysAvailable.toFixed(1) : days.toFixed(1)}</span></div>
+                                    {editingUser ? (
+                                        <div className="flex gap-2"><input type="number" step="0.5" className="w-16 xl:w-14 p-2 border rounded-xl text-center font-bold text-sm" value={adjDays || ''} onChange={e=>setAdjDays(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-[10px]" placeholder="Motivo ajuste..." value={adjDaysReason} onChange={e=>setAdjDaysReason(e.target.value)}/></div>
+                                    ) : (
+                                        <div className="mt-2">
+                                            <label className="block text-[8px] font-bold text-orange-500 uppercase mb-1">Carga Inicial de Días</label>
+                                            <input type="number" step="0.5" className="w-full p-2 border rounded-xl font-bold text-sm bg-white" value={days} onChange={e=>setDays(parseFloat(e.target.value) || 0)}/>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 xl:p-3 flex flex-col justify-between">
-                                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-bold text-blue-400 uppercase">Horas extra</span><span className="text-3xl xl:text-2xl font-black text-blue-600 leading-none">{editingUser ? editingUser.overtimeHours.toFixed(1) : hours}h</span></div>
-                                    {editingUser && (<div className="flex gap-2"><input type="number" step="0.5" className="w-16 xl:w-14 p-2 border rounded-xl text-center font-bold text-sm" value={adjHours || ''} onChange={e=>setAdjHours(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-[10px]" placeholder="Motivo ajuste..." value={adjHoursReason} onChange={e=>setAdjHoursReason(e.target.value)}/></div>)}
+                                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-bold text-blue-400 uppercase">Horas extra</span><span className="text-3xl xl:text-2xl font-black text-blue-600 leading-none">{editingUser ? editingUser.overtimeHours.toFixed(1) : hours.toFixed(1)}h</span></div>
+                                    {editingUser ? (
+                                        <div className="flex gap-2"><input type="number" step="0.5" className="w-16 xl:w-14 p-2 border rounded-xl text-center font-bold text-sm" value={adjHours || ''} onChange={e=>setAdjHours(parseFloat(e.target.value) || 0)}/><input className="flex-1 p-2 border rounded-xl text-[10px]" placeholder="Motivo ajuste..." value={adjHoursReason} onChange={e=>setAdjHoursReason(e.target.value)}/></div>
+                                    ) : (
+                                        <div className="mt-2">
+                                            <label className="block text-[8px] font-bold text-blue-500 uppercase mb-1">Carga Inicial de Horas</label>
+                                            <input type="number" step="0.5" className="w-full p-2 border rounded-xl font-bold text-sm bg-white" value={hours} onChange={e=>setHours(parseFloat(e.target.value) || 0)}/>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
