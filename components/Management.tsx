@@ -694,7 +694,7 @@ const HRConfigManager = () => {
                                             <tr key={idx} className="hover:bg-slate-50">
                                                 <td className="px-3 py-2"><p className="font-bold text-slate-800">{range.label}</p><p className="text-blue-600 font-bold">{calculateDays(range.startDate, range.endDate)} días</p></td>
                                                 <td className="px-3 py-2 text-center text-slate-500 font-medium">{formatDate(range.startDate)} al<br/>{formatDate(range.endDate)}</td>
-                                                <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1"><button onClick={()=>{}} className="p-1 text-blue-400 border border-blue-100 rounded hover:bg-blue-50"><Edit2 size={10}/></button><button onClick={()=>setTypeRanges(typeRanges.filter((_,i)=>i!==idx))} className="p-1 text-red-400 border border-red-100 rounded hover:bg-red-50"><X size={10}/></button></div></td>
+                                                <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1"><button onClick={() => { setNewRangeLabel(range.label || ''); setNewRangeStart(range.startDate); setNewRangeEnd(range.endDate); setTypeRanges(typeRanges.filter((_, i) => i !== idx)); }} className="p-1 text-blue-400 border border-blue-100 rounded hover:bg-blue-50"><Edit2 size={10}/></button><button onClick={()=>setTypeRanges(typeRanges.filter((_,i)=>i!==idx))} className="p-1 text-red-400 border border-red-100 rounded hover:bg-red-50"><X size={10}/></button></div></td>
                                             </tr>
                                         ))}
                                     </tbody>
