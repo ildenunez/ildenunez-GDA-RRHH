@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { store } from '../services/store';
-import { HardHat, Check, Clock, Package, Plus, FileText, Trash2, ShoppingCart } from 'lucide-react';
+import { HardHat, Check, Clock, Package, Plus, FileText, Trash2, ShoppingCart, Filter } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 import PPEReportModal from './PPEReportModal';
 
@@ -14,19 +14,33 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportFilter, setReportFilter] = useState<'PENDIENTE' | 'SOLICITADO'>('PENDIENTE');
+  const [selectedDeptId, setSelectedDeptId] = useState<string>('');
 
   // Logic: Admin sees all, Supervisor sees team + own, Worker sees own
   const requests = store.config.ppeRequests.filter(req => {
-      if (user.role === Role.ADMIN) return true;
-      if (user.role === Role.SUPERVISOR) {
+      const reqUser = store.users.find(u => u.id === req.userId);
+      
+      // Primero, determinar si la solicitud está en el alcance del usuario actual
+      let inScope = false;
+      if (user.role === Role.ADMIN) {
+          inScope = true;
+      } else if (user.role === Role.SUPERVISOR) {
           const myDepts = store.departments.filter(d => d.supervisorIds.includes(user.id)).map(d => d.id);
-          const reqUser = store.users.find(u => u.id === req.userId);
           const isMyTeam = reqUser && myDepts.includes(reqUser.departmentId);
           const isMe = req.userId === user.id;
-          return isMyTeam || isMe;
+          inScope = isMyTeam || isMe;
+      } else {
+          inScope = req.userId === user.id;
       }
-      // Worker
-      return req.userId === user.id;
+
+      if (!inScope) return false;
+
+      // Segundo, aplicar el filtro de departamento si está seleccionado (solo para admins)
+      if (user.role === Role.ADMIN && selectedDeptId) {
+          return reqUser?.departmentId === selectedDeptId;
+      }
+
+      return true;
   });
 
   const handleMarkRequested = async (reqId: string) => {
@@ -55,7 +69,7 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   return (
     <div className="space-y-6 animate-fade-in">
        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden min-h-[600px] flex flex-col">
-           <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+           <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                <div className="flex items-center gap-3">
                    <div className="bg-orange-100 p-2 rounded-lg text-orange-600">
                        <HardHat size={24}/>
@@ -65,7 +79,24 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                        <p className="text-sm text-slate-500">Solicitudes y entregas de material</p>
                    </div>
                </div>
-               <div className="flex flex-wrap gap-2">
+               <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                   {/* Filtro de Departamento para Admins */}
+                   {user.role === Role.ADMIN && (
+                       <div className="relative flex items-center mr-2">
+                           <Filter className="absolute left-3 text-slate-400 w-4 h-4" />
+                           <select 
+                               className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none appearance-none font-bold text-slate-700 min-w-[180px]"
+                               value={selectedDeptId}
+                               onChange={(e) => setSelectedDeptId(e.target.value)}
+                           >
+                               <option value="">Todos los Dptos.</option>
+                               {store.departments.map(d => (
+                                   <option key={d.id} value={d.id}>{d.name}</option>
+                               ))}
+                           </select>
+                       </div>
+                   )}
+
                    {isManager && (
                        <>
                            <button 
@@ -91,11 +122,11 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                </div>
            </div>
 
-           <div className="p-6">
+           <div className="p-6 flex-1 overflow-auto">
                {requests.length === 0 ? (
                    <div className="text-center py-12 text-slate-400">
                        <Package size={48} className="mx-auto mb-4 opacity-50"/>
-                       <p>No hay solicitudes de EPI registradas.</p>
+                       <p>No hay solicitudes de EPI registradas {selectedDeptId ? 'en este departamento' : ''}.</p>
                    </div>
                ) : (
                    <div className="overflow-x-auto">
