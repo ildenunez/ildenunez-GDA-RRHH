@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { store } from '../services/store';
-import { HardHat, Check, Clock, Package, Plus, FileText, Trash2 } from 'lucide-react';
+import { HardHat, Check, Clock, Package, Plus, FileText, Trash2, ShoppingCart } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 import PPEReportModal from './PPEReportModal';
 
@@ -13,6 +13,7 @@ interface PPEViewProps {
 const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [reportFilter, setReportFilter] = useState<'PENDIENTE' | 'SOLICITADO'>('PENDIENTE');
 
   // Logic: Admin sees all, Supervisor sees team + own, Worker sees own
   const requests = store.config.ppeRequests.filter(req => {
@@ -28,10 +29,15 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
       return req.userId === user.id;
   });
 
+  const handleMarkRequested = async (reqId: string) => {
+      if(confirm('¿Marcar este EPI como pedido al proveedor? Pasará a estado "SOLICITADO".')) {
+          await store.markPPEAsRequested(reqId);
+      }
+  };
+
   const handleDeliver = async (reqId: string) => {
       if(confirm('¿Confirmar entrega de EPI al empleado?')) {
           await store.deliverPPERequest(reqId);
-          window.location.reload(); 
       }
   };
 
@@ -59,14 +65,22 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                        <p className="text-sm text-slate-500">Solicitudes y entregas de material</p>
                    </div>
                </div>
-               <div className="flex gap-2">
+               <div className="flex flex-wrap gap-2">
                    {isManager && (
-                       <button 
-                          onClick={() => setShowReportModal(true)}
-                          className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
-                       >
-                           <FileText size={16}/> Informe Pendientes
-                       </button>
+                       <>
+                           <button 
+                              onClick={() => { setReportFilter('PENDIENTE'); setShowReportModal(true); }}
+                              className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
+                           >
+                               <FileText size={16}/> Inf. Pendientes
+                           </button>
+                           <button 
+                              onClick={() => { setReportFilter('SOLICITADO'); setShowReportModal(true); }}
+                              className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
+                           >
+                               <ShoppingCart size={16}/> Inf. Solicitados
+                           </button>
+                       </>
                    )}
                    <button 
                       onClick={() => setShowModal(true)}
@@ -97,7 +111,7 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-100">
-                               {requests.map(req => (
+                               {requests.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(req => (
                                    <tr key={req.id} className="hover:bg-slate-50">
                                        <td className="px-6 py-4 font-medium text-slate-800">{getUserName(req.userId)}</td>
                                        <td className="px-6 py-4">{getTypeName(req.typeId)}</td>
@@ -115,6 +129,10 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                                        {req.deliveryDate ? new Date(req.deliveryDate).toLocaleDateString() : '-'}
                                                    </span>
                                                </div>
+                                           ) : req.status === 'SOLICITADO' ? (
+                                               <span className="flex items-center gap-1 text-blue-600 font-bold text-xs bg-blue-50 px-2 py-1 rounded-full w-fit">
+                                                   <ShoppingCart size={12}/> SOLICITADO
+                                               </span>
                                            ) : (
                                                <span className="flex items-center gap-1 text-orange-600 font-bold text-xs bg-orange-50 px-2 py-1 rounded-full w-fit">
                                                    <Clock size={12}/> PENDIENTE
@@ -126,10 +144,18 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                                 <div className="flex justify-end gap-2">
                                                     {req.status === 'PENDIENTE' && (
                                                         <button 
+                                                            onClick={() => handleMarkRequested(req.id)}
+                                                            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                                                        >
+                                                            Solicitar
+                                                        </button>
+                                                    )}
+                                                    {req.status !== 'ENTREGADO' && (
+                                                        <button 
                                                             onClick={() => handleDeliver(req.id)}
                                                             className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
                                                         >
-                                                            Marcar Entregado
+                                                            Entregar
                                                         </button>
                                                     )}
                                                     <button 
@@ -157,7 +183,8 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
        
        {showReportModal && (
            <PPEReportModal 
-                requests={requests.filter(r => r.status === 'PENDIENTE')} 
+                filterType={reportFilter}
+                requests={requests.filter(r => r.status === reportFilter)} 
                 onClose={() => setShowReportModal(false)} 
            />
        )}

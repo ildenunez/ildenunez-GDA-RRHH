@@ -153,7 +153,7 @@ export interface PPERequest {
   type_id: string; // compatibility
   typeId: string;
   size: string;
-  status: 'PENDIENTE' | 'ENTREGADO';
+  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
   createdAt: string;
   deliveryDate?: string;
 }

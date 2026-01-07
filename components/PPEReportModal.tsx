@@ -7,9 +7,10 @@ import { X, Printer, Package } from 'lucide-react';
 interface PPEReportModalProps {
   requests: PPERequest[];
   onClose: () => void;
+  filterType?: 'PENDIENTE' | 'SOLICITADO';
 }
 
-const PPEReportModal: React.FC<PPEReportModalProps> = ({ requests, onClose }) => {
+const PPEReportModal: React.FC<PPEReportModalProps> = ({ requests, onClose, filterType = 'PENDIENTE' }) => {
   const handlePrint = () => window.print();
 
   // Group by Type
@@ -22,13 +23,17 @@ const PPEReportModal: React.FC<PPEReportModalProps> = ({ requests, onClose }) =>
   const getTypeName = (id: string) => store.config.ppeTypes.find(t => t.id === id)?.name || id;
   const getUserName = (id: string) => store.users.find(u => u.id === id)?.name || 'Desconocido';
 
+  const reportTitle = filterType === 'SOLICITADO' 
+    ? 'Informe de EPIs Solicitados (En Proceso)' 
+    : 'Informe de EPIs Pendientes de Gestión';
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm print:p-0 print:bg-white print:items-start">
       <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl animate-fade-in-up overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none h-[90vh] flex flex-col print:h-auto">
         
         {/* Header (No Print) */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:hidden shrink-0">
-            <h2 className="font-bold text-slate-700 flex items-center gap-2"><Package size={20}/> Informe de EPIs Pendientes</h2>
+            <h2 className="font-bold text-slate-700 flex items-center gap-2"><Package size={20}/> {reportTitle}</h2>
             <div className="flex gap-2">
                 <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm hover:bg-slate-50 transition-colors shadow-sm text-slate-700">
                     <Printer size={16}/> Imprimir
@@ -46,13 +51,13 @@ const PPEReportModal: React.FC<PPEReportModalProps> = ({ requests, onClose }) =>
                      <img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="Logo" className="w-full h-full object-contain"/>
                  </div>
                  <div>
-                     <h1 className="text-2xl font-bold text-slate-900">Listado de EPIs Pendientes de Entrega</h1>
+                     <h1 className="text-2xl font-bold text-slate-900">{reportTitle}</h1>
                      <p className="text-sm text-slate-500">Fecha de emisión: {new Date().toLocaleDateString()}</p>
                  </div>
              </div>
 
              {Object.keys(groupedRequests).length === 0 ? (
-                 <p className="text-center text-slate-400 py-10">No hay solicitudes pendientes.</p>
+                 <p className="text-center text-slate-400 py-10">No hay registros para este informe.</p>
              ) : (
                  Object.keys(groupedRequests).map(typeId => (
                      <div key={typeId} className="mb-8 break-inside-avoid">

@@ -575,6 +575,15 @@ class Store {
     } 
   }
 
+  async markPPEAsRequested(id: string) {
+    await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
+    const req = this.config.ppeRequests.find(r => r.id === id);
+    if (req) {
+        req.status = 'SOLICITADO';
+        this.notify();
+    }
+  }
+
   async deliverPPERequest(id: string) { 
     const d = new Date().toISOString(); 
     await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: d }).eq('id', id); 
