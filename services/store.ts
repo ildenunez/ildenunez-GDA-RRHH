@@ -76,18 +76,18 @@ class Store {
         if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
         if (newsData) this.config.news = newsData;
-        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range }));
+        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ id: t.id, label: t.label, subtracts_days: !!t.subtracts_days, fixed_range: t.fixed_range }));
         if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: p.name, sizes: p.sizes || [] }));
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
-        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id }));
+        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shift_type_id: a.shift_type_id }));
         
         // Mapeo Repartidores
         if (trucksData) this.config.trucks = trucksData;
         if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
         if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
-            id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date 
+            id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
         // Load notifications for current user
@@ -123,6 +123,7 @@ class Store {
       }));
   }
 
+  // Changed type_id to typeId to fix TypeScript mapping error
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, startDate: r.start_date, endDate: r.end_date,
@@ -356,7 +357,7 @@ class Store {
   }
 
   async updateUserAdmin(id: string, data: any) {
-      await supabase.from('users').update({ name: data.name, email: data.email, department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber }).eq('id', id);
+      await supabase.from('users').update({ name: data.name, email: data.email, department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truck_number }).eq('id', id);
       await this.refresh();
   }
 
@@ -483,12 +484,16 @@ class Store {
 
   async updateDriverPPEStatus(id: string, status: 'SOLICITADO' | 'ENTREGADO') {
       const updateData: any = { status };
-      if (status === 'ENTREGADO') updateData.delivery_date = new Date().toISOString();
+      const now = new Date().toISOString();
+      if (status === 'SOLICITADO') updateData.requested_date = now;
+      if (status === 'ENTREGADO') updateData.delivery_date = now;
+      
       await supabase.from('drivers_ppe').update(updateData).eq('id', id);
       const req = this.config.driversPpe.find(r => r.id === id);
       if (req) { 
           req.status = status; 
-          if (status === 'ENTREGADO') req.deliveryDate = updateData.delivery_date;
+          if (status === 'SOLICITADO') req.requestedDate = now;
+          if (status === 'ENTREGADO') req.deliveryDate = now;
           this.notify(); 
       }
   }

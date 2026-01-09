@@ -145,18 +145,24 @@ const DriverPPEReportModal: React.FC<{ onClose: () => void, trucks: TruckType[],
                                 <thead className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] border-b border-slate-200">
                                     <tr>
                                         <th className="px-6 py-3">Repartidor</th>
-                                        <th className="px-6 py-3">Material</th>
-                                        <th className="px-6 py-3">Talla</th>
+                                        <th className="px-6 py-3">Material / Talla</th>
+                                        <th className="px-6 py-3">Cronología</th>
                                         <th className="px-6 py-3">Estado Actual</th>
-                                        <th className="px-6 py-3 border-l border-slate-200 text-center w-24">Recibido</th>
+                                        <th className="px-6 py-3 border-l border-slate-200 text-center w-24">Firma</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {group.items.map(item => (
                                         <tr key={item.id} className="print:bg-transparent">
                                             <td className="px-6 py-4 font-bold text-slate-800">{item.driverName}</td>
-                                            <td className="px-6 py-4 font-medium text-slate-600">{getPpeTypeName(item.typeId)}</td>
-                                            <td className="px-6 py-4 font-black font-mono text-blue-600">{item.size}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-slate-600">{getPpeTypeName(item.typeId)}</div>
+                                                <div className="font-black font-mono text-blue-600 text-[10px]">TALLA: {item.size}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase">Registro: {new Date(item.createdAt).toLocaleDateString()}</div>
+                                                {item.requestedDate && <div className="text-[9px] text-blue-500 font-bold uppercase">Pedido: {new Date(item.requestedDate).toLocaleDateString()}</div>}
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <span className={`text-[10px] font-black px-2 py-1 rounded-full border ${item.status === 'SOLICITADO' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
                                                     {item.status}
@@ -348,7 +354,7 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
                             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                                 <tr>
                                     <th className="px-6 py-4">Repartidor / Camión</th>
-                                    <th className="px-6 py-4">Material</th>
+                                    <th className="px-6 py-4">Material / Cronología</th>
                                     <th className="px-6 py-4">Talla</th>
                                     <th className="px-6 py-4">Estado</th>
                                     <th className="px-6 py-4 text-right">Acciones</th>
@@ -368,7 +374,14 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
                                                     <Truck size={10}/> {truck?.name || 'N/A'}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 font-medium text-slate-700">{getPpeTypeName(req.typeId)}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-slate-700">{getPpeTypeName(req.typeId)}</div>
+                                                <div className="flex flex-col gap-0.5 mt-1">
+                                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">REG: {new Date(req.createdAt).toLocaleDateString()}</span>
+                                                    {req.requestedDate && <span className="text-[9px] text-blue-400 font-bold uppercase tracking-tighter">PED: {new Date(req.requestedDate).toLocaleDateString()}</span>}
+                                                    {req.deliveryDate && <span className="text-[9px] text-green-400 font-bold uppercase tracking-tighter">ENT: {new Date(req.deliveryDate).toLocaleDateString()}</span>}
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <span className="bg-slate-100 px-2 py-1 rounded font-mono font-bold text-xs">{req.size}</span>
                                             </td>

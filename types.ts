@@ -71,6 +71,7 @@ export interface DriverPPE {
   size: string;
   status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
   createdAt: string;
+  requestedDate?: string;
   deliveryDate?: string;
 }
 
