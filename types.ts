@@ -14,14 +14,14 @@ export enum RequestStatus {
 export interface DateRange {
   startDate: string;
   endDate: string;
-  label?: string; // Optional label for the specific range (e.g., "Turno 1")
+  label?: string;
 }
 
 export interface LeaveTypeConfig {
   id: string;
   label: string;
   subtractsDays: boolean;
-  fixedRanges?: DateRange[]; // Changed from single object to array
+  fixedRanges?: DateRange[];
 }
 
 export enum RequestType {
@@ -46,8 +46,35 @@ export interface User {
   daysAvailable: number;
   overtimeHours: number;
   avatar?: string;
-  birthdate?: string; // Nuevo: Fecha de nacimiento
+  birthdate?: string; 
+  // Add truckNumber property to fix type errors in Dashboard and Management
+  truckNumber?: string;
 }
+
+// --- NUEVAS INTERFACES REPARTIDORES ---
+
+export interface Truck {
+  id: string;
+  name: string; // Ej: Camión 1, Matrícula, etc.
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  truckId: string;
+}
+
+export interface DriverPPE {
+  id: string;
+  driverId: string;
+  typeId: string;
+  size: string;
+  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
+  createdAt: string;
+  deliveryDate?: string;
+}
+
+// ---------------------------------------
 
 export interface Department {
   id: string;
@@ -73,15 +100,9 @@ export interface LeaveRequest {
   createdAt: string;
   adminComment?: string;
   createdByAdmin?: boolean;
-  
-  // Trazabilidad de Horas
   isConsumed?: boolean;
   consumedHours?: number;
-  
-  // Para solicitudes de consumo
   overtimeUsage?: OvertimeUsage[];
-
-  // Justificaciones
   isJustified?: boolean; 
   reportedToAdmin?: boolean;
 }
@@ -92,7 +113,7 @@ export interface Notification {
   message: string;
   read: boolean;
   date: string;
-  type?: 'system' | 'admin'; // Nuevo campo para distinguir el origen
+  type?: 'system' | 'admin';
 }
 
 export interface NewsPost {
@@ -150,7 +171,6 @@ export interface PPEType {
 export interface PPERequest {
   id: string;
   userId: string;
-  type_id: string; // compatibility
   typeId: string;
   size: string;
   status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
@@ -167,7 +187,7 @@ export interface AppConfig {
   holidays: Holiday[];
   ppeTypes: PPEType[];
   ppeRequests: PPERequest[];
-  news: NewsPost[]; // Nuevo
+  news: NewsPost[];
   smtpSettings: {
     host: string;
     port: number;
@@ -175,4 +195,8 @@ export interface AppConfig {
     password?: string;
     enabled: boolean;
   };
+  // Campos nuevos en la config
+  trucks: Truck[];
+  drivers: Driver[];
+  driversPpe: DriverPPE[];
 }

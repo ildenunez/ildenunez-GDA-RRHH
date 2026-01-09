@@ -1,6 +1,6 @@
 {
   "name": "GdA RRHH",
-  "version": "OPERATIVO 27122025",
-  "description": "Premium Leave and Overtime Management System with Role-Based Access Control.",
+  "version": "1.0.0-ESTABLE-RESTAURACION-202508",
+  "description": "Sistema de Gestión de RRHH y EPIs. Punto de restauración: Lógica de EPIs (Solicitado/Entregado) y Filtros Admin completados.",
   "requestFramePermissions": []
 }

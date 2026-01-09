@@ -11,6 +11,7 @@ import RequestDetailModal from './components/RequestDetailModal';
 import RequestFormModal from './components/RequestFormModal';
 import HelpView from './components/HelpView';
 import PPEView from './components/PPEView';
+import RepartidoresView from './components/RepartidoresView';
 import UnreadNotificationsModal from './components/UnreadNotificationsModal';
 import { 
   LayoutDashboard, 
@@ -28,7 +29,8 @@ import {
   HelpCircle,
   HardHat,
   CalendarClock,
-  AlertTriangle
+  AlertTriangle,
+  Truck
 } from 'lucide-react';
 
 const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
@@ -72,11 +74,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 <button onClick={() => window.location.reload()} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/30">
                     Recargar Página
                 </button>
-                {(import.meta as any).env.DEV && (
-                    <pre className="mt-6 p-4 bg-slate-900 text-slate-200 rounded-lg text-left text-[10px] overflow-auto max-h-40">
-                        {this.state.error?.toString()}
-                    </pre>
-                )}
             </div>
         </div>
       );
@@ -101,7 +98,7 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
         if (user) onLogin(user); else setError('Credenciales inválidas.');
     } catch (e) { 
         console.error(e);
-        setError('Error de conexión con la base de datos. Verifica tu configuración.'); 
+        setError('Error de conexión.'); 
     } finally { 
         setLoading(false); 
     }
@@ -211,8 +208,6 @@ export default function App() {
     </button>
   );
 
-  const deptName = store.departments.find(d => d.id === user.departmentId)?.name;
-
   return (
     <div className="flex h-screen h-[100dvh] bg-slate-50 overflow-hidden">
       <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-64 xl:w-60 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl`}>
@@ -226,9 +221,13 @@ export default function App() {
           <NavItem id="calendar" icon={CalendarDays} label="Calendario" />
           <NavItem id="notifications" icon={Bell} label="Notificaciones" badgeCount={unreadCount} />
           <NavItem id="epis" icon={HardHat} label="EPIS" />
+          
           {isSupervisor && (
             <>
-              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase">Gestión</div>
+              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase tracking-widest">Reparto</div>
+              <NavItem id="repartidores" icon={Truck} label="Repartidores" />
+              
+              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase tracking-widest">Gestión</div>
               <NavItem id="approvals" icon={ShieldCheck} label="Aprobaciones" badgeCount={pendingCount} />
               <NavItem id="team" icon={UsersIcon} label="Mi Equipo" />
               <NavItem id="upcoming" icon={CalendarClock} label="Próximas Ausencias" />
@@ -236,7 +235,7 @@ export default function App() {
           )}
           {isAdmin && (
             <>
-              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase">Admin</div>
+              <div className="pt-4 pb-2 px-4 xl:px-3 text-xs font-semibold text-slate-500 uppercase tracking-widest">Admin</div>
               <NavItem id="settings" icon={Settings} label="Administración" />
             </>
           )}
@@ -248,7 +247,7 @@ export default function App() {
             <img src={user.avatar} className="w-10 h-10 xl:w-9 xl:h-9 rounded-full border-2 border-slate-700 object-cover" />
             <div className="flex-1 min-w-0">
                 <p className="text-sm xl:text-xs font-medium truncate">{user.name}</p>
-                <p className="text-[10px] text-slate-400 truncate uppercase">{deptName || 'Sin Dpto.'}</p>
+                <p className="text-[10px] text-slate-400 truncate uppercase">Sesión activa</p>
             </div>
           </div>
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition-colors text-slate-300"><LogOut size={16} /> Salir</button>
@@ -258,7 +257,7 @@ export default function App() {
       <main className="flex-1 md:ml-64 xl:ml-60 flex flex-col h-screen h-[100dvh]">
         <header className="h-16 xl:h-14 bg-white border-b flex items-center justify-between px-6 xl:px-5 z-30 shrink-0">
           <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-600"><Menu/></button>
-          <h2 className="text-lg xl:text-base font-semibold text-slate-800 capitalize">{activeTab}</h2>
+          <h2 className="text-lg xl:text-base font-semibold text-slate-800 capitalize">{activeTab.replace(/_/g, ' ')}</h2>
           <button onClick={() => {setModalInitialTab('absence'); setEditingRequest(null); setShowRequestModal(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-medium flex items-center gap-2 shadow-lg"><Plus size={16} /> Nueva Solicitud</button>
         </header>
         <div className="flex-1 overflow-auto p-4 md:p-8 xl:p-6 2xl:p-8">
@@ -271,19 +270,14 @@ export default function App() {
              {activeTab === 'team' && <UserManagement currentUser={user} onViewRequest={setViewingRequest} />}
              {activeTab === 'upcoming' && <UpcomingAbsences user={user} onViewRequest={setViewingRequest} />}
              {activeTab === 'epis' && <PPEView user={user} />}
+             {activeTab === 'repartidores' && <RepartidoresView user={user} />}
              {activeTab === 'settings' && isAdmin && <AdminSettings onViewRequest={setViewingRequest} />}
              {activeTab === 'help' && <HelpView />}
            </ErrorBoundary>
         </div>
         {showRequestModal && <RequestFormModal onClose={() => { setShowRequestModal(false); store.refresh(); }} user={user} initialTab={modalInitialTab} editingRequest={editingRequest} />}
         {viewingRequest && <RequestDetailModal request={viewingRequest} onClose={() => setViewingRequest(null)} />}
-        
-        {unreadToModal && (
-          <UnreadNotificationsModal 
-            notification={unreadToModal} 
-            onClose={() => setUnreadToModal(null)} 
-          />
-        )}
+        {unreadToModal && <UnreadNotificationsModal notification={unreadToModal} onClose={() => setUnreadToModal(null)} />}
       </main>
     </div>
   );

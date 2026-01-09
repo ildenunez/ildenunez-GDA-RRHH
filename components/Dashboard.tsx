@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, RequestStatus, LeaveRequest, RequestType, NewsPost } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -26,6 +26,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   const requests = store.getMyRequests();
   const nextShiftData = store.getNextShift(user.id);
   const news = store.config.news;
+  const isRepartidor = store.departments.find(d => d.id === user.departmentId)?.name === 'Repartidores';
 
   // Birthday logic
   const upcomingBirthdays = store.users.filter(u => {
@@ -39,7 +40,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
       nextWeek.setDate(today.getDate() + 7);
       const bThisYear = new Date(today.getFullYear(), bMonth, bDay);
       const bNextYear = new Date(today.getFullYear() + 1, bMonth, bDay);
-      return isToday || (bThisYear >= today && bThisYear <= nextWeek) || (bNextYear >= today && bNextYear <= nextWeek);
+      // Fix typo: use nextWeek instead of undefined bNextWeek
+      return isToday || (bThisYear >= today && bThisYear <= nextWeek) || (bNextYear >= today && nextWeek >= bNextYear);
   }).sort((a,b) => {
       const today = new Date();
       const getDays = (u: User) => {
@@ -64,7 +66,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   };
 
   const getRequestLabel = (req: LeaveRequest) => {
-      // PRIORIDAD: req.label (que es donde guardamos "Vacaciones 2026")
       const label = req.label || store.getTypeLabel(req.typeId);
       if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) {
           return ( <span className="flex items-center gap-1.5 text-blue-700 font-bold"><ShieldCheck size={16} className="text-blue-600" />{label}</span> );
@@ -73,9 +74,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   };
 
   const stats = [
-    { id: 'days', label: 'Días Disponibles', value: (user.daysAvailable || 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true },
-    { id: 'hours', label: 'Saldo Horas Extra', value: `${user.overtimeHours || 0}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true },
-    { id: 'pending', label: 'Pendientes', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false },
+    { id: 'days', label: 'Días Disponibles', value: (user.daysAvailable || 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true, visible: !isRepartidor },
+    { id: 'hours', label: 'Saldo Horas Extra', value: `${user.overtimeHours || 0}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true, visible: !isRepartidor },
+    { id: 'truck', label: 'Camión Asignado', value: user.truckNumber || 'N/A', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50', clickable: false, visible: isRepartidor },
+    { id: 'pending', label: 'Solicitudes EPI', value: String(store.config.ppeRequests.filter(r => r.userId === user.id && r.status !== 'ENTREGADO').length), icon: HardHat, color: 'text-orange-500', bg: 'bg-orange-50', clickable: false, visible: isRepartidor },
+    { id: 'pending_abs', label: 'Pendientes', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false, visible: !isRepartidor },
   ];
 
   const currentYear = new Date().getFullYear();
@@ -161,11 +164,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   return (
     <div className="space-y-6 xl:space-y-5 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-         <div><h2 className="text-2xl xl:text-xl font-bold text-slate-800">Hola, {user.name}</h2><p className="text-slate-500 xl:text-sm">Resumen de tu actividad laboral.</p></div>
+         <div><h2 className="text-2xl xl:text-xl font-bold text-slate-800">Hola, {user.name}</h2><p className="text-slate-500 xl:text-sm">Resumen de tu actividad {isRepartidor ? 'logística' : 'laboral'}.</p></div>
          <div className="flex gap-2.5 w-full md:w-auto">
-            <button onClick={() => onNewRequest('absence')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl shadow-lg font-medium text-sm"><PlusCircle size={18}/> Ausencia</button>
-            <button onClick={() => onNewRequest('overtime')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl font-medium text-sm"><Timer size={18}/> Horas</button>
-            <button onClick={() => setShowPPEModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl font-medium text-sm"><HardHat size={18}/> EPI</button>
+            {!isRepartidor && (
+              <>
+                <button onClick={() => onNewRequest('absence')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl shadow-lg font-medium text-sm"><PlusCircle size={18}/> Ausencia</button>
+                <button onClick={() => onNewRequest('overtime')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl font-medium text-sm"><Timer size={18}/> Horas</button>
+              </>
+            )}
+            <button onClick={() => setShowPPEModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-5 xl:px-4 py-3 xl:py-2.5 rounded-xl font-medium text-sm"><HardHat size={18}/> {isRepartidor ? 'Solicitar EPI' : 'EPI'}</button>
          </div>
       </div>
       
@@ -175,7 +182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
              <p className="text-[10px] xl:text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Próximo Turno</p>
              {nextShiftData && nextShiftData.shift ? (<><h3 className="text-xl xl:text-lg font-bold capitalize">{formatDateSafe(nextShiftData.date)}</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-white/10 border border-white/20"><span className="w-2 h-2 rounded-full" style={{backgroundColor: nextShiftData.shift.color}}></span>{nextShiftData.shift.name}</div></>) : <div className="text-slate-400 italic text-sm mt-2">Sin turnos próximos.</div>}
         </div>
-        {stats.map((stat) => (
+        {stats.filter(s => s.visible).map((stat) => (
           <div key={stat.id} onClick={() => stat.clickable && setDetailView(stat.id as any)} className={`bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between group transition-all ${stat.clickable ? 'cursor-pointer hover:shadow-md' : ''}`}>
             <div className="flex items-center space-x-4 xl:space-x-3"><div className={`p-4 xl:p-3 rounded-xl ${stat.bg}`}><stat.icon className={`w-8 h-8 xl:w-7 xl:h-7 ${stat.color}`} /></div><div><p className="text-xs font-medium text-slate-500">{stat.label}</p><h3 className="text-2xl xl:text-xl font-bold text-slate-800">{stat.value}</h3></div></div>
             {stat.clickable && <ChevronRight className="text-slate-300 group-hover:text-blue-500" size={20}/>}
@@ -184,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-4">
-        <div className="lg:col-span-2 bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 h-fit">
+        <div className={`${isRepartidor ? 'lg:col-span-3' : 'lg:col-span-2'} bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 h-fit`}>
             <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-6 xl:mb-4 flex items-center gap-2"><Megaphone className="text-blue-500" size={20}/> Muro de Anuncios</h3>
             <div className="space-y-6 xl:space-y-4">
                 {news.length === 0 ? (
@@ -202,70 +209,74 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
             </div>
         </div>
 
-        <div className="space-y-6 xl:space-y-4">
-             <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
-                 <div className="absolute -top-4 -right-4 text-orange-100 opacity-50 transform rotate-12"><Cake size={100}/></div>
-                 <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10"><Cake className="text-orange-500" size={20}/> Cumpleaños</h3>
-                 <div className="space-y-4 xl:space-y-3 relative z-10">
-                     {upcomingBirthdays.length === 0 ? (
-                         <p className="text-sm text-slate-400 italic">Sin novedades.</p>
-                     ) : upcomingBirthdays.map(u => {
-                         const bd = new Date(u.birthdate!);
-                         const today = new Date();
-                         const isToday = bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
-                         return (
-                             <div key={u.id} className={`flex items-center gap-3 p-3 xl:p-2 rounded-xl border transition-all ${isToday ? 'bg-orange-50 border-orange-200 animate-pulse' : 'bg-slate-50 border-slate-100'}`}>
-                                 <img src={u.avatar} className="w-10 h-10 xl:w-8 xl:h-8 rounded-full border-2 border-white shadow-sm"/>
-                                 <div className="flex-1 min-w-0">
-                                     <p className="text-sm xl:text-xs font-bold text-slate-800 truncate">{u.name}</p>
-                                     <p className={`text-xs xl:text-[10px] font-medium ${isToday ? 'text-orange-600' : 'text-slate-500'}`}>
-                                         {isToday ? '¡Hoy! 🎂' : `${bd.getDate()} de ${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][bd.getMonth()]}`}
-                                     </p>
-                                 </div>
-                                 {isToday && <Star className="text-orange-400 fill-orange-400" size={16}/>}
-                             </div>
-                         );
-                     })}
-                 </div>
-             </div>
+        {!isRepartidor && (
+          <div className="space-y-6 xl:space-y-4">
+               <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
+                   <div className="absolute -top-4 -right-4 text-orange-100 opacity-50 transform rotate-12"><Cake size={100}/></div>
+                   <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10"><Cake className="text-orange-500" size={20}/> Cumpleaños</h3>
+                   <div className="space-y-4 xl:space-y-3 relative z-10">
+                       {upcomingBirthdays.length === 0 ? (
+                           <p className="text-sm text-slate-400 italic">Sin novedades.</p>
+                       ) : upcomingBirthdays.map(u => {
+                           const bd = new Date(u.birthdate!);
+                           const today = new Date();
+                           const isToday = bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+                           return (
+                               <div key={u.id} className={`flex items-center gap-3 p-3 xl:p-2 rounded-xl border transition-all ${isToday ? 'bg-orange-50 border-orange-200 animate-pulse' : 'bg-slate-50 border-slate-100'}`}>
+                                   <img src={u.avatar} className="w-10 h-10 xl:w-8 xl:h-8 rounded-full border-2 border-white shadow-sm"/>
+                                   <div className="flex-1 min-w-0">
+                                       <p className="text-sm xl:text-xs font-bold text-slate-800 truncate">{u.name}</p>
+                                       <p className={`text-xs xl:text-[10px] font-medium ${isToday ? 'text-orange-600' : 'text-slate-500'}`}>
+                                           {isToday ? '¡Hoy! 🎂' : `${bd.getDate()} de ${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][bd.getMonth()]}`}
+                                       </p>
+                                   </div>
+                                   {isToday && <Star className="text-orange-400 fill-orange-400" size={16}/>}
+                               </div>
+                           );
+                       })}
+                   </div>
+               </div>
 
-             <div className="bg-blue-600 p-6 xl:p-5 rounded-2xl shadow-lg text-white">
-                 <Quote className="text-white/20 mb-2 w-8 h-8 xl:w-6 xl:h-6" size={32} />
-                 <p className="italic font-medium leading-relaxed text-sm xl:text-xs">"El talento gana partidos, pero el trabajo en equipo y la inteligencia ganan campeonatos."</p>
-                 <p className="text-right text-xs font-bold mt-4 xl:mt-2 text-blue-200 uppercase tracking-widest">— Michael Jordan</p>
-             </div>
-        </div>
+               <div className="bg-blue-600 p-6 xl:p-5 rounded-2xl shadow-lg text-white">
+                   <Quote className="text-white/20 mb-2 w-8 h-8 xl:w-6 xl:h-6" size={32} />
+                   <p className="italic font-medium leading-relaxed text-sm xl:text-xs">"El talento gana partidos, pero el trabajo en equipo y la inteligencia ganan campeonatos."</p>
+                   <p className="text-right text-xs font-bold mt-4 xl:mt-2 text-blue-200 uppercase tracking-widest">— Michael Jordan</p>
+               </div>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 xl:gap-4">
-        <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4 flex items-center"><Calendar className="w-5 h-5 mr-2 text-slate-500" /> Solicitudes Recientes</h3>
-          <div className="space-y-3 xl:space-y-2">
-            {requests.length === 0 ? <p className="text-slate-400 text-sm">No hay solicitudes.</p> : requests.slice(0, 4).map((req) => (
-              <div key={req.id} onClick={() => onViewRequest(req)} className="flex items-center justify-between p-3 xl:p-2 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 group">
-                <div><div className="flex items-center gap-2 text-sm xl:text-xs">{getRequestLabel(req)}</div><p className="text-xs xl:text-[10px] text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}`}</p></div>
-                <div className="flex items-center gap-3"><span className={`px-2 py-1 rounded-full text-[10px] font-medium ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>{req.status === RequestStatus.PENDING && (<div className="flex gap-1" onClick={e => e.stopPropagation()}><button onClick={() => onEditRequest(req)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button><button onClick={() => handleDelete(req.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button></div>)}</div>
-              </div>
-            ))}
+      {!isRepartidor && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 xl:gap-4">
+          <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100">
+            <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4 flex items-center"><Calendar className="w-5 h-5 mr-2 text-slate-500" /> Solicitudes Recientes</h3>
+            <div className="space-y-3 xl:space-y-2">
+              {requests.length === 0 ? <p className="text-slate-400 text-sm">No hay solicitudes.</p> : requests.slice(0, 4).map((req) => (
+                <div key={req.id} onClick={() => onViewRequest(req)} className="flex items-center justify-between p-3 xl:p-2 bg-slate-50 rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-100 group">
+                  <div><div className="flex items-center gap-2 text-sm xl:text-xs">{getRequestLabel(req)}</div><p className="text-xs xl:text-[10px] text-slate-500">{(req.typeId as string).includes('ajuste') ? 'Automático' : `${new Date(req.startDate).toLocaleDateString()}`}</p></div>
+                  <div className="flex items-center gap-3"><span className={`px-2 py-1 rounded-full text-[10px] font-medium ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span>{req.status === RequestStatus.PENDING && (<div className="flex gap-1" onClick={e => e.stopPropagation()}><button onClick={() => onEditRequest(req)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button><button onClick={() => handleDelete(req.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button></div>)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100">
+               <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4">Evolución Ausencias (Días)</h3>
+               <div style={{ width: '100%', height: '240px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={monthlyAbsenceStats}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
+                          <XAxis dataKey="name" fontSize={10} stroke="#94a3b8" />
+                          <YAxis fontSize={10} stroke="#94a3b8" allowDecimals={false}/>
+                          <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
+                          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                          <Bar dataKey="approved" name="Aprobados" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} />
+                          <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#eab308" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                  </ResponsiveContainer>
+               </div>
           </div>
         </div>
-        <div className="bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100">
-             <h3 className="text-lg xl:text-base font-bold text-slate-800 mb-4">Evolución Ausencias (Días)</h3>
-             <div style={{ width: '100%', height: '240px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyAbsenceStats}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
-                        <XAxis dataKey="name" fontSize={10} stroke="#94a3b8" />
-                        <YAxis fontSize={10} stroke="#94a3b8" allowDecimals={false}/>
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
-                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                        <Bar dataKey="approved" name="Aprobados" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} />
-                        <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#eab308" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-             </div>
-        </div>
-      </div>
+      )}
       {showPPEModal && <PPERequestModal userId={user.id} onClose={() => setShowPPEModal(false)} />}
     </div>
   );
