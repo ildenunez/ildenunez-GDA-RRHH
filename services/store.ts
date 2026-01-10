@@ -1,4 +1,3 @@
-
 import { User, Role, Department, LeaveRequest, RequestStatus, AppConfig, Notification, LeaveTypeConfig, EmailTemplate, ShiftType, ShiftAssignment, Holiday, PPEType, PPERequest, RequestType, OvertimeUsage, DateRange, NewsPost, Truck, Driver, DriverPPE } from '../types';
 import { supabase } from './supabase';
 
@@ -81,7 +80,7 @@ class Store {
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
-        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shift_type_id: a.shift_type_id }));
+        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id }));
         
         // Mapeo Repartidores
         if (trucksData) this.config.trucks = trucksData;
