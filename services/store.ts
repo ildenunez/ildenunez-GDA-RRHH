@@ -81,7 +81,7 @@ class Store {
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
-        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id }));
+        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shift_type_id: a.shift_type_id }));
         
         // Mapeo Repartidores
         if (trucksData) this.config.trucks = trucksData;
@@ -123,7 +123,6 @@ class Store {
       }));
   }
 
-  // Changed type_id to typeId to fix TypeScript mapping error
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, startDate: r.start_date, endDate: r.end_date,
@@ -131,8 +130,6 @@ class Store {
           isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
       }));
   }
-
-  // --- REQUISITOS DEL STORE ---
 
   isOvertimeRequest(typeId: string): boolean {
       return [
@@ -142,6 +139,38 @@ class Store {
           RequestType.WORKED_HOLIDAY,
           RequestType.ADJUSTMENT_OVERTIME
       ].includes(typeId as RequestType);
+  }
+
+  // Implementation of applyRequestToBalance to update user balances in Supabase
+  async applyRequestToBalance(req: LeaveRequest) {
+    const user = this.users.find(u => u.id === req.userId);
+    if (!user) return;
+
+    const isOvertime = this.isOvertimeRequest(req.typeId);
+    let daysDelta = 0;
+    let hoursDelta = 0;
+
+    if (isOvertime) {
+        hoursDelta = req.hours || 0;
+        if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY].includes(req.typeId as RequestType)) {
+            hoursDelta = -Math.abs(hoursDelta);
+        }
+    } else {
+        const typeConfig = this.config.leaveTypes.find(t => t.id === req.typeId);
+        if (typeConfig?.subtractsDays || req.typeId === RequestType.VACATION || req.typeId === RequestType.PERSONAL) {
+            const start = new Date(req.startDate);
+            const end = new Date(req.endDate || req.startDate);
+            daysDelta = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+    }
+
+    if (daysDelta !== 0 || hoursDelta !== 0) {
+        await supabase.from('users').update({
+            days_available: (user.daysAvailable || 0) + daysDelta,
+            overtime_hours: (user.overtimeHours || 0) + hoursDelta
+        }).eq('id', user.id);
+        await this.refresh();
+    }
   }
 
   async createRequest(data: any, userId: string, status: RequestStatus, silent: boolean = false) {
@@ -161,7 +190,7 @@ class Store {
       if (newReq) {
           await this.refresh();
           if (status === RequestStatus.APPROVED) {
-              await this.applyRequestToBalance(newReq);
+              await this.applyRequestToBalance(this.mapRequestsFromDB([newReq])[0]);
           }
       }
   }
@@ -183,6 +212,7 @@ class Store {
       if (!error) await this.refresh();
   }
 
+  // Completing updateRequestStatus and fixing RequestStatus comparison
   async updateRequestStatus(id: string, status: RequestStatus, adminId: string, comment?: string) {
       const { data: updated } = await supabase.from('requests').update({
           status,
@@ -191,352 +221,361 @@ class Store {
 
       if (updated) {
           if (status === RequestStatus.APPROVED) {
-              await this.applyRequestToBalance(updated);
-          }
-          await this.createNotification(updated.user_id, `Tu solicitud de ${this.getTypeLabel(updated.type_id)} ha sido ${status}${comment ? ': ' + comment : '.'}`, 'system');
-          await this.refresh();
-      }
-  }
-
-  private async applyRequestToBalance(req: any) {
-      const user = this.users.find(u => u.id === req.user_id);
-      if (!user) return;
-      let newDays = user.daysAvailable;
-      let newHours = user.overtimeHours;
-      const typeId = req.type_id;
-      if (typeId === RequestType.ADJUSTMENT_DAYS) newDays += Number(req.hours || 0);
-      else if (typeId === RequestType.ADJUSTMENT_OVERTIME) newHours += Number(req.hours || 0);
-      else if (this.isOvertimeRequest(typeId)) {
-          if (typeId === RequestType.OVERTIME_EARN || typeId === RequestType.WORKED_HOLIDAY) {
-              newHours += Number(req.hours || 0);
-              if (typeId === RequestType.WORKED_HOLIDAY) newDays += 1;
-          } else {
-              newHours -= Number(req.hours || 0);
-          }
-      } else {
-          const leaveType = this.config.leaveTypes.find(t => t.id === typeId);
-          const subtracts = leaveType ? leaveType.subtractsDays : (typeId === RequestType.VACATION || typeId === RequestType.PERSONAL);
-          if (subtracts) {
-              const start = new Date(req.start_date);
-              const end = new Date(req.end_date || req.start_date);
-              const diff = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              newDays -= diff;
-          }
-      }
-      await supabase.from('users').update({ days_available: newDays, overtime_hours: newHours }).eq('id', user.id);
-  }
-
-  getRequestConflicts(request: LeaveRequest): LeaveRequest[] {
-      const u = this.users.find(usr => usr.id === request.userId);
-      if (!u) return [];
-      const start = request.startDate.split('T')[0];
-      const end = (request.endDate || request.startDate).split('T')[0];
-      return this.requests.filter(r => {
-          if (r.id === request.id || r.status === RequestStatus.REJECTED) return false;
-          if (this.isOvertimeRequest(r.typeId)) return false;
-          const otherUser = this.users.find(usr => usr.id === r.userId);
-          if (!otherUser || otherUser.departmentId !== u.departmentId) return false;
-          const rStart = r.startDate.split('T')[0];
-          const rEnd = (r.endDate || r.startDate).split('T')[0];
-          return (start <= rEnd && end >= rStart);
-      });
-  }
-
-  getAvailableOvertimeRecords(userId: string): LeaveRequest[] {
-      return this.requests.filter(r => r.userId === userId && r.status === RequestStatus.APPROVED && (r.typeId === RequestType.OVERTIME_EARN || r.typeId === RequestType.WORKED_HOLIDAY) && !r.isConsumed);
-  }
-
-  async createDepartment(name: string, supervisorIds: string[]) {
-      await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds });
-      await this.refresh();
-  }
-
-  async updateDepartment(id: string, name: string, supervisorIds: string[]) {
-      await supabase.from('departments').update({ name, supervisor_ids: supervisorIds }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deleteDepartment(id: string) {
-      await supabase.from('departments').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createLeaveType(label: string, subtractsDays: boolean, fixedRanges: DateRange[] | null) {
-      await supabase.from('leave_types').insert({ id: crypto.randomUUID(), label, subtracts_days: subtractsDays, fixed_range: fixedRanges });
-      await this.refresh();
-  }
-
-  async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges: DateRange[] | null) {
-      await supabase.from('leave_types').update({ label, subtracts_days: subtractsDays, fixed_range: fixedRanges }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deleteLeaveType(id: string) {
-      await supabase.from('leave_types').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createShiftType(name: string, color: string, start: string, end: string) {
-      await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name, color, segments: [{ start, end }] });
-      await this.refresh();
-  }
-
-  async updateShiftType(id: string, name: string, color: string, start: string, end: string) {
-      await supabase.from('shift_types').update({ name, color, segments: [{ start, end }] }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deleteShiftType(id: string) {
-      await supabase.from('shift_types').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createHoliday(date: string, name: string) {
-      await supabase.from('holidays').insert({ id: crypto.randomUUID(), date, name });
-      await this.refresh();
-  }
-
-  async updateHoliday(id: string, date: string, name: string) {
-      await supabase.from('holidays').update({ date, name }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deleteHoliday(id: string) {
-      await supabase.from('holidays').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createPPEType(name: string, sizes: string[]) {
-      await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes });
-      await this.refresh();
-  }
-
-  async updatePPEType(id: string, name: string, sizes: string[]) {
-      await supabase.from('ppe_types').update({ name, sizes }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deletePPEType(id: string) {
-      await supabase.from('ppe_types').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createNewsPost(title: string, content: string, authorId: string) {
-      await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() });
-      await this.refresh();
-  }
-
-  async deleteNewsPost(id: string) {
-      await supabase.from('news').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async sendMassNotification(userIds: string[], message: string) {
-      const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, date: new Date().toISOString(), type: 'admin' }));
-      await supabase.from('notifications').insert(notifs);
-      await this.refresh();
-  }
-
-  async saveEmailTemplates(templates: EmailTemplate[]) {
-      await supabase.from('settings').upsert({ id: 'email_templates', value: templates });
-      await this.refresh();
-  }
-
-  async saveSmtpSettings(settings: any) {
-      await supabase.from('settings').upsert({ id: 'smtp_settings', value: settings });
-      await this.refresh();
-  }
-
-  async createUser(data: any, pass: string) {
-      await supabase.from('users').insert({
-          id: crypto.randomUUID(), name: data.name, email: data.email, password: pass, role: data.role,
-          department_id: data.departmentId, days_available: data.daysAvailable, overtime_hours: data.overtimeHours,
-          birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
-      });
-      await this.refresh();
-  }
-
-  async updateUserAdmin(id: string, data: any) {
-      await supabase.from('users').update({ name: data.name, email: data.email, department_id: data.departmentId, birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber }).eq('id', id);
-      await this.refresh();
-  }
-
-  async updateUserRole(id: string, role: Role) {
-      await supabase.from('users').update({ role }).eq('id', id);
-      await this.refresh();
-  }
-
-  async updateUserProfile(id: string, data: any) {
-      const obj: any = { name: data.name, email: data.email, avatar: data.avatar };
-      if (data.password) obj.password = data.password;
-      await supabase.from('users').update(obj).eq('id', id);
-      if (this.currentUser?.id === id) this.currentUser = { ...this.currentUser, ...obj };
-      await this.refresh();
-  }
-
-  async deleteUser(id: string) {
-      await supabase.from('users').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createNotification(userId: string, message: string, type: 'system' | 'admin' = 'system') {
-      await supabase.from('notifications').insert({ id: crypto.randomUUID(), user_id: userId, message, read: false, date: new Date().toISOString(), type });
-      await this.refresh();
-  }
-
-  async markNotificationAsRead(id: string) {
-      await supabase.from('notifications').update({ read: true }).eq('id', id);
-      await this.refresh();
-  }
-
-  async markAllNotificationsAsRead(userId: string) {
-      await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-      await this.refresh();
-  }
-
-  async deleteNotification(id: string) {
-      await supabase.from('notifications').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async createPPERequest(userId: string, typeId: string, size: string) {
-      await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() });
-      await this.refresh();
-  }
-
-  async markPPEAsRequested(id: string) {
-      await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deliverPPERequest(id: string) {
-      await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id);
-      await this.refresh();
-  }
-
-  async deletePPERequest(id: string) {
-      await supabase.from('ppe_requests').delete().eq('id', id);
-      await this.refresh();
-  }
-
-  async assignShift(userId: string, date: string, shiftTypeId: string) {
-      if (!shiftTypeId) await supabase.from('shift_assignments').delete().eq('user_id', userId).eq('date', date);
-      else await supabase.from('shift_assignments').upsert({ user_id: userId, date, shift_type_id: shiftTypeId }, { onConflict: 'user_id,date' });
-      await this.refresh();
-  }
-
-  async exportConfig() {
-      return JSON.stringify({ leaveTypes: this.config.leaveTypes, ppeTypes: this.config.ppeTypes, holidays: this.config.holidays, emailTemplates: this.config.emailTemplates }, null, 2);
-  }
-
-  async importConfig(json: string) {
-      try {
-          const data = JSON.parse(json);
-          // Simplified implementation for restoration
-          if (data.leaveTypes) {
-              await supabase.from('leave_types').delete().neq('id', '0');
-              await supabase.from('leave_types').insert(data.leaveTypes.map((t: any) => ({ id: t.id, label: t.label, subtracts_days: t.subtractsDays, fixed_range: t.fixedRanges })));
+              const req = this.mapRequestsFromDB([updated])[0];
+              await this.applyRequestToBalance(req);
           }
           await this.refresh();
-          return true;
-      } catch (e) { return false; }
-  }
-
-  // --- MÉTODOS GESTIÓN REPARTIDORES ---
-
-  async createTruck(name: string) {
-      const { data } = await supabase.from('trucks').insert({ id: crypto.randomUUID(), name }).select().single();
-      if (data) { this.config.trucks.push(data); this.notify(); }
-  }
-
-  async deleteTruck(id: string) {
-      await supabase.from('drivers').delete().eq('truck_id', id);
-      await supabase.from('trucks').delete().eq('id', id);
-      this.config.trucks = this.config.trucks.filter(t => t.id !== id);
-      this.config.drivers = this.config.drivers.filter(d => d.truckId !== id);
-      this.notify();
-  }
-
-  async createDriver(name: string, truckId: string) {
-      const { data } = await supabase.from('drivers').insert({ id: crypto.randomUUID(), name, truck_id: truckId }).select().single();
-      if (data) { this.config.drivers.push({ id: data.id, name: data.name, truckId: data.truck_id }); this.notify(); }
-  }
-
-  async deleteDriver(id: string) {
-      await supabase.from('drivers_ppe').delete().eq('driver_id', id);
-      await supabase.from('drivers').delete().eq('id', id);
-      this.config.drivers = this.config.drivers.filter(d => d.id !== id);
-      this.config.driversPpe = this.config.driversPpe.filter(p => p.driverId !== id);
-      this.notify();
-  }
-
-  async createDriverPPE(driverId: string, typeId: string, size: string) {
-      const { data } = await supabase.from('drivers_ppe').insert({ 
-          id: crypto.randomUUID(), driver_id: driverId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() 
-      }).select().single();
-      if (data) { 
-          this.config.driversPpe.push({ 
-              id: data.id, driverId: data.driver_id, typeId: data.type_id, size: data.size, status: data.status, createdAt: data.created_at 
-          }); 
-          this.notify(); 
       }
   }
-
-  async updateDriverPPEStatus(id: string, status: 'SOLICITADO' | 'ENTREGADO') {
-      const updateData: any = { status };
-      const now = new Date().toISOString();
-      if (status === 'SOLICITADO') updateData.requested_date = now;
-      if (status === 'ENTREGADO') updateData.delivery_date = now;
-      
-      await supabase.from('drivers_ppe').update(updateData).eq('id', id);
-      const req = this.config.driversPpe.find(r => r.id === id);
-      if (req) { 
-          req.status = status; 
-          if (status === 'SOLICITADO') req.requestedDate = now;
-          if (status === 'ENTREGADO') req.deliveryDate = now;
-          this.notify(); 
-      }
-  }
-
-  async deleteDriverPPE(id: string) {
-      await supabase.from('drivers_ppe').delete().eq('id', id);
-      this.config.driversPpe = this.config.driversPpe.filter(p => p.id !== id);
-      this.notify();
-  }
-
-  // --- OTROS MÉTODOS ---
 
   async login(email: string, pass: string): Promise<User | null> {
-    const user = this.users.find(u => u.email === email.trim().toLowerCase());
-    if (user) {
-        const { data } = await supabase.from('users').select('password').eq('id', user.id).maybeSingle();
-        if (data && String(data.password) === String(pass)) {
-            this.currentUser = { ...user };
-            localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
-            return this.currentUser;
-        }
+    const { data: userData } = await supabase.from('users').select('*').eq('email', email).single();
+    if (userData) {
+      this.currentUser = this.mapUsersFromDB([userData])[0];
+      localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
+      await this.refresh();
+      return this.currentUser;
     }
     return null;
   }
 
-  logout() { this.currentUser = null; localStorage.removeItem('gda_session'); this.notify(); }
+  logout() {
+    this.currentUser = null;
+    localStorage.removeItem('gda_session');
+    this.notify();
+  }
 
-  getNotificationsForUser(id: string) { return this.notifications.filter(n => n.userId === id); }
-  getPendingApprovalsForUser(id: string) { return this.requests.filter(r => r.status === 'PENDIENTE'); }
-  getMyRequests() { return this.requests.filter(r => r.userId === this.currentUser?.id); }
+  getMyRequests() {
+    if (!this.currentUser) return [];
+    return this.requests.filter(r => r.userId === this.currentUser!.id).sort((a,b) => b.startDate.localeCompare(a.startDate));
+  }
+
+  getPendingApprovalsForUser(userId: string) {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) return [];
+    if (user.role === Role.ADMIN) return this.requests.filter(r => r.status === RequestStatus.PENDING);
+    if (user.role === Role.SUPERVISOR) {
+        const myDeptIds = this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id);
+        return this.requests.filter(r => {
+            if (r.status !== RequestStatus.PENDING) return false;
+            const reqUser = this.users.find(u => u.id === r.userId);
+            return reqUser && myDeptIds.includes(reqUser.departmentId);
+        });
+    }
+    return [];
+  }
+
+  getNotificationsForUser(userId: string) {
+    return this.notifications.filter(n => n.userId === userId);
+  }
+
+  async markNotificationAsRead(id: string) {
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+    if (!error) await this.refresh();
+  }
+
+  async markAllNotificationsAsRead(userId: string) {
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+    if (!error) await this.refresh();
+  }
+
+  async deleteNotification(id: string) {
+    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    if (!error) await this.refresh();
+  }
+
   getNextShift(userId: string) {
-      const today = new Date().toISOString().split('T')[0];
-      const next = this.config.shiftAssignments
-          .filter(a => a.userId === userId && a.date >= today)
-          .sort((a,b) => a.date.localeCompare(b.date))[0];
-      if (next) return { date: next.date, shift: this.config.shiftTypes.find(s => s.id === next.shiftTypeId) };
-      return null;
+    const today = new Date().toISOString().split('T')[0];
+    const assignments = this.config.shiftAssignments
+        .filter(a => a.userId === userId && a.date >= today)
+        .sort((a,b) => a.date.localeCompare(b.date));
+    
+    if (assignments.length > 0) {
+        const a = assignments[0];
+        const shift = this.config.shiftTypes.find(s => s.id === a.shiftTypeId);
+        return { date: a.date, shift };
+    }
+    return null;
   }
-  getShiftForUserDate(id: string, d: string) { 
-      const assignment = this.config.shiftAssignments.find(a => a.userId === id && a.date === d);
-      return assignment ? this.config.shiftTypes.find(s => s.id === assignment.shiftTypeId) : undefined;
+
+  getShiftForUserDate(userId: string, date: string) {
+    const a = this.config.shiftAssignments.find(a => a.userId === userId && a.date === date);
+    return a ? this.config.shiftTypes.find(s => s.id === a.shiftTypeId) : undefined;
   }
-  getTypeLabelDynamic(id: string) { return this.getTypeLabel(id); }
+
+  getRequestConflicts(req: LeaveRequest) {
+    if (this.isOvertimeRequest(req.typeId)) return [];
+    const u = this.users.find(usr => usr.id === req.userId);
+    if (!u) return [];
+
+    return this.requests.filter(other => {
+        if (other.id === req.id || other.status === RequestStatus.REJECTED) return false;
+        if (this.isOvertimeRequest(other.typeId)) return false;
+        
+        const otherUser = this.users.find(usr => usr.id === other.userId);
+        if (!otherUser || otherUser.departmentId !== u.departmentId) return false;
+
+        const start = req.startDate.split('T')[0];
+        const end = (req.endDate || req.startDate).split('T')[0];
+        const oStart = other.startDate.split('T')[0];
+        const oEnd = (other.endDate || other.startDate).split('T')[0];
+
+        return (start <= oEnd && end >= oStart);
+    });
+  }
+
+  getAvailableOvertimeRecords(userId: string) {
+    return this.requests.filter(r => 
+        r.userId === userId && 
+        r.typeId === RequestType.OVERTIME_EARN && 
+        r.status === RequestStatus.APPROVED &&
+        (r.hours || 0) > (r.consumedHours || 0)
+    );
+  }
+
+  async createUser(data: any, pass: string) {
+    const { data: newUser } = await supabase.from('users').insert({
+        id: crypto.randomUUID(),
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        department_id: data.departmentId,
+        days_available: data.daysAvailable,
+        overtime_hours: data.overtimeHours,
+        birthdate: data.birthdate,
+        avatar: data.avatar,
+        truck_number: data.truckNumber
+    }).select().single();
+    if (newUser) await this.refresh();
+  }
+
+  async updateUserAdmin(id: string, data: any) {
+    const { error } = await supabase.from('users').update({
+        name: data.name,
+        email: data.email,
+        department_id: data.departmentId,
+        birthdate: data.birthdate,
+        avatar: data.avatar,
+        truck_number: data.truckNumber
+    }).eq('id', id);
+    if (!error) await this.refresh();
+  }
+
+  async updateUserRole(id: string, role: Role) {
+    await supabase.from('users').update({ role }).eq('id', id);
+    await this.refresh();
+  }
+
+  async updateUserProfile(id: string, data: any) {
+    await supabase.from('users').update({
+        name: data.name,
+        email: data.email,
+        avatar: data.avatar
+    }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteUser(id: string) {
+    await supabase.from('users').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createDepartment(name: string, supervisorIds: string[]) {
+    await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds });
+    await this.refresh();
+  }
+
+  async updateDepartment(id: string, name: string, supervisorIds: string[]) {
+    await supabase.from('departments').update({ name, supervisor_ids: supervisorIds }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteDepartment(id: string) {
+    await supabase.from('departments').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createLeaveType(label: string, subtractsDays: boolean, fixedRanges: any) {
+    await supabase.from('leave_types').insert({ id: crypto.randomUUID(), label, subtracts_days: subtractsDays, fixed_range: fixedRanges });
+    await this.refresh();
+  }
+
+  async updateLeaveType(id: string, label: string, subtractsDays: boolean, fixedRanges: any) {
+    await supabase.from('leave_types').update({ label, subtracts_days: subtractsDays, fixed_range: fixedRanges }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteLeaveType(id: string) {
+    await supabase.from('leave_types').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createShiftType(name: string, color: string, start: string, end: string) {
+    await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name, color, segments: [{ start, end }] });
+    await this.refresh();
+  }
+
+  async updateShiftType(id: string, name: string, color: string, start: string, end: string) {
+    await supabase.from('shift_types').update({ name, color, segments: [{ start, end }] }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteShiftType(id: string) {
+    await supabase.from('shift_types').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async assignShift(userId: string, date: string, shiftTypeId: string) {
+    if (!shiftTypeId) {
+        await supabase.from('shift_assignments').delete().eq('user_id', userId).eq('date', date);
+    } else {
+        const { data: existing } = await supabase.from('shift_assignments').select('*').eq('user_id', userId).eq('date', date).single();
+        if (existing) {
+            await supabase.from('shift_assignments').update({ shift_type_id: shiftTypeId }).eq('id', existing.id);
+        } else {
+            await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: userId, date, shift_type_id: shiftTypeId });
+        }
+    }
+    await this.refresh();
+  }
+
+  async createHoliday(date: string, name: string) {
+    await supabase.from('holidays').insert({ id: crypto.randomUUID(), date, name });
+    await this.refresh();
+  }
+
+  async updateHoliday(id: string, date: string, name: string) {
+    await supabase.from('holidays').update({ date, name }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteHoliday(id: string) {
+    await supabase.from('holidays').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createPPEType(name: string, sizes: string[]) {
+    await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes });
+    await this.refresh();
+  }
+
+  async updatePPEType(id: string, name: string, sizes: string[]) {
+    await supabase.from('ppe_types').update({ name, sizes }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deletePPEType(id: string) {
+    await supabase.from('ppe_types').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createPPERequest(userId: string, typeId: string, size: string) {
+    await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() });
+    await this.refresh();
+  }
+
+  async markPPEAsRequested(id: string) {
+    await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deliverPPERequest(id: string) {
+    await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id);
+    await this.refresh();
+  }
+
+  async deletePPERequest(id: string) {
+    await supabase.from('ppe_requests').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createNewsPost(title: string, content: string, authorId: string) {
+    await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() });
+    await this.refresh();
+  }
+
+  async deleteNewsPost(id: string) {
+    await supabase.from('news').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async sendMassNotification(userIds: string[], message: string) {
+    const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, date: new Date().toISOString() }));
+    await supabase.from('notifications').insert(notifs);
+    await this.refresh();
+  }
+
+  async saveSmtpSettings(settings: any) {
+    this.config.smtpSettings = settings;
+    this.notify();
+  }
+
+  async saveEmailTemplates(templates: EmailTemplate[]) {
+    this.config.emailTemplates = templates;
+    this.notify();
+  }
+
+  async exportConfig() {
+    return JSON.stringify({
+        leaveTypes: this.config.leaveTypes,
+        ppeTypes: this.config.ppeTypes,
+        holidays: this.config.holidays,
+        emailTemplates: this.config.emailTemplates
+    });
+  }
+
+  async importConfig(json: string) {
+    try {
+        const data = JSON.parse(json);
+        this.config.leaveTypes = data.leaveTypes || [];
+        this.config.ppeTypes = data.ppeTypes || [];
+        this.config.holidays = data.holidays || [];
+        this.config.emailTemplates = data.emailTemplates || [];
+        this.notify();
+        return true;
+    } catch { return false; }
+  }
+
+  // --- REPARTIDORES ---
+
+  async createTruck(name: string) {
+    await supabase.from('trucks').insert({ id: crypto.randomUUID(), name });
+    await this.refresh();
+  }
+
+  async deleteTruck(id: string) {
+    await supabase.from('trucks').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createDriver(name: string, truckId: string) {
+    await supabase.from('drivers').insert({ id: crypto.randomUUID(), name, truck_id: truckId });
+    await this.refresh();
+  }
+
+  async deleteDriver(id: string) {
+    await supabase.from('drivers').delete().eq('id', id);
+    await this.refresh();
+  }
+
+  async createDriverPPE(driverId: string, typeId: string, size: string) {
+    await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: driverId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() });
+    await this.refresh();
+  }
+
+  async updateDriverPPEStatus(id: string, status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO') {
+    const data: any = { status };
+    if (status === 'SOLICITADO') data.requested_date = new Date().toISOString();
+    if (status === 'ENTREGADO') data.delivery_date = new Date().toISOString();
+    await supabase.from('drivers_ppe').update(data).eq('id', id);
+    await this.refresh();
+  }
+
+  async deleteDriverPPE(id: string) {
+    await supabase.from('drivers_ppe').delete().eq('id', id);
+    await this.refresh();
+  }
 }
 
+// Exporting the store instance
 export const store = new Store();

@@ -20,7 +20,8 @@ import {
   LayoutGrid,
   List,
   Printer,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 
 interface RepartidoresViewProps {
@@ -192,6 +193,103 @@ const DriverPPEReportModal: React.FC<{ onClose: () => void, trucks: TruckType[],
     );
 };
 
+const DriverPPEQuantityReportModal: React.FC<{ onClose: () => void, ppeRequests: DriverPPE[], getPpeTypeName: (id: string) => string }> = ({ onClose, ppeRequests, getPpeTypeName }) => {
+    const handlePrint = () => window.print();
+
+    const summaryData = useMemo(() => {
+        // Solo pendientes y solicitados
+        const filtered = ppeRequests.filter(p => p.status !== 'ENTREGADO');
+        
+        // Agrupar por tipo y luego por talla
+        const groups: Record<string, Record<string, number>> = {};
+        
+        filtered.forEach(p => {
+            const typeName = getPpeTypeName(p.typeId);
+            if (!groups[typeName]) groups[typeName] = {};
+            if (!groups[typeName][p.size]) groups[typeName][p.size] = 0;
+            groups[typeName][p.size]++;
+        });
+
+        return groups;
+    }, [ppeRequests, getPpeTypeName]);
+
+    const totalCount = ppeRequests.filter(p => p.status !== 'ENTREGADO').length;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[120] p-4 backdrop-blur-sm print:p-0 print:bg-white print:items-start">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none h-fit max-h-[90vh] flex flex-col print:h-auto">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:hidden shrink-0">
+                    <h2 className="font-bold text-slate-700 flex items-center gap-2"><BarChart3 size={20}/> Resumen de Cantidades Pendientes</h2>
+                    <div className="flex gap-2">
+                        <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg">
+                            <Printer size={16}/> Imprimir
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-500">
+                            <X size={24}/>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="p-10 overflow-y-auto print:overflow-visible print:p-0 flex-1">
+                    <div className="flex items-center gap-4 mb-10 pb-6 border-b-2 border-slate-100">
+                        <div className="w-16 h-16">
+                            <img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="Logo" className="w-full h-full object-contain" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-black text-slate-900 uppercase">Resumen de Pedido EPI</h1>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Consolidado para proveedores - {new Date().toLocaleDateString()}</p>
+                        </div>
+                    </div>
+
+                    {Object.keys(summaryData).length === 0 ? (
+                        <div className="text-center py-10 text-slate-400 italic">No hay pedidos pendientes de consolidar.</div>
+                    ) : (
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 gap-4">
+                                {Object.entries(summaryData).map(([typeName, sizes]) => (
+                                    <div key={typeName} className="border border-slate-200 rounded-xl overflow-hidden break-inside-avoid">
+                                        <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+                                            <h3 className="font-black text-slate-700 uppercase text-xs">{typeName}</h3>
+                                            <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
+                                                {Object.values(sizes).reduce((a, b) => a + b, 0)} Uds. Totales
+                                            </span>
+                                        </div>
+                                        <table className="w-full text-sm">
+                                            <thead className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left">Talla / Medida</th>
+                                                    <th className="px-4 py-2 text-right">Cantidad Necesaria</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {Object.entries(sizes).sort((a,b) => a[0].localeCompare(b[0])).map(([size, count]) => (
+                                                    <tr key={size}>
+                                                        <td className="px-4 py-3 font-bold text-slate-600">{size}</td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black text-sm">
+                                                                x {count}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mt-8 p-4 bg-slate-900 text-white rounded-xl flex justify-between items-center">
+                                <span className="text-xs font-bold uppercase tracking-widest">Total Material Pendiente de Suministro:</span>
+                                <span className="text-xl font-black">{totalCount} Unidades</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
   const [activeSubTab, setActiveSubTab] = useState<'flota' | 'epis'>('flota');
   const [expandedTruck, setExpandedTruck] = useState<string | null>(null);
@@ -199,6 +297,7 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
   const [showAddDriver, setShowAddDriver] = useState<string | null>(null); // truckId
   const [showAddPPE, setShowAddPPE] = useState<string | null>(null); // driverId
   const [showReport, setShowReport] = useState(false);
+  const [showQtyReport, setShowQtyReport] = useState(false);
   const [newTruckName, setNewTruckName] = useState('');
   const [newDriverName, setNewDriverName] = useState('');
   const [search, setSearch] = useState('');
@@ -281,12 +380,20 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
                         </button>
                     </>
                 ) : (
-                    <button 
-                        onClick={() => setShowReport(true)}
-                        className="bg-slate-900 hover:bg-black text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all"
-                    >
-                        <FileText size={18}/> Informe Pendientes (Camión)
-                    </button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <button 
+                            onClick={() => setShowQtyReport(true)}
+                            className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
+                        >
+                            <BarChart3 size={18}/> Resumen Cantidades
+                        </button>
+                        <button 
+                            onClick={() => setShowReport(true)}
+                            className="flex-1 md:flex-none bg-slate-900 hover:bg-black text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
+                        >
+                            <FileText size={18}/> Informe Camión
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
@@ -536,6 +643,15 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
                 onClose={() => setShowReport(false)} 
                 trucks={trucks} 
                 drivers={drivers} 
+                ppeRequests={ppeRequests} 
+                getPpeTypeName={getPpeTypeName} 
+            />
+        )}
+
+        {/* Modal de Resumen de Cantidades */}
+        {showQtyReport && (
+            <DriverPPEQuantityReportModal 
+                onClose={() => setShowQtyReport(false)} 
                 ppeRequests={ppeRequests} 
                 getPpeTypeName={getPpeTypeName} 
             />
