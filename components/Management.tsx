@@ -15,7 +15,7 @@ export const AdminSettings = ({ onViewRequest }: { onViewRequest: (req: LeaveReq
     const stats = useMemo(() => {
         const total = store.users.length;
         const today = new Date().toISOString().split('T')[0];
-        const absentToday = store.requests.filter(r => 
+        const absentToday = store.requests.filter((r: LeaveRequest) => 
             r.status === RequestStatus.APPROVED && 
             !store.isOvertimeRequest(r.typeId) &&
             r.startDate <= today && (r.endDate || r.startDate) >= today
@@ -77,10 +77,10 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
         let list = store.users;
         if (currentUser.role === Role.SUPERVISOR) {
             const myDeptIds = store.departments.filter(d => (d.supervisorIds || []).includes(currentUser.id)).map(d => d.id);
-            list = list.filter(u => myDeptIds.includes(u.departmentId));
+            list = list.filter((u: User) => myDeptIds.includes(u.departmentId));
         }
-        if (selectedDept) list = list.filter(u => u.departmentId === selectedDept);
-        if (search) list = list.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+        if (selectedDept) list = list.filter((u: User) => u.departmentId === selectedDept);
+        if (search) list = list.filter((u: User) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
         return list.sort((a,b) => a.name.localeCompare(b.name));
     }, [search, selectedDept, currentUser, store.users, refresh]);
 
@@ -113,7 +113,7 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
 
             {view === 'list' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredUsers.map(u => (
+                    {filteredUsers.map((u: User) => (
                         <div key={u.id} onClick={() => setSelectedUser(u)} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden">
                             <div className="flex items-center gap-4 mb-6">
                                 <img src={u.avatar} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover bg-slate-100" />
@@ -147,8 +147,8 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
 
 export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
     const pendingRequests = store.getPendingApprovalsForUser(user.id);
-    const absenceRequests = pendingRequests.filter(r => !store.isOvertimeRequest(r.typeId));
-    const overtimeRequests = pendingRequests.filter(r => store.isOvertimeRequest(r.typeId));
+    const absenceRequests = pendingRequests.filter((r: LeaveRequest) => !store.isOvertimeRequest(r.typeId));
+    const overtimeRequests = pendingRequests.filter((r: LeaveRequest) => store.isOvertimeRequest(r.typeId));
 
     const handleAction = async (id: string, status: RequestStatus) => {
         const comment = status === RequestStatus.REJECTED ? prompt('Motivo del rechazo:') || '' : '';
@@ -156,7 +156,7 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
         await store.updateRequestStatus(id, status, user.id, comment);
     };
 
-    const Table = ({ requests, title, icon: Icon, color }: any) => (
+    const Table = ({ requests, title, icon: Icon, color }: { requests: LeaveRequest[], title: string, icon: any, color: string }) => (
         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Icon className={color}/> {title}</h3>
@@ -175,7 +175,7 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                     <tbody className="divide-y divide-slate-100">
                         {requests.length === 0 ? (
                             <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No hay solicitudes pendientes.</td></tr>
-                        ) : requests.map(req => {
+                        ) : requests.map((req: LeaveRequest) => {
                             const u = store.users.find(usr => usr.id === req.userId);
                             const conflicts = store.getRequestConflicts(req);
                             return (
@@ -221,10 +221,10 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
 export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
     const today = new Date().toISOString().split('T')[0];
     const upcoming = useMemo(() => {
-        let list = store.requests.filter(r => r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId) && (r.endDate || r.startDate) >= today);
+        let list = store.requests.filter((r: LeaveRequest) => r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId) && (r.endDate || r.startDate) >= today);
         if (user.role === Role.SUPERVISOR) {
             const myDeptIds = store.departments.filter(d => (d.supervisorIds || []).includes(user.id)).map(d => d.id);
-            list = list.filter(r => {
+            list = list.filter((r: LeaveRequest) => {
                 const u = store.users.find(usr => usr.id === r.userId);
                 return u && myDeptIds.includes(u.departmentId);
             });
@@ -240,7 +240,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
                     <div className="text-xs font-black text-slate-400 uppercase tracking-widest">{upcoming.length} Registros</div>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas.</div> : upcoming.map(req => {
+                    {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas.</div> : upcoming.map((req: LeaveRequest) => {
                         const u = store.users.find(usr => usr.id === req.userId);
                         return (
                             <div key={req.id} onClick={() => onViewRequest(req)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-white group relative overflow-hidden">
