@@ -70,7 +70,6 @@ class Store {
         const { data: driversData } = await supabase.from('drivers').select('*');
         const { data: driversPpeData } = await supabase.from('drivers_ppe').select('*');
         
-        // PROCESAMIENTO TABLA SETTINGS (KEY-VALUE)
         const { data: settingsRows } = await supabase.from('settings').select('*');
 
         if (usersData) this.users = this.mapUsersFromDB(usersData);
@@ -153,7 +152,6 @@ class Store {
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          // Fix: Mapping type_id from DB to typeId in interface
           id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, 
           startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
           status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
@@ -166,6 +164,7 @@ class Store {
   }
 
   async applyRequestToBalanceDB(req: LeaveRequest, undo: boolean = false) {
+    // Recargar el usuario del estado actual para evitar problemas de concurrencia
     const user = this.users.find(u => u.id === req.userId);
     if (!user) return;
 
@@ -176,6 +175,7 @@ class Store {
 
     if (isOvertime) {
         hoursDelta = req.hours || 0;
+        // Si es canje o pago, restamos del saldo
         if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY].includes(req.typeId as RequestType)) {
             hoursDelta = -Math.abs(hoursDelta);
         }
@@ -193,37 +193,53 @@ class Store {
     if (daysDelta !== 0 || hoursDelta !== 0) {
         const newDays = user.daysAvailable + (daysDelta * multiplier);
         const newHours = user.overtimeHours + (hoursDelta * multiplier);
-        await supabase.from('users').update({ days_available: newDays, overtime_hours: newHours }).eq('id', user.id);
+        await supabase.from('users').update({ 
+            days_available: newDays, 
+            overtime_hours: newHours 
+        }).eq('id', user.id);
+        
+        // Actualizar localmente para cálculos inmediatos
+        user.daysAvailable = newDays;
+        user.overtimeHours = newHours;
     }
   }
 
   async createRequest(data: any, userId: string, status: RequestStatus) {
       const id = crypto.randomUUID();
       const label = data.label || this.getTypeLabel(data.typeId);
+      const isOvertime = this.isOvertimeRequest(data.typeId);
+
       const { data: newReqData } = await supabase.from('requests').insert({
           id, user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
           hours: data.hours, reason: data.reason, status: status, created_at: new Date().toISOString(),
           overtime_usage: data.overtimeUsage || []
       }).select().single();
 
-      if (newReqData && status !== RequestStatus.REJECTED) {
+      if (newReqData) {
           const req = {
               id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
               status: newReqData.status
           } as LeaveRequest;
-          await this.applyRequestToBalanceDB(req);
+
+          // Lógica de aplicación inmediata:
+          // 1. Si es Ausencia/Vacaciones: Aplicamos siempre (para reservar días aunque esté PENDIENTE)
+          // 2. Si es Registro de Horas: Solo aplicamos si ya nace como APROBADO (por un admin)
+          if (!isOvertime || status === RequestStatus.APPROVED) {
+              await this.applyRequestToBalanceDB(req);
+          }
       }
       await this.refresh();
   }
 
-  // Fix: Added missing updateRequest method for RequestFormModal
   async updateRequest(id: string, data: any) {
     const oldReq = this.requests.find(r => r.id === id);
     if (!oldReq) return;
 
-    // If request was active, revert impact before applying new data
-    if (oldReq.status !== RequestStatus.REJECTED) {
+    const isOvertime = this.isOvertimeRequest(oldReq.typeId);
+    
+    // Si la solicitud antigua ya había afectado al saldo, revertimos antes de aplicar cambios
+    if (oldReq.status === RequestStatus.APPROVED || (!isOvertime && oldReq.status === RequestStatus.PENDING)) {
         await this.applyRequestToBalanceDB(oldReq, true);
     }
 
@@ -238,13 +254,17 @@ class Store {
         overtime_usage: data.overtimeUsage || []
     }).eq('id', id).select().single();
 
-    if (updatedReqData && updatedReqData.status !== RequestStatus.REJECTED) {
+    if (updatedReqData) {
         const req = {
             id: String(updatedReqData.id), userId: updatedReqData.user_id, typeId: updatedReqData.type_id,
             startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
             status: updatedReqData.status
         } as LeaveRequest;
-        await this.applyRequestToBalanceDB(req);
+        
+        const isNewOvertime = this.isOvertimeRequest(req.typeId);
+        if (req.status === RequestStatus.APPROVED || (!isNewOvertime && req.status === RequestStatus.PENDING)) {
+            await this.applyRequestToBalanceDB(req);
+        }
     }
     await this.refresh();
   }
@@ -253,9 +273,30 @@ class Store {
       const oldReq = this.requests.find(r => r.id === id);
       if (!oldReq) return;
 
-      if (oldReq.status !== RequestStatus.REJECTED && status === RequestStatus.REJECTED) {
-          await this.applyRequestToBalanceDB(oldReq, true);
-      } else if (oldReq.status === RequestStatus.REJECTED && status !== RequestStatus.REJECTED) {
+      const isOvertime = this.isOvertimeRequest(oldReq.typeId);
+
+      // CASO 1: Aprobando una solicitud que estaba pendiente
+      if (oldReq.status === RequestStatus.PENDING && status === RequestStatus.APPROVED) {
+          if (isOvertime) {
+              // Si es horas extra, sumamos ahora que se aprueba
+              await this.applyRequestToBalanceDB(oldReq, false);
+          }
+          // Si es vacaciones, no hacemos nada extra porque ya se restaron al crearse (reserva)
+      }
+      
+      // CASO 2: Rechazando una solicitud que estaba aprobada o pendiente (reserva)
+      else if (status === RequestStatus.REJECTED) {
+          if (oldReq.status === RequestStatus.APPROVED) {
+              // Si estaba aprobada, restamos lo que se sumó (o sumamos lo que se restó)
+              await this.applyRequestToBalanceDB(oldReq, true);
+          } else if (oldReq.status === RequestStatus.PENDING && !isOvertime) {
+              // Si eran vacaciones pendientes, liberamos la reserva
+              await this.applyRequestToBalanceDB(oldReq, true);
+          }
+      }
+
+      // CASO 3: Rehabilitando una rechazada
+      else if (oldReq.status === RequestStatus.REJECTED && status === RequestStatus.APPROVED) {
           await this.applyRequestToBalanceDB(oldReq, false);
       }
 
@@ -265,8 +306,11 @@ class Store {
 
   async deleteRequest(id: string) {
       const req = this.requests.find(r => r.id === id);
-      if (req && req.status !== RequestStatus.REJECTED) {
-          await this.applyRequestToBalanceDB(req, true);
+      if (req) {
+          const isOvertime = this.isOvertimeRequest(req.typeId);
+          if (req.status === RequestStatus.APPROVED || (!isOvertime && req.status === RequestStatus.PENDING)) {
+              await this.applyRequestToBalanceDB(req, true);
+          }
       }
       await supabase.from('requests').delete().eq('id', id);
       await this.refresh();
@@ -371,7 +415,7 @@ class Store {
     await supabase.from('users').insert({
         id: crypto.randomUUID(), name: data.name, email: data.email, role: data.role || Role.WORKER,
         department_id: data.departmentId, days_available: Number(data.daysAvailable || 0),
-        overtime_hours: Number(data.overtimeHours || 0), birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
+        overtime_hours: Number(data.overtime_hours || 0), birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
     });
     await this.refresh();
   }
