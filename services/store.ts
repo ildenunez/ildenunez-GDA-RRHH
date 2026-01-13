@@ -152,7 +152,7 @@ class Store {
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, 
+          id: String(r.id), userId: r.user_id, type_id: r.type_id, typeId: r.type_id, label: r.label, 
           startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
           status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
           isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
@@ -169,17 +169,24 @@ class Store {
     if (!user) return;
 
     const multiplier = undo ? -1 : 1;
-    const isOvertime = this.isOvertimeRequest(req.typeId);
     let daysDelta = 0;
     let hoursDelta = 0;
 
-    if (isOvertime) {
+    // Lógica especial para FESTIVO TRABAJADO: Suma 1 día y 4 horas
+    if (req.typeId === RequestType.WORKED_HOLIDAY) {
+        daysDelta = 1;
+        hoursDelta = 4;
+    } 
+    // Otros registros de horas
+    else if (this.isOvertimeRequest(req.typeId)) {
         hoursDelta = req.hours || 0;
         // Si es canje o pago, restamos del saldo
         if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY].includes(req.typeId as RequestType)) {
             hoursDelta = -Math.abs(hoursDelta);
         }
-    } else {
+    } 
+    // Ausencias y ajustes de días
+    else {
         const typeConfig = this.config.leaveTypes.find(t => t.id === req.typeId);
         if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
             daysDelta = req.hours || 0;
@@ -209,9 +216,12 @@ class Store {
       const label = data.label || this.getTypeLabel(data.typeId);
       const isOvertime = this.isOvertimeRequest(data.typeId);
 
+      // Aseguramos que para festivo trabajado se guarden las 4h por defecto si no vienen
+      const finalHours = data.typeId === RequestType.WORKED_HOLIDAY ? 4 : data.hours;
+
       const { data: newReqData } = await supabase.from('requests').insert({
           id, user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
-          hours: data.hours, reason: data.reason, status: status, created_at: new Date().toISOString(),
+          hours: finalHours, reason: data.reason, status: status, created_at: new Date().toISOString(),
           overtime_usage: data.overtimeUsage || []
       }).select().single();
 
@@ -224,7 +234,7 @@ class Store {
 
           // Lógica de aplicación inmediata:
           // 1. Si es Ausencia/Vacaciones: Aplicamos siempre (para reservar días aunque esté PENDIENTE)
-          // 2. Si es Registro de Horas: Solo aplicamos si ya nace como APROBADO (por un admin)
+          // 2. Si es Registro de Horas o Festivo: Solo aplicamos si ya nace como APROBADO (por un admin)
           if (!isOvertime || status === RequestStatus.APPROVED) {
               await this.applyRequestToBalanceDB(req);
           }
@@ -278,7 +288,7 @@ class Store {
       // CASO 1: Aprobando una solicitud que estaba pendiente
       if (oldReq.status === RequestStatus.PENDING && status === RequestStatus.APPROVED) {
           if (isOvertime) {
-              // Si es horas extra, sumamos ahora que se aprueba
+              // Si es horas extra o festivo, aplicamos el cambio al saldo ahora que se aprueba
               await this.applyRequestToBalanceDB(oldReq, false);
           }
           // Si es vacaciones, no hacemos nada extra porque ya se restaron al crearse (reserva)
@@ -422,7 +432,7 @@ class Store {
 
   async updateUserAdmin(id: string, data: any) {
     await supabase.from('users').update({
-        name: data.name, email: data.email, role: data.role, department_id: data.departmentId,
+        name: data.name, email: data.email, role: data.role, department_id: data.department_id,
         days_available: Number(data.daysAvailable || 0), overtime_hours: Number(data.overtimeHours || 0),
         birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
     }).eq('id', id);

@@ -3,7 +3,7 @@ import {
   Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info
 } from 'lucide-react';
 import { store } from '../services/store';
-import { User, Role, LeaveRequest, RequestStatus } from '../types';
+import { User, Role, LeaveRequest, RequestStatus, RequestType } from '../types';
 import UserDetailModal from './UserDetailModal';
 import ShiftScheduler from './ShiftScheduler';
 
@@ -178,6 +178,14 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                         ) : requests.map((req: LeaveRequest) => {
                             const u = store.users.find(usr => usr.id === req.userId);
                             const conflicts = store.getRequestConflicts(req);
+                            
+                            // Cálculo de días para ausencias
+                            const calculateDays = (startStr: string, endStr?: string) => {
+                                const start = new Date(startStr);
+                                const end = new Date(endStr || startStr);
+                                return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                            };
+
                             return (
                                 <tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
                                     <td className="px-6 py-4">
@@ -187,7 +195,27 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="font-bold text-slate-700">{store.getTypeLabel(req.typeId)}</div>
+                                        <div className="font-bold text-slate-700 flex items-center gap-2">
+                                            {store.getTypeLabel(req.typeId)}
+                                            {req.typeId === RequestType.WORKED_HOLIDAY ? (
+                                                <>
+                                                    <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-green-100 text-green-700">
+                                                        +1d
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-green-100 text-green-700">
+                                                        +4h
+                                                    </span>
+                                                </>
+                                            ) : store.isOvertimeRequest(req.typeId) ? (
+                                                <span className={`px-2 py-0.5 rounded-lg font-black text-[10px] ${req.hours && req.hours > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {req.hours && req.hours > 0 ? '+' : ''}{req.hours}h
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-blue-50 text-blue-600">
+                                                    -{calculateDays(req.startDate, req.endDate)}d
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-xs text-slate-500 mt-0.5">{new Date(req.startDate).toLocaleDateString()}{req.endDate ? ` - ${new Date(req.endDate).toLocaleDateString()}` : ''}</div>
                                     </td>
                                     <td className="px-6 py-4">
