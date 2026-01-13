@@ -36,6 +36,7 @@ class Store {
   }
 
   getTypeLabel(typeId: string): string {
+      if (!typeId) return 'Tipo desconocido';
       const map: Record<string, string> = {
           [RequestType.VACATION]: 'Vacaciones',
           [RequestType.SICKNESS]: 'Baja Médica',
@@ -66,30 +67,64 @@ class Store {
         const { data: shiftTypesData } = await supabase.from('shift_types').select('*');
         const { data: assignmentsData } = await supabase.from('shift_assignments').select('*');
         
-        // Carga de Repartidores
         const { data: trucksData } = await supabase.from('trucks').select('*');
         const { data: driversData } = await supabase.from('drivers').select('*');
         const { data: driversPpeData } = await supabase.from('drivers_ppe').select('*');
 
+        const { data: settingsData } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
+
         if (usersData) this.users = this.mapUsersFromDB(usersData);
-        if (deptsData) this.departments = deptsData.map((d: any) => ({ id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] }));
+        if (deptsData) this.departments = deptsData.map((d: any) => ({ 
+            id: d.id, 
+            name: String(d.name || ''), 
+            supervisorIds: d.supervisor_ids || [] 
+        }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
         if (newsData) this.config.news = newsData;
-        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range }));
+        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ 
+            id: t.id, 
+            label: t.label, 
+            subtractsDays: !!t.subtracts_days, 
+            fixedRanges: t.fixed_range || [] 
+        }));
         if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: p.name, sizes: p.sizes || [] }));
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
-        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id }));
+        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ 
+            id: a.id, 
+            userId: a.user_id, 
+            date: a.date, 
+            shiftTypeId: a.shift_type_id 
+        }));
         
-        // Mapeo Repartidores
         if (trucksData) this.config.trucks = trucksData;
         if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
         if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
             id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
-        // Load notifications for current user
+        if (settingsData) {
+          if (settingsData.smtp) {
+            this.config.smtpSettings = {
+              host: settingsData.smtp.host || 'smtp.gmail.com',
+              port: settingsData.smtp.port || 587,
+              user: settingsData.smtp.user || '',
+              password: settingsData.smtp.password || '',
+              enabled: !!settingsData.smtp.enabled
+            };
+          }
+          if (settingsData.email_templates) {
+            this.config.emailTemplates = settingsData.email_templates.map((t: any) => ({
+              id: t.id,
+              label: t.label,
+              subject: t.subject,
+              body: t.body,
+              recipients: t.recipients || { worker: true, supervisor: false, admin: false }
+            }));
+          }
+        }
+
         if (this.currentUser) {
             const { data: notifsData } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
             if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: n.id, userId: n.user_id, message: n.message, read: n.read, date: n.date, type: n.type }));
@@ -115,22 +150,40 @@ class Store {
 
   private mapUsersFromDB(data: any[]): User[] {
       return data.map(u => ({
-          id: u.id, name: u.name, email: u.email, role: u.role, departmentId: u.department_id,
-          daysAvailable: Number(u.days_available || 0), overtimeHours: Number(u.overtime_hours || 0),
+          id: u.id, 
+          name: u.name, 
+          email: u.email, 
+          role: u.role, 
+          departmentId: u.department_id,
+          daysAvailable: Number(u.days_available || 0), 
+          overtimeHours: Number(u.overtime_hours || 0),
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`, 
-          birthdate: u.birthdate, truckNumber: u.truck_number
+          birthdate: u.birthdate, 
+          truckNumber: u.truck_number
       }));
   }
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, startDate: r.start_date, endDate: r.end_date,
-          hours: r.hours, reason: r.reason, status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
-          isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
+          id: String(r.id), 
+          userId: r.user_id, 
+          typeId: r.type_id, // CORRECCIÓN: typeId en lugar de type_id
+          label: r.label, 
+          startDate: r.start_date, 
+          endDate: r.end_date,
+          hours: r.hours, 
+          reason: r.reason, 
+          status: r.status, 
+          createdAt: r.created_at, 
+          adminComment: r.admin_comment,
+          isConsumed: !!r.is_consumed, 
+          consumedHours: Number(r.consumed_hours || 0), 
+          overtimeUsage: r.overtime_usage || []
       }));
   }
 
   isOvertimeRequest(typeId: string): boolean {
+      if (!typeId) return false;
       return [
           RequestType.OVERTIME_EARN,
           RequestType.OVERTIME_SPEND_DAYS,
@@ -140,7 +193,6 @@ class Store {
       ].includes(typeId as RequestType);
   }
 
-  // Implementation of applyRequestToBalance to update user balances in Supabase
   async applyRequestToBalance(req: LeaveRequest) {
     const user = this.users.find(u => u.id === req.userId);
     if (!user) return;
@@ -183,7 +235,8 @@ class Store {
           hours: data.hours,
           reason: data.reason,
           status: status,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          overtime_usage: data.overtimeUsage || []
       }).select().single();
 
       if (newReq) {
@@ -201,7 +254,8 @@ class Store {
           start_date: data.startDate,
           end_date: data.endDate,
           hours: data.hours,
-          reason: data.reason
+          reason: data.reason,
+          overtime_usage: data.overtimeUsage || []
       }).eq('id', id);
       if (!error) await this.refresh();
   }
@@ -211,7 +265,6 @@ class Store {
       if (!error) await this.refresh();
   }
 
-  // Completing updateRequestStatus and fixing RequestStatus comparison
   async updateRequestStatus(id: string, status: RequestStatus, adminId: string, comment?: string) {
       const { data: updated } = await supabase.from('requests').update({
           status,
@@ -228,7 +281,7 @@ class Store {
   }
 
   async login(email: string, pass: string): Promise<User | null> {
-    const { data: userData } = await supabase.from('users').select('*').eq('email', email).single();
+    const { data: userData } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
     if (userData) {
       this.currentUser = this.mapUsersFromDB([userData])[0];
       localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
@@ -254,7 +307,9 @@ class Store {
     if (!user) return [];
     if (user.role === Role.ADMIN) return this.requests.filter(r => r.status === RequestStatus.PENDING);
     if (user.role === Role.SUPERVISOR) {
-        const myDeptIds = this.departments.filter(d => d.supervisorIds.includes(userId)).map(d => d.id);
+        const myDeptIds = this.departments
+          .filter(d => (d.supervisorIds || []).includes(userId))
+          .map(d => d.id);
         return this.requests.filter(r => {
             if (r.status !== RequestStatus.PENDING) return false;
             const reqUser = this.users.find(u => u.id === r.userId);
@@ -303,7 +358,7 @@ class Store {
   }
 
   getRequestConflicts(req: LeaveRequest) {
-    if (this.isOvertimeRequest(req.typeId)) return [];
+    if (!req.typeId || this.isOvertimeRequest(req.typeId)) return [];
     const u = this.users.find(usr => usr.id === req.userId);
     if (!u) return [];
 
@@ -337,10 +392,10 @@ class Store {
         id: crypto.randomUUID(),
         name: data.name,
         email: data.email,
-        role: data.role,
-        department_id: data.departmentId,
-        days_available: data.daysAvailable,
-        overtime_hours: data.overtimeHours,
+        role: data.role || Role.WORKER,
+        department_id: data.departmentId, // Mapeo de camelCase a snake_case
+        days_available: Number(data.daysAvailable || 0),
+        overtime_hours: Number(data.overtimeHours || 0),
         birthdate: data.birthdate,
         avatar: data.avatar,
         truck_number: data.truckNumber
@@ -352,7 +407,10 @@ class Store {
     const { error } = await supabase.from('users').update({
         name: data.name,
         email: data.email,
+        role: data.role,
         department_id: data.departmentId,
+        days_available: Number(data.daysAvailable || 0),
+        overtime_hours: Number(data.overtimeHours || 0),
         birthdate: data.birthdate,
         avatar: data.avatar,
         truck_number: data.truckNumber
@@ -366,11 +424,15 @@ class Store {
   }
 
   async updateUserProfile(id: string, data: any) {
-    await supabase.from('users').update({
+    const updateData: any = {
         name: data.name,
         email: data.email,
         avatar: data.avatar
-    }).eq('id', id);
+    };
+    if (data.password) {
+        // En un entorno real, aquí se cifraría o se usaría Supabase Auth
+    }
+    await supabase.from('users').update(updateData).eq('id', id);
     await this.refresh();
   }
 
@@ -428,7 +490,7 @@ class Store {
     if (!shiftTypeId) {
         await supabase.from('shift_assignments').delete().eq('user_id', userId).eq('date', date);
     } else {
-        const { data: existing } = await supabase.from('shift_assignments').select('*').eq('user_id', userId).eq('date', date).single();
+        const { data: existing } = await supabase.from('shift_assignments').select('*').eq('user_id', userId).eq('date', date).maybeSingle();
         if (existing) {
             await supabase.from('shift_assignments').update({ shift_type_id: shiftTypeId }).eq('id', existing.id);
         } else {
@@ -499,19 +561,29 @@ class Store {
   }
 
   async sendMassNotification(userIds: string[], message: string) {
-    const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, date: new Date().toISOString() }));
+    const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, date: new Date().toISOString(), type: 'admin' }));
     await supabase.from('notifications').insert(notifs);
     await this.refresh();
   }
 
   async saveSmtpSettings(settings: any) {
-    this.config.smtpSettings = settings;
-    this.notify();
+    await supabase.from('settings').update({
+        smtp: {
+          host: settings.host,
+          port: settings.port,
+          user: settings.user,
+          password: settings.password,
+          enabled: settings.enabled
+        }
+    }).eq('id', 1);
+    await this.refresh();
   }
 
   async saveEmailTemplates(templates: EmailTemplate[]) {
-    this.config.emailTemplates = templates;
-    this.notify();
+    await supabase.from('settings').update({
+        email_templates: templates
+    }).eq('id', 1);
+    await this.refresh();
   }
 
   async exportConfig() {
@@ -534,8 +606,6 @@ class Store {
         return true;
     } catch { return false; }
   }
-
-  // --- REPARTIDORES ---
 
   async createTruck(name: string) {
     await supabase.from('trucks').insert({ id: crypto.randomUUID(), name });
@@ -576,5 +646,4 @@ class Store {
   }
 }
 
-// Exporting the store instance
 export const store = new Store();
