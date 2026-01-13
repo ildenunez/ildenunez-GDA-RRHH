@@ -1,25 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, 
-  Plus, 
-  Search, 
-  Palmtree, 
-  TrendingUp,
-  ChevronRight,
-  Filter,
-  RotateCcw,
-  CalendarDays,
-  Timer,
-  AlertTriangle,
-  CheckCircle
+  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info
 } from 'lucide-react';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus } from '../types';
 import UserDetailModal from './UserDetailModal';
 import ShiftScheduler from './ShiftScheduler';
 
-// Subcomponentes organizados para limpieza visual
-import { AdminStats, DepartmentManager, HRConfigManager, CommunicationsManager, AbsenceQueryManager, MaintenanceManager } from './AdminSubsections';
+import { AdminStats, DepartmentManager, HRConfigManager, CommunicationsManager, AbsenceQueryManager, MaintenanceManager, EPIManager } from './AdminSubsections';
 
 export const AdminSettings = ({ onViewRequest }: { onViewRequest: (req: LeaveRequest) => void }) => {
     const [activeTab, setActiveTab] = useState('users');
@@ -38,7 +26,6 @@ export const AdminSettings = ({ onViewRequest }: { onViewRequest: (req: LeaveReq
 
     return (
         <div className="space-y-8 animate-fade-in">
-            {/* Tarjetas de Resumen Superiores (Imagen 2) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
                     <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center"><Users size={24}/></div>
@@ -54,25 +41,9 @@ export const AdminSettings = ({ onViewRequest }: { onViewRequest: (req: LeaveReq
                 </div>
             </div>
 
-            {/* Menú de Pestañas (Imagen 2) */}
             <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
-                {[
-                    { id: 'users', label: 'Usuarios' },
-                    { id: 'depts', label: 'Dptos' },
-                    { id: 'hr', label: 'RRHH' },
-                    { id: 'epis', label: 'EPIs' },
-                    { id: 'comms', label: 'Comunicaciones' },
-                    { id: 'queries', label: 'Consultas' },
-                    { id: 'stats', label: 'Estadísticas' },
-                    { id: 'maintenance', label: 'Mantenimiento' }
-                ].map(tab => (
-                    <button 
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`px-6 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === tab.id ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                    >
-                        {tab.label}
-                    </button>
+                {[{ id: 'users', label: 'Usuarios' }, { id: 'depts', label: 'Dptos' }, { id: 'hr', label: 'RRHH' }, { id: 'epis', label: 'EPIs' }, { id: 'comms', label: 'Comunicaciones' }, { id: 'queries', label: 'Consultas' }, { id: 'stats', label: 'Estadísticas' }, { id: 'maintenance', label: 'Mantenimiento' }].map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === tab.id ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>{tab.label}</button>
                 ))}
             </div>
 
@@ -80,6 +51,7 @@ export const AdminSettings = ({ onViewRequest }: { onViewRequest: (req: LeaveReq
                 {activeTab === 'users' && <UserManagement currentUser={store.currentUser!} onViewRequest={onViewRequest} />}
                 {activeTab === 'depts' && <DepartmentManager />}
                 {activeTab === 'hr' && <HRConfigManager />}
+                {activeTab === 'epis' && <EPIManager />}
                 {activeTab === 'comms' && <CommunicationsManager />}
                 {activeTab === 'queries' && <AbsenceQueryManager />}
                 {activeTab === 'stats' && <AdminStats />}
@@ -94,6 +66,12 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [search, setSearch] = useState('');
     const [selectedDept, setSelectedDept] = useState('');
+    const [refresh, setRefresh] = useState(0);
+
+    useEffect(() => {
+        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
+        return unsubscribe;
+    }, []);
 
     const filteredUsers = useMemo(() => {
         let list = store.users;
@@ -104,11 +82,10 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
         if (selectedDept) list = list.filter(u => u.departmentId === selectedDept);
         if (search) list = list.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
         return list.sort((a,b) => a.name.localeCompare(b.name));
-    }, [search, selectedDept, currentUser, store.users]);
+    }, [search, selectedDept, currentUser, store.users, refresh]);
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Controles (Imagen 2) */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
                     <button onClick={() => setView('list')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Listado</button>
@@ -123,9 +100,6 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                             {store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                     </div>
-                    <button className="bg-slate-800 text-white px-5 py-2 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-black transition-all shadow-sm">
-                        <RotateCcw size={16}/> Reinicio Anual
-                    </button>
                     <button onClick={() => setSelectedUser({ id: 'new', name: '', email: '', role: Role.WORKER, departmentId: '', daysAvailable: 22, overtimeHours: 0 } as any)} className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-blue-700 shadow-lg">
                         <Plus size={18}/> Nuevo
                     </button>
@@ -134,23 +108,13 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
 
             <div className="relative">
                 <Search className="absolute left-4 top-3.5 text-slate-400" size={20}/>
-                <input 
-                    type="text" 
-                    placeholder="Buscar empleado..." 
-                    className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                />
+                <input type="text" placeholder="Buscar empleado..." className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
 
             {view === 'list' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredUsers.map(u => (
-                        <div 
-                            key={u.id} 
-                            onClick={() => setSelectedUser(u)}
-                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative"
-                        >
+                        <div key={u.id} onClick={() => setSelectedUser(u)} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden">
                             <div className="flex items-center gap-4 mb-6">
                                 <img src={u.avatar} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover bg-slate-100" />
                                 <div className="flex-1 min-w-0">
@@ -161,11 +125,11 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-50 p-4 rounded-2xl text-center border border-slate-100/50">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Vacaciones</p>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Saldos BBDD Vac.</p>
                                     <p className="text-xl font-black text-orange-600">{u.daysAvailable.toFixed(1)} <span className="text-[10px] font-bold text-slate-300 ml-0.5">D</span></p>
                                 </div>
                                 <div className="bg-slate-50 p-4 rounded-2xl text-center border border-slate-100/50">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Horas Extra</p>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Saldos BBDD Horas</p>
                                     <p className="text-xl font-black text-blue-600">{u.overtimeHours.toFixed(1)} <span className="text-[10px] font-bold text-slate-300 ml-0.5">H</span></p>
                                 </div>
                             </div>
@@ -176,13 +140,7 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                 <ShiftScheduler users={filteredUsers} />
             )}
 
-            {selectedUser && (
-                <UserDetailModal 
-                    user={selectedUser} 
-                    onClose={() => setSelectedUser(null)} 
-                    onViewRequest={onViewRequest}
-                />
-            )}
+            {selectedUser && <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} onViewRequest={onViewRequest} />}
         </div>
     );
 };
@@ -225,10 +183,7 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <img src={u?.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover" />
-                                            <div>
-                                                <div className="font-bold text-slate-800">{u?.name}</div>
-                                                <div className="text-[10px] text-slate-400 uppercase font-black">{store.departments.find(d => d.id === u?.departmentId)?.name}</div>
-                                            </div>
+                                            <div><div className="font-bold text-slate-800">{u?.name}</div><div className="text-[10px] text-slate-400 uppercase font-black">{store.departments.find(d => d.id === u?.departmentId)?.name}</div></div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">

@@ -66,66 +66,64 @@ class Store {
         const { data: holidayData } = await supabase.from('holidays').select('*');
         const { data: shiftTypesData } = await supabase.from('shift_types').select('*');
         const { data: assignmentsData } = await supabase.from('shift_assignments').select('*');
-        
         const { data: trucksData } = await supabase.from('trucks').select('*');
         const { data: driversData } = await supabase.from('drivers').select('*');
         const { data: driversPpeData } = await supabase.from('drivers_ppe').select('*');
-
-        const { data: settingsData } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
+        
+        // PROCESAMIENTO TABLA SETTINGS (KEY-VALUE)
+        const { data: settingsRows } = await supabase.from('settings').select('*');
 
         if (usersData) this.users = this.mapUsersFromDB(usersData);
         if (deptsData) this.departments = deptsData.map((d: any) => ({ 
-            id: d.id, 
-            name: String(d.name || ''), 
-            supervisorIds: d.supervisor_ids || [] 
+            id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] 
         }));
         if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
         if (newsData) this.config.news = newsData;
         if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ 
-            id: t.id, 
-            label: t.label, 
-            subtractsDays: !!t.subtracts_days, 
-            fixedRanges: t.fixed_range || [] 
+            id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
         if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: p.name, sizes: p.sizes || [] }));
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
         if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ 
-            id: a.id, 
-            userId: a.user_id, 
-            date: a.date, 
-            shiftTypeId: a.shift_type_id 
+            id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id 
         }));
-        
         if (trucksData) this.config.trucks = trucksData;
         if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
         if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
             id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
-        if (settingsData) {
-          if (settingsData.smtp) {
-            this.config.smtpSettings = {
-              host: settingsData.smtp.host || 'smtp.gmail.com',
-              port: settingsData.smtp.port || 587,
-              user: settingsData.smtp.user || '',
-              password: settingsData.smtp.password || '',
-              enabled: !!settingsData.smtp.enabled
-            };
-          }
-          if (settingsData.email_templates) {
-            this.config.emailTemplates = settingsData.email_templates.map((t: any) => ({
-              id: t.id,
-              label: t.label,
-              subject: t.subject,
-              body: t.body,
-              recipients: t.recipients || { worker: true, supervisor: false, admin: false }
-            }));
-          }
+        if (settingsRows) {
+            const smtpRow = settingsRows.find(r => r.key === 'smtp');
+            const templatesRow = settingsRows.find(r => r.key === 'email_templates');
+
+            if (smtpRow && smtpRow.value) {
+                this.config.smtpSettings = {
+                    host: smtpRow.value.host || 'smtp.gmail.com',
+                    port: smtpRow.value.port || 587,
+                    user: smtpRow.value.user || '',
+                    password: smtpRow.value.password || '',
+                    enabled: !!smtpRow.value.enabled
+                };
+            }
+
+            if (templatesRow && Array.isArray(templatesRow.value)) {
+                this.config.emailTemplates = templatesRow.value.map((t: any) => ({
+                    id: t.id,
+                    label: t.label,
+                    subject: t.subject,
+                    body: t.body,
+                    recipients: t.recipients || { admin: true, worker: true, supervisor: false }
+                }));
+            }
         }
 
         if (this.currentUser) {
+            const updatedSelf = this.users.find(u => u.id === this.currentUser!.id);
+            if (updatedSelf) this.currentUser = updatedSelf;
+
             const { data: notifsData } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
             if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: n.id, userId: n.user_id, message: n.message, read: n.read, date: n.date, type: n.type }));
         }
@@ -139,64 +137,39 @@ class Store {
   async init() {
     if (this.initialized) return;
     const savedUser = localStorage.getItem('gda_session');
-    if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        this.currentUser = parsed;
-    }
+    if (savedUser) this.currentUser = JSON.parse(savedUser);
     await this.refresh();
     this.initialized = true;
-    this.notify();
   }
 
   private mapUsersFromDB(data: any[]): User[] {
       return data.map(u => ({
-          id: u.id, 
-          name: u.name, 
-          email: u.email, 
-          role: u.role, 
-          departmentId: u.department_id,
-          daysAvailable: Number(u.days_available || 0), 
-          overtimeHours: Number(u.overtime_hours || 0),
+          id: u.id, name: u.name, email: u.email, role: u.role, departmentId: u.department_id,
+          daysAvailable: Number(u.days_available || 0), overtimeHours: Number(u.overtime_hours || 0),
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`, 
-          birthdate: u.birthdate, 
-          truckNumber: u.truck_number
+          birthdate: u.birthdate, truckNumber: u.truck_number
       }));
   }
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          id: String(r.id), 
-          userId: r.user_id, 
-          typeId: r.type_id, // CORRECCIÓN: typeId en lugar de type_id
-          label: r.label, 
-          startDate: r.start_date, 
-          endDate: r.end_date,
-          hours: r.hours, 
-          reason: r.reason, 
-          status: r.status, 
-          createdAt: r.created_at, 
-          adminComment: r.admin_comment,
-          isConsumed: !!r.is_consumed, 
-          consumedHours: Number(r.consumed_hours || 0), 
-          overtimeUsage: r.overtime_usage || []
+          // Fix: Mapping type_id from DB to typeId in interface
+          id: String(r.id), userId: r.user_id, typeId: r.type_id, label: r.label, 
+          startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
+          status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
+          isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
       }));
   }
 
   isOvertimeRequest(typeId: string): boolean {
-      if (!typeId) return false;
-      return [
-          RequestType.OVERTIME_EARN,
-          RequestType.OVERTIME_SPEND_DAYS,
-          RequestType.OVERTIME_PAY,
-          RequestType.WORKED_HOLIDAY,
-          RequestType.ADJUSTMENT_OVERTIME
-      ].includes(typeId as RequestType);
+      return [RequestType.OVERTIME_EARN, RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME].includes(typeId as RequestType);
   }
 
-  async applyRequestToBalance(req: LeaveRequest) {
+  async applyRequestToBalanceDB(req: LeaveRequest, undo: boolean = false) {
     const user = this.users.find(u => u.id === req.userId);
     if (!user) return;
 
+    const multiplier = undo ? -1 : 1;
     const isOvertime = this.isOvertimeRequest(req.typeId);
     let daysDelta = 0;
     let hoursDelta = 0;
@@ -208,7 +181,9 @@ class Store {
         }
     } else {
         const typeConfig = this.config.leaveTypes.find(t => t.id === req.typeId);
-        if (typeConfig?.subtractsDays || req.typeId === RequestType.VACATION || req.typeId === RequestType.PERSONAL) {
+        if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
+            daysDelta = req.hours || 0;
+        } else if (typeConfig?.subtractsDays || req.typeId === RequestType.VACATION || req.typeId === RequestType.PERSONAL) {
             const start = new Date(req.startDate);
             const end = new Date(req.endDate || req.startDate);
             daysDelta = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
@@ -216,68 +191,85 @@ class Store {
     }
 
     if (daysDelta !== 0 || hoursDelta !== 0) {
-        await supabase.from('users').update({
-            days_available: (user.daysAvailable || 0) + daysDelta,
-            overtime_hours: (user.overtimeHours || 0) + hoursDelta
-        }).eq('id', user.id);
-        await this.refresh();
+        const newDays = user.daysAvailable + (daysDelta * multiplier);
+        const newHours = user.overtimeHours + (hoursDelta * multiplier);
+        await supabase.from('users').update({ days_available: newDays, overtime_hours: newHours }).eq('id', user.id);
     }
   }
 
-  async createRequest(data: any, userId: string, status: RequestStatus, silent: boolean = false) {
-      const { data: newReq } = await supabase.from('requests').insert({
-          id: crypto.randomUUID(),
-          user_id: userId,
-          type_id: data.typeId,
-          label: data.label || this.getTypeLabel(data.typeId),
-          start_date: data.startDate,
-          end_date: data.endDate,
-          hours: data.hours,
-          reason: data.reason,
-          status: status,
-          created_at: new Date().toISOString(),
+  async createRequest(data: any, userId: string, status: RequestStatus) {
+      const id = crypto.randomUUID();
+      const label = data.label || this.getTypeLabel(data.typeId);
+      const { data: newReqData } = await supabase.from('requests').insert({
+          id, user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
+          hours: data.hours, reason: data.reason, status: status, created_at: new Date().toISOString(),
           overtime_usage: data.overtimeUsage || []
       }).select().single();
 
-      if (newReq) {
-          await this.refresh();
-          if (status === RequestStatus.APPROVED) {
-              await this.applyRequestToBalance(this.mapRequestsFromDB([newReq])[0]);
-          }
+      if (newReqData && status !== RequestStatus.REJECTED) {
+          const req = {
+              id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
+              startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
+              status: newReqData.status
+          } as LeaveRequest;
+          await this.applyRequestToBalanceDB(req);
       }
+      await this.refresh();
   }
 
+  // Fix: Added missing updateRequest method for RequestFormModal
   async updateRequest(id: string, data: any) {
-      const { error } = await supabase.from('requests').update({
-          type_id: data.typeId,
-          label: data.label || this.getTypeLabel(data.typeId),
-          start_date: data.startDate,
-          end_date: data.endDate,
-          hours: data.hours,
-          reason: data.reason,
-          overtime_usage: data.overtimeUsage || []
-      }).eq('id', id);
-      if (!error) await this.refresh();
-  }
+    const oldReq = this.requests.find(r => r.id === id);
+    if (!oldReq) return;
 
-  async deleteRequest(id: string) {
-      const { error } = await supabase.from('requests').delete().eq('id', id);
-      if (!error) await this.refresh();
+    // If request was active, revert impact before applying new data
+    if (oldReq.status !== RequestStatus.REJECTED) {
+        await this.applyRequestToBalanceDB(oldReq, true);
+    }
+
+    const label = data.label || this.getTypeLabel(data.typeId);
+    const { data: updatedReqData } = await supabase.from('requests').update({
+        type_id: data.typeId,
+        label,
+        start_date: data.startDate,
+        end_date: data.endDate,
+        hours: data.hours,
+        reason: data.reason,
+        overtime_usage: data.overtimeUsage || []
+    }).eq('id', id).select().single();
+
+    if (updatedReqData && updatedReqData.status !== RequestStatus.REJECTED) {
+        const req = {
+            id: String(updatedReqData.id), userId: updatedReqData.user_id, typeId: updatedReqData.type_id,
+            startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
+            status: updatedReqData.status
+        } as LeaveRequest;
+        await this.applyRequestToBalanceDB(req);
+    }
+    await this.refresh();
   }
 
   async updateRequestStatus(id: string, status: RequestStatus, adminId: string, comment?: string) {
-      const { data: updated } = await supabase.from('requests').update({
-          status,
-          admin_comment: comment
-      }).eq('id', id).select().single();
+      const oldReq = this.requests.find(r => r.id === id);
+      if (!oldReq) return;
 
-      if (updated) {
-          if (status === RequestStatus.APPROVED) {
-              const req = this.mapRequestsFromDB([updated])[0];
-              await this.applyRequestToBalance(req);
-          }
-          await this.refresh();
+      if (oldReq.status !== RequestStatus.REJECTED && status === RequestStatus.REJECTED) {
+          await this.applyRequestToBalanceDB(oldReq, true);
+      } else if (oldReq.status === RequestStatus.REJECTED && status !== RequestStatus.REJECTED) {
+          await this.applyRequestToBalanceDB(oldReq, false);
       }
+
+      await supabase.from('requests').update({ status, admin_comment: comment }).eq('id', id);
+      await this.refresh();
+  }
+
+  async deleteRequest(id: string) {
+      const req = this.requests.find(r => r.id === id);
+      if (req && req.status !== RequestStatus.REJECTED) {
+          await this.applyRequestToBalanceDB(req, true);
+      }
+      await supabase.from('requests').delete().eq('id', id);
+      await this.refresh();
   }
 
   async login(email: string, pass: string): Promise<User | null> {
@@ -307,9 +299,7 @@ class Store {
     if (!user) return [];
     if (user.role === Role.ADMIN) return this.requests.filter(r => r.status === RequestStatus.PENDING);
     if (user.role === Role.SUPERVISOR) {
-        const myDeptIds = this.departments
-          .filter(d => (d.supervisorIds || []).includes(userId))
-          .map(d => d.id);
+        const myDeptIds = this.departments.filter(d => (d.supervisorIds || []).includes(userId)).map(d => d.id);
         return this.requests.filter(r => {
             if (r.status !== RequestStatus.PENDING) return false;
             const reqUser = this.users.find(u => u.id === r.userId);
@@ -324,18 +314,18 @@ class Store {
   }
 
   async markNotificationAsRead(id: string) {
-    const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
-    if (!error) await this.refresh();
+    await supabase.from('notifications').update({ read: true }).eq('id', id);
+    await this.refresh();
   }
 
   async markAllNotificationsAsRead(userId: string) {
-    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-    if (!error) await this.refresh();
+    await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+    await this.refresh();
   }
 
   async deleteNotification(id: string) {
-    const { error } = await supabase.from('notifications').delete().eq('id', id);
-    if (!error) await this.refresh();
+    await supabase.from('notifications').delete().eq('id', id);
+    await this.refresh();
   }
 
   getNextShift(userId: string) {
@@ -343,7 +333,6 @@ class Store {
     const assignments = this.config.shiftAssignments
         .filter(a => a.userId === userId && a.date >= today)
         .sort((a,b) => a.date.localeCompare(b.date));
-    
     if (assignments.length > 0) {
         const a = assignments[0];
         const shift = this.config.shiftTypes.find(s => s.id === a.shiftTypeId);
@@ -361,61 +350,39 @@ class Store {
     if (!req.typeId || this.isOvertimeRequest(req.typeId)) return [];
     const u = this.users.find(usr => usr.id === req.userId);
     if (!u) return [];
-
     return this.requests.filter(other => {
         if (other.id === req.id || other.status === RequestStatus.REJECTED) return false;
         if (this.isOvertimeRequest(other.typeId)) return false;
-        
         const otherUser = this.users.find(usr => usr.id === other.userId);
         if (!otherUser || otherUser.departmentId !== u.departmentId) return false;
-
         const start = req.startDate.split('T')[0];
         const end = (req.endDate || req.startDate).split('T')[0];
         const oStart = other.startDate.split('T')[0];
         const oEnd = (other.endDate || other.startDate).split('T')[0];
-
         return (start <= oEnd && end >= oStart);
     });
   }
 
   getAvailableOvertimeRecords(userId: string) {
-    return this.requests.filter(r => 
-        r.userId === userId && 
-        r.typeId === RequestType.OVERTIME_EARN && 
-        r.status === RequestStatus.APPROVED &&
-        (r.hours || 0) > (r.consumedHours || 0)
-    );
+    return this.requests.filter(r => r.userId === userId && r.typeId === RequestType.OVERTIME_EARN && r.status === RequestStatus.APPROVED && (r.hours || 0) > (r.consumedHours || 0));
   }
 
   async createUser(data: any, pass: string) {
-    const { data: newUser } = await supabase.from('users').insert({
-        id: crypto.randomUUID(),
-        name: data.name,
-        email: data.email,
-        role: data.role || Role.WORKER,
-        department_id: data.departmentId, // Mapeo de camelCase a snake_case
-        days_available: Number(data.daysAvailable || 0),
-        overtime_hours: Number(data.overtimeHours || 0),
-        birthdate: data.birthdate,
-        avatar: data.avatar,
-        truck_number: data.truckNumber
-    }).select().single();
-    if (newUser) await this.refresh();
+    await supabase.from('users').insert({
+        id: crypto.randomUUID(), name: data.name, email: data.email, role: data.role || Role.WORKER,
+        department_id: data.departmentId, days_available: Number(data.daysAvailable || 0),
+        overtime_hours: Number(data.overtimeHours || 0), birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
+    });
+    await this.refresh();
   }
 
   async updateUserAdmin(id: string, data: any) {
-    const { error } = await supabase.from('users').update({
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        department_id: data.departmentId,
-        days_available: Number(data.daysAvailable || 0),
-        overtime_hours: Number(data.overtimeHours || 0),
-        birthdate: data.birthdate,
-        avatar: data.avatar,
-        truck_number: data.truckNumber
+    await supabase.from('users').update({
+        name: data.name, email: data.email, role: data.role, department_id: data.departmentId,
+        days_available: Number(data.daysAvailable || 0), overtime_hours: Number(data.overtimeHours || 0),
+        birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
     }).eq('id', id);
-    if (!error) await this.refresh();
+    await this.refresh();
   }
 
   async updateUserRole(id: string, role: Role) {
@@ -424,15 +391,7 @@ class Store {
   }
 
   async updateUserProfile(id: string, data: any) {
-    const updateData: any = {
-        name: data.name,
-        email: data.email,
-        avatar: data.avatar
-    };
-    if (data.password) {
-        // En un entorno real, aquí se cifraría o se usaría Supabase Auth
-    }
-    await supabase.from('users').update(updateData).eq('id', id);
+    await supabase.from('users').update({ name: data.name, email: data.email, avatar: data.avatar }).eq('id', id);
     await this.refresh();
   }
 
@@ -491,11 +450,8 @@ class Store {
         await supabase.from('shift_assignments').delete().eq('user_id', userId).eq('date', date);
     } else {
         const { data: existing } = await supabase.from('shift_assignments').select('*').eq('user_id', userId).eq('date', date).maybeSingle();
-        if (existing) {
-            await supabase.from('shift_assignments').update({ shift_type_id: shiftTypeId }).eq('id', existing.id);
-        } else {
-            await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: userId, date, shift_type_id: shiftTypeId });
-        }
+        if (existing) await supabase.from('shift_assignments').update({ shift_type_id: shiftTypeId }).eq('id', existing.id);
+        else await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: userId, date, shift_type_id: shiftTypeId });
     }
     await this.refresh();
   }
@@ -567,44 +523,13 @@ class Store {
   }
 
   async saveSmtpSettings(settings: any) {
-    await supabase.from('settings').update({
-        smtp: {
-          host: settings.host,
-          port: settings.port,
-          user: settings.user,
-          password: settings.password,
-          enabled: settings.enabled
-        }
-    }).eq('id', 1);
+    await supabase.from('settings').update({ value: settings }).eq('key', 'smtp');
     await this.refresh();
   }
 
   async saveEmailTemplates(templates: EmailTemplate[]) {
-    await supabase.from('settings').update({
-        email_templates: templates
-    }).eq('id', 1);
+    await supabase.from('settings').update({ value: templates }).eq('key', 'email_templates');
     await this.refresh();
-  }
-
-  async exportConfig() {
-    return JSON.stringify({
-        leaveTypes: this.config.leaveTypes,
-        ppeTypes: this.config.ppeTypes,
-        holidays: this.config.holidays,
-        emailTemplates: this.config.emailTemplates
-    });
-  }
-
-  async importConfig(json: string) {
-    try {
-        const data = JSON.parse(json);
-        this.config.leaveTypes = data.leaveTypes || [];
-        this.config.ppeTypes = data.ppeTypes || [];
-        this.config.holidays = data.holidays || [];
-        this.config.emailTemplates = data.emailTemplates || [];
-        this.notify();
-        return true;
-    } catch { return false; }
   }
 
   async createTruck(name: string) {

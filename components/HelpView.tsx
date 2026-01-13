@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   Book, User, Briefcase, Shield, CheckCircle, AlertTriangle, 
@@ -7,7 +6,6 @@ import {
   Lock, Share2, Info, PlusCircle, Timer, Star, Check, X,
   ChevronRight, Users, Truck, MessageSquare, History,
   TrendingUp, MousePointer2,
-  // Fix: Added missing CalendarClock import
   CalendarClock
 } from 'lucide-react';
 
@@ -215,7 +213,7 @@ const HelpView = () => {
                 <div>
                     <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2"><CalendarClock className="text-blue-600"/> 5.2 Planificación de Turnos</h3>
                     <p className="text-sm text-slate-600 mb-4">
-                        Desde el menú <strong>"Mi Equipo > Planificación"</strong>, podrá asignar turnos horariossus empleados. 
+                        Desde el menú <strong>{"Mi Equipo > Planificación"}</strong>, podrá asignar turnos horariossus empleados. 
                     </p>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200">
                         <ul className="space-y-3 text-xs">

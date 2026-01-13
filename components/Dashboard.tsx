@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, RequestStatus, LeaveRequest, RequestType, NewsPost } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck, Info } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -13,7 +12,7 @@ interface DashboardProps {
   onViewRequest: (req: LeaveRequest) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest, onViewRequest }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, onEditRequest, onViewRequest }) => {
   const [detailView, setDetailView] = useState<'none' | 'days' | 'hours'>('none');
   const [showPPEModal, setShowPPEModal] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -23,12 +22,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
     return unsubscribe;
   }, []);
 
+  // Obtenemos los datos directos de la BBDD a través del store
+  const currentUser = store.users.find(u => u.id === initialUser.id) || initialUser;
   const requests = store.getMyRequests();
-  const nextShiftData = store.getNextShift(user.id);
+  const nextShiftData = store.getNextShift(currentUser.id);
   const news = store.config.news;
-  const isRepartidor = store.departments.find(d => d.id === user.departmentId)?.name === 'Repartidores';
+  const isRepartidor = store.departments.find(d => d.id === currentUser.departmentId)?.name === 'Repartidores';
 
-  // Birthday logic
   const upcomingBirthdays = store.users.filter(u => {
       if (!u.birthdate) return false;
       const b = new Date(u.birthdate);
@@ -40,7 +40,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
       nextWeek.setDate(today.getDate() + 7);
       const bThisYear = new Date(today.getFullYear(), bMonth, bDay);
       const bNextYear = new Date(today.getFullYear() + 1, bMonth, bDay);
-      // Fix typo: use nextWeek instead of undefined bNextWeek
       return isToday || (bThisYear >= today && bThisYear <= nextWeek) || (bNextYear >= today && nextWeek >= bNextYear);
   }).sort((a,b) => {
       const today = new Date();
@@ -73,12 +72,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
       return <span className="font-medium text-slate-800">{label}</span>;
   };
 
+  // Aquí mostramos directamente currentUser.daysAvailable (que ya tiene el descuento de la BBDD)
   const stats = [
-    { id: 'days', label: 'Días Disponibles', value: (user.daysAvailable || 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true, visible: !isRepartidor },
-    { id: 'hours', label: 'Saldo Horas Extra', value: `${user.overtimeHours || 0}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true, visible: !isRepartidor },
-    { id: 'truck', label: 'Camión Asignado', value: user.truckNumber || 'N/A', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50', clickable: false, visible: isRepartidor },
-    { id: 'pending', label: 'Solicitudes EPI', value: String(store.config.ppeRequests.filter(r => r.userId === user.id && r.status !== 'ENTREGADO').length), icon: HardHat, color: 'text-orange-500', bg: 'bg-orange-50', clickable: false, visible: isRepartidor },
-    { id: 'pending_abs', label: 'Pendientes', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false, visible: !isRepartidor },
+    { id: 'days', label: 'Días de Vacaciones', value: currentUser.daysAvailable.toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true, visible: !isRepartidor },
+    { id: 'hours', label: 'Saldo Horas Extra', value: `${currentUser.overtimeHours.toFixed(1)}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true, visible: !isRepartidor },
+    { id: 'truck', label: 'Camión Asignado', value: currentUser.truckNumber || 'N/A', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50', clickable: false, visible: isRepartidor },
+    { id: 'pending', label: 'Solicitudes EPI', value: String(store.config.ppeRequests.filter(r => r.userId === currentUser.id && r.status !== 'ENTREGADO').length), icon: HardHat, color: 'text-orange-500', bg: 'bg-orange-50', clickable: false, visible: isRepartidor },
+    { id: 'pending_abs', label: 'En Revisión', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false, visible: !isRepartidor },
   ];
 
   const currentYear = new Date().getFullYear();
@@ -118,14 +118,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
             </div>
             <div className="flex justify-between items-center bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <p className="text-sm text-slate-500 uppercase font-semibold">{isOvertimeView ? 'Saldo Actual' : 'Días Restantes'}</p>
-                    <p className="text-4xl xl:text-3xl font-bold text-slate-800">{isOvertimeView ? `${user.overtimeHours}h` : user.daysAvailable}</p>
+                    <p className="text-sm text-slate-500 uppercase font-semibold">Saldo Real de BBDD</p>
+                    <p className="text-4xl xl:text-3xl font-bold text-slate-800">{isOvertimeView ? `${currentUser.overtimeHours.toFixed(1)}h` : currentUser.daysAvailable.toFixed(1)}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Refleja el estado actual sincronizado con Supabase</p>
                 </div>
                 <button onClick={() => onNewRequest(isOvertimeView ? 'overtime' : 'absence')} className="flex items-center gap-2 bg-blue-600 text-white px-6 xl:px-5 py-3 xl:py-2.5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-500/30 font-bold transition-all"><PlusCircle size={20} /> {isOvertimeView ? 'Gestionar Horas' : 'Nueva Ausencia'}</button>
             </div>
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 xl:p-4 border-b border-slate-100"><h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18} className="text-slate-400"/> Registros</h3></div>
-                {filteredRequests.length === 0 ? <div className="p-12 text-center text-slate-400">No hay registros.</div> : (
+                <div className="p-6 xl:p-4 border-b border-slate-100"><h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18} className="text-slate-400"/> Registros Recientes</h3></div>
+                {filteredRequests.length === 0 ? <div className="p-12 text-center text-slate-400">No hay registros aún.</div> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-500">
@@ -164,7 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
   return (
     <div className="space-y-6 xl:space-y-5 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-         <div><h2 className="text-2xl xl:text-xl font-bold text-slate-800">Hola, {user.name}</h2><p className="text-slate-500 xl:text-sm">Resumen de tu actividad {isRepartidor ? 'logística' : 'laboral'}.</p></div>
+         <div><h2 className="text-2xl xl:text-xl font-bold text-slate-800">Hola, {currentUser.name}</h2><p className="text-slate-500 xl:text-sm">Resumen de tu actividad {isRepartidor ? 'logística' : 'laboral'}.</p></div>
          <div className="flex gap-2.5 w-full md:w-auto">
             {!isRepartidor && (
               <>
@@ -184,7 +185,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
         </div>
         {stats.filter(s => s.visible).map((stat) => (
           <div key={stat.id} onClick={() => stat.clickable && setDetailView(stat.id as any)} className={`bg-white p-6 xl:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between group transition-all ${stat.clickable ? 'cursor-pointer hover:shadow-md' : ''}`}>
-            <div className="flex items-center space-x-4 xl:space-x-3"><div className={`p-4 xl:p-3 rounded-xl ${stat.bg}`}><stat.icon className={`w-8 h-8 xl:w-7 xl:h-7 ${stat.color}`} /></div><div><p className="text-xs font-medium text-slate-500">{stat.label}</p><h3 className="text-2xl xl:text-xl font-bold text-slate-800">{stat.value}</h3></div></div>
+            <div className="flex items-center space-x-4 xl:space-x-3">
+                <div className={`p-4 xl:p-3 rounded-xl ${stat.bg}`}><stat.icon className={`w-8 h-8 xl:w-7 xl:h-7 ${stat.color}`} /></div>
+                <div>
+                    <p className="text-xs font-medium text-slate-500">{stat.label}</p>
+                    <h3 className="text-2xl xl:text-xl font-bold text-slate-800">{stat.value}</h3>
+                </div>
+            </div>
             {stat.clickable && <ChevronRight className="text-slate-300 group-hover:text-blue-500" size={20}/>}
           </div>
         ))}
@@ -277,7 +284,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onNewRequest, onEditRequest
           </div>
         </div>
       )}
-      {showPPEModal && <PPERequestModal userId={user.id} onClose={() => setShowPPEModal(false)} />}
+      {showPPEModal && <PPERequestModal userId={currentUser.id} onClose={() => setShowPPEModal(false)} />}
     </div>
   );
 };
