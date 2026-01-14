@@ -86,12 +86,12 @@ class Store {
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
         if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ 
-            id: a.id, userId: a.user_id, date: a.date, shift_type_id: a.shift_type_id 
+            id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id 
         }));
         if (trucksData) this.config.trucks = trucksData;
         if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
         if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
-            id: p.id, driverId: p.driver_id, type_id: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
+            id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
         if (settingsRows) {
