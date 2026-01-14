@@ -575,7 +575,7 @@ export const CommunicationsManager = () => {
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Cuerpo del Mensaje (HTML compatible)</label>
                                 <textarea className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm h-32" value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} />
-                                <p className="text-[9px] text-slate-400 mt-2 italic px-1">Usa variables como {'{empleado}'}, {'{tipo}'}, {'{fechas}'}</p>
+                                <p className="text-[9px] text-slate-400 mt-2 italic px-1">Variables: {'{empleado}'}, {'{tipo}'}, {'{fechas}'}, {'{supervisor}'}, {'{comentario_admin}'}, {'{horas}'}</p>
                             </div>
                             <button onClick={handleUpdateTemplate} disabled={isSavingTemplates} className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black transition-all flex justify-center items-center gap-2">{isSavingTemplates ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Actualizar Plantilla</button>
                         </div>

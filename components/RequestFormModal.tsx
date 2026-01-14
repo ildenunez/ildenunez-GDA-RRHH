@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, LeaveRequest, OvertimeUsage, RequestStatus, Role, RequestType } from '../types';
 import { store } from '../services/store';
@@ -162,7 +161,7 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const hasFixedRanges = activeTab === 'absence' && currentLeaveType?.fixedRanges && currentLeaveType.fixedRanges.length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[80] p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <div>

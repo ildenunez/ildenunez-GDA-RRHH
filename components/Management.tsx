@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info
+  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info, UserCheck
 } from 'lucide-react';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType } from '../types';
@@ -147,14 +146,90 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
 };
 
 export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
-    const pendingRequests = store.getPendingApprovalsForUser(user.id);
-    const absenceRequests = pendingRequests.filter((r: LeaveRequest) => !store.isOvertimeRequest(r.typeId));
-    const overtimeRequests = pendingRequests.filter((r: LeaveRequest) => store.isOvertimeRequest(r.typeId));
+    const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+    const [refresh, setRefresh] = useState(0);
+
+    useEffect(() => {
+        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
+        return unsubscribe;
+    }, []);
+
+    const allowedDepts = useMemo(() => {
+        if (user.role === Role.ADMIN) return store.departments;
+        if (user.role === Role.SUPERVISOR) return store.departments.filter(d => (d.supervisorIds || []).includes(user.id));
+        return [];
+    }, [user]);
+
+    const filteredPending = useMemo(() => {
+        let list = store.getPendingApprovalsForUser(user.id);
+        if (selectedDeptId) {
+            list = list.filter(r => {
+                const u = store.users.find(usr => usr.id === r.userId);
+                return u && u.departmentId === selectedDeptId;
+            });
+        }
+        return list;
+    }, [user.id, selectedDeptId, refresh]);
+
+    const absenceRequests = filteredPending.filter((r: LeaveRequest) => !store.isOvertimeRequest(r.typeId));
+    const overtimeRequests = filteredPending.filter((r: LeaveRequest) => store.isOvertimeRequest(r.typeId));
+
+    const conflictsSummary = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0];
+        const conflictList: { dateRange: string, users: string[], deptName: string }[] = [];
+        const deptsToCheck = selectedDeptId 
+            ? store.departments.filter(d => d.id === selectedDeptId)
+            : allowedDepts;
+
+        deptsToCheck.forEach(dept => {
+            const deptUsers = store.users.filter(u => u.departmentId === dept.id).map(u => u.id);
+            const deptReqs = store.requests.filter(r => 
+                (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
+                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) &&
+                deptUsers.includes(r.userId) &&
+                (r.endDate || r.startDate) >= today
+            );
+
+            for (let i = 0; i < deptReqs.length; i++) {
+                for (let j = i + 1; j < deptReqs.length; j++) {
+                    const r1 = deptReqs[i];
+                    const r2 = deptReqs[j];
+                    const s1 = r1.startDate.split('T')[0];
+                    const e1 = (r1.endDate || r1.startDate).split('T')[0];
+                    const s2 = r2.startDate.split('T')[0];
+                    const e2 = (r2.endDate || r2.startDate).split('T')[0];
+
+                    if (s1 <= e2 && e1 >= s2) {
+                        const u1 = store.users.find(u => u.id === r1.userId)?.name || '?';
+                        const u2 = store.users.find(u => u.id === r2.userId)?.name || '?';
+                        const overlapStart = s1 > s2 ? s1 : s2;
+                        const overlapEnd = e1 < e2 ? e1 : e2;
+                        conflictList.push({
+                            dateRange: overlapStart === overlapEnd 
+                                ? new Date(overlapStart).toLocaleDateString()
+                                : `${new Date(overlapStart).toLocaleDateString()} - ${new Date(overlapEnd).toLocaleDateString()}`,
+                            users: [u1, u2],
+                            deptName: dept.name
+                        });
+                    }
+                }
+            }
+        });
+        return conflictList;
+    }, [store.requests, store.users, allowedDepts, selectedDeptId, refresh]);
 
     const handleAction = async (id: string, status: RequestStatus) => {
-        const comment = status === RequestStatus.REJECTED ? prompt('Motivo del rechazo:') || '' : '';
-        if (status === RequestStatus.REJECTED && !comment) return;
-        await store.updateRequestStatus(id, status, user.id, comment);
+        const isRejection = status === RequestStatus.REJECTED;
+        const promptMsg = isRejection ? 'Motivo del rechazo (obligatorio):' : 'Comentario / Observaciones (opcional):';
+        
+        // Bloqueamos la ejecución para esperar al prompt del navegador
+        const comment = window.prompt(promptMsg);
+        
+        // Si el usuario cancela (null) o deja vacío en caso de rechazo, detenemos la acción
+        if (isRejection && !comment) return;
+        
+        // Enviamos la actualización con el ID del usuario en sesión
+        await store.updateRequestStatus(id, status, store.currentUser?.id || user.id, comment || '');
     };
 
     const Table = ({ requests, title, icon: Icon, color }: { requests: LeaveRequest[], title: string, icon: any, color: string }) => (
@@ -180,7 +255,6 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                             const u = store.users.find(usr => usr.id === req.userId);
                             const conflicts = store.getRequestConflicts(req);
                             
-                            // Cálculo de días para ausencias
                             const calculateDays = (startStr: string, endStr?: string) => {
                                 const start = new Date(startStr);
                                 const end = new Date(endStr || startStr);
@@ -241,16 +315,66 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
 
     return (
         <div className="space-y-10 animate-fade-in">
+             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50 gap-4">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <CheckCircle className="text-blue-600"/> Gestión de Aprobaciones
+                </h3>
+                
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-64">
+                        <Filter className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                        <select 
+                            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-sm outline-none font-bold text-slate-600 appearance-none" 
+                            value={selectedDeptId} 
+                            onChange={e => setSelectedDeptId(e.target.value)}
+                        >
+                            <option value="">Filtrar por Departamento</option>
+                            {allowedDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{filteredPending.length} Pendientes</div>
+                </div>
+            </div>
+
             <Table title="Solicitudes de Ausencia y Vacaciones" requests={absenceRequests} icon={CalendarDays} color="text-blue-600" />
             <Table title="Solicitudes de Gestión de Horas" requests={overtimeRequests} icon={Timer} color="text-indigo-600" />
+
+            <div className={`p-6 rounded-3xl border transition-all ${conflictsSummary.length > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                <h3 className={`font-bold flex items-center gap-2 mb-4 text-base ${conflictsSummary.length > 0 ? 'text-red-800' : 'text-green-800'}`}>
+                    {conflictsSummary.length > 0 ? <AlertTriangle size={12} className="text-red-600" /> : <CheckCircle size={12} className="text-green-600" />}
+                    {conflictsSummary.length > 0 ? `Conflictos Potenciales (${conflictsSummary.length})` : 'No hay conflictos detectados'}
+                </h3>
+                {conflictsSummary.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {conflictsSummary.slice(0, 12).map((conf, idx) => (
+                            <div key={idx} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm animate-scale-in">
+                                <div className="text-sm font-bold text-red-600 mb-1">{conf.dateRange}</div>
+                                <div className="text-[10px] font-semibold text-slate-500 uppercase mb-2">{conf.deptName}</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {conf.users.map(u => <span key={u} className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] rounded-full font-medium">{u}</span>)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-green-700 italic">No hay solapamientos de ausencias para el personal y criterios seleccionados.</p>
+                )}
+            </div>
         </div>
     );
 };
 
 export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
     const today = new Date().toISOString().split('T')[0];
+    const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+
+    const allowedDepts = useMemo(() => {
+        if (user.role === Role.ADMIN) return store.departments;
+        if (user.role === Role.SUPERVISOR) return store.departments.filter(d => (d.supervisorIds || []).includes(user.id));
+        return [];
+    }, [user]);
+
     const upcoming = useMemo(() => {
-        // Ajustamos el filtro para incluir OVERTIME_SPEND_DAYS (Canjes por días libres)
         let list = store.requests.filter((r: LeaveRequest) => 
             r.status === RequestStatus.APPROVED && 
             (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) && 
@@ -258,34 +382,135 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
         );
 
         if (user.role === Role.SUPERVISOR) {
-            const myDeptIds = store.departments.filter(d => (d.supervisorIds || []).includes(user.id)).map(d => d.id);
+            const myDeptIds = allowedDepts.map(d => d.id);
             list = list.filter((r: LeaveRequest) => {
                 const u = store.users.find(usr => usr.id === r.userId);
                 return u && myDeptIds.includes(u.departmentId);
             });
         }
+
+        if (selectedDeptId) {
+            list = list.filter((r: LeaveRequest) => {
+                const u = store.users.find(usr => usr.id === r.userId);
+                return u && u.departmentId === selectedDeptId;
+            });
+        }
+
         return list.sort((a,b) => (a.startDate || '').localeCompare(b.startDate || ''));
-    }, [store.requests, user]);
+    }, [store.requests, user, selectedDeptId, allowedDepts, today]);
+
+    const conflicts = useMemo(() => {
+        const conflictList: { dateRange: string, users: string[], deptName: string }[] = [];
+        const deptsToCheck = selectedDeptId 
+            ? store.departments.filter(d => d.id === selectedDeptId)
+            : allowedDepts;
+
+        deptsToCheck.forEach(dept => {
+            const deptUsers = store.users.filter(u => u.departmentId === dept.id).map(u => u.id);
+            const deptReqs = store.requests.filter(r => 
+                r.status === RequestStatus.APPROVED && 
+                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) &&
+                deptUsers.includes(r.userId) &&
+                (r.endDate || r.startDate) >= today
+            );
+
+            for (let i = 0; i < deptReqs.length; i++) {
+                for (let j = i + 1; j < deptReqs.length; j++) {
+                    const r1 = deptReqs[i];
+                    const r2 = deptReqs[j];
+                    const s1 = r1.startDate.split('T')[0];
+                    const e1 = (r1.endDate || r1.startDate).split('T')[0];
+                    const s2 = r2.startDate.split('T')[0];
+                    const e2 = (r2.endDate || r2.startDate).split('T')[0];
+
+                    if (s1 <= e2 && e1 >= s2) {
+                        const u1 = store.users.find(u => u.id === r1.userId)?.name || '?';
+                        const u2 = store.users.find(u => u.id === r2.userId)?.name || '?';
+                        
+                        const overlapStart = s1 > s2 ? s1 : s2;
+                        const overlapEnd = e1 < e2 ? e1 : e2;
+                        
+                        conflictList.push({
+                            dateRange: overlapStart === overlapEnd 
+                                ? new Date(overlapStart).toLocaleDateString()
+                                : `${new Date(overlapStart).toLocaleDateString()} - ${new Date(overlapEnd).toLocaleDateString()}`,
+                            users: [u1, u2],
+                            deptName: dept.name
+                        });
+                    }
+                }
+            }
+        });
+        return conflictList;
+    }, [store.requests, store.users, allowedDepts, selectedDeptId, today]);
 
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CheckCircle className="text-blue-600"/> Próximas Ausencias Confirmadas</h3>
-                    <div className="text-xs font-black text-slate-400 uppercase tracking-widest">{upcoming.length} Registros</div>
+                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50 gap-4">
+                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CheckCircle size={20} className="text-blue-600"/> Próximas Ausencias Confirmadas</h3>
+                    
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-64">
+                            <Filter className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                            <select 
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-sm outline-none font-bold text-slate-600 appearance-none" 
+                                value={selectedDeptId} 
+                                onChange={e => setSelectedDeptId(e.target.value)}
+                            >
+                                <option value="">Todos los Dptos.</option>
+                                {allowedDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{upcoming.length} Registros</div>
+                    </div>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas.</div> : upcoming.map((req: LeaveRequest) => {
+                    {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas {selectedDeptId ? 'para este departamento' : ''}.</div> : upcoming.map((req: LeaveRequest) => {
                         const u = store.users.find(usr => usr.id === req.userId);
+                        const approverName = req.resolvedBy ? store.users.find(usr => usr.id === req.resolvedBy)?.name : null;
+                        
                         return (
-                            <div key={req.id} onClick={() => onViewRequest(req)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-white group relative overflow-hidden">
+                            <div key={req.id} onClick={() => onViewRequest(req)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-white group relative overflow-hidden flex flex-col justify-between h-full">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
-                                <div className="flex items-center gap-3 mb-4"><img src={u?.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover" /><div><div className="font-bold text-slate-800 text-sm">{u?.name}</div><div className="text-[10px] text-slate-400 uppercase font-bold">{store.departments.find(d => d.id === u?.departmentId)?.name}</div></div></div>
-                                <div className="space-y-2"><div className="flex justify-between items-center"><span className="text-xs font-black text-blue-600 uppercase">{store.getTypeLabel(req.typeId)}</span><span className="text-[10px] font-bold text-slate-400">{new Date(req.startDate).toLocaleDateString()}</span></div></div>
+                                <div>
+                                    <div className="flex items-center gap-3 mb-4"><img src={u?.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover" /><div><div className="font-bold text-slate-800 text-sm">{u?.name}</div><div className="text-[10px] text-slate-400 uppercase font-bold">{store.departments.find(d => d.id === u?.departmentId)?.name}</div></div></div>
+                                    <div className="space-y-2 mb-4"><div className="flex justify-between items-center"><span className="text-xs font-black text-blue-600 uppercase">{store.getTypeLabel(req.typeId)}</span><span className="text-[10px] font-bold text-slate-400">{new Date(req.startDate).toLocaleDateString()}</span></div></div>
+                                </div>
+                                {approverName && (
+                                    <div className="mt-auto pt-3 border-t border-slate-50 flex items-center gap-2">
+                                        <div className="p-1 bg-green-50 text-green-600 rounded">
+                                            <UserCheck size={12}/>
+                                        </div>
+                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Validado por: <span className="text-green-700">{approverName}</span></p>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
+            </div>
+
+            <div className={`p-6 rounded-3xl border transition-all ${conflicts.length > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                <h3 className={`font-bold flex items-center gap-2 mb-4 text-base ${conflicts.length > 0 ? 'text-red-800' : 'text-green-800'}`}>
+                    {conflicts.length > 0 ? <AlertTriangle size={12} className="text-red-600" /> : <CheckCircle size={12} className="text-green-600" />}
+                    {conflicts.length > 0 ? `Conflictos Detectados en el Equipo (${conflicts.length})` : 'No hay conflictos detectados'}
+                </h3>
+                {conflicts.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {conflicts.map((conf, idx) => (
+                            <div key={idx} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm animate-scale-in">
+                                <div className="text-sm font-bold text-red-600 mb-1">{conf.dateRange}</div>
+                                <div className="text-[10px] font-semibold text-slate-500 uppercase mb-2">{conf.deptName}</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {conf.users.map(u => <span key={u} className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] rounded-full font-medium">{u}</span>)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-green-700 italic">No hay solapamientos de ausencias aprobadas para el personal y criterios seleccionados.</p>
+                )}
             </div>
         </div>
     );

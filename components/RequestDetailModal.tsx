@@ -1,9 +1,7 @@
-
-
 import React from 'react';
 import { LeaveRequest, RequestStatus } from '../types';
 import { store } from '../services/store';
-import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare } from 'lucide-react';
+import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck } from 'lucide-react';
 
 interface RequestDetailModalProps {
   request: LeaveRequest;
@@ -14,7 +12,9 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
   const user = store.users.find(u => u.id === request.userId);
   const dept = user ? store.departments.find(d => d.id === user.departmentId) : null;
   
-  // Si es una solicitud de consumo, buscar el detalle de los registros origen
+  // Buscar quién resolvió la solicitud
+  const approver = request.resolvedBy ? store.users.find(u => u.id === request.resolvedBy) : null;
+
   const usageDetails = request.overtimeUsage?.map(usage => {
       const sourceReq = store.requests.find(r => r.id === usage.requestId);
       return {
@@ -29,7 +29,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm print:p-0 print:bg-white print:items-start">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm print:p-0 print:bg-white print:items-start">
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
         
         {/* Header (No Print Actions) */}
@@ -56,7 +56,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Informe de Solicitud</h1>
                         <p className="text-slate-500 text-sm">Portal de RRHH - GdA</p>
-                        <p className="text-slate-400 text-xs mt-1">Ref: {request.id}</p>
+                        <p className="text-slate-400 text-[10px] mt-1 font-mono uppercase tracking-tighter">ID: {request.id}</p>
                     </div>
                 </div>
                 <div className="text-right">
@@ -85,7 +85,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                         <span className="block text-xs text-slate-500">Departamento</span>
                         <span className="font-semibold text-slate-800">{dept?.name || '-'}</span>
                     </div>
-                    <div>
+                    <div className="col-span-2">
                         <span className="block text-xs text-slate-500">Email</span>
                         <span className="font-semibold text-slate-800">{user?.email}</span>
                     </div>
@@ -107,7 +107,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                             <span className="font-medium text-slate-900">{new Date(request.endDate).toLocaleDateString()}</span>
                         </div>
                     )}
-                    {request.hours && (
+                    {request.hours !== undefined && (
                         <div>
                             <span className="flex items-center gap-2 text-sm text-slate-500 mb-1"><Clock size={14}/> Total Horas</span>
                             <span className="font-mono font-bold text-slate-900">{request.hours}h</span>
@@ -121,15 +121,35 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                         <p className="text-slate-700 italic">"{request.reason}"</p>
                     </div>
                 )}
-
-                {/* Notas del Responsable */}
-                {request.adminComment && (
-                    <div className="mt-4 pt-4 border-t border-slate-200 bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-                        <span className="flex items-center gap-2 text-sm font-bold text-yellow-700 mb-1"><MessageSquare size={14}/> Notas del Responsable</span>
-                        <p className="text-slate-700">"{request.adminComment}"</p>
-                    </div>
-                )}
             </div>
+
+            {/* Validación y Observaciones Admin */}
+            {(request.status !== RequestStatus.PENDING) && (
+                <div className="mb-8 bg-blue-50/50 p-6 rounded-xl border border-blue-100">
+                    <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-4 border-b border-blue-100 pb-2">Información de Validación</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <span className="block text-xs text-blue-500 mb-1">Responsable de la acción</span>
+                            <div className="flex items-center gap-2 font-bold text-slate-800">
+                                <div className="p-1 bg-blue-100 text-blue-600 rounded">
+                                    <UserCheck size={14}/>
+                                </div>
+                                {approver ? approver.name : 'Administración / Sistema'}
+                            </div>
+                        </div>
+                        {request.adminComment && (
+                            <div className="col-span-2 mt-2">
+                                <span className="flex items-center gap-2 text-xs font-bold text-blue-500 mb-2">
+                                    <MessageSquare size={14}/> Observaciones de la validación:
+                                </span>
+                                <p className="text-slate-700 font-medium italic bg-white p-3 rounded-lg border border-blue-100">
+                                    "{request.adminComment}"
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Trazabilidad de Horas (Si aplica) */}
             {usageDetails && usageDetails.length > 0 && (

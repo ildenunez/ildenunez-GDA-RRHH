@@ -100,6 +100,7 @@ export interface LeaveRequest {
   status: RequestStatus;
   createdAt: string;
   adminComment?: string;
+  resolvedBy?: string;
   createdByAdmin?: boolean;
   isConsumed?: boolean;
   consumedHours?: number;

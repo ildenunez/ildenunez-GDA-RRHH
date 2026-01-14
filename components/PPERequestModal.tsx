@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { store } from '../services/store';
 import { Role } from '../types';
@@ -49,7 +48,7 @@ const PPERequestModal: React.FC<PPERequestModalProps> = ({ onClose, userId }) =>
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-scale-in">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
             <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">

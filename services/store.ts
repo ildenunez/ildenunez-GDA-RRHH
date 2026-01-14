@@ -155,6 +155,7 @@ class Store {
           id: String(r.id), userId: r.user_id, type_id: r.type_id, typeId: r.type_id, label: r.label, 
           startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
           status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
+          resolvedBy: r.resolved_by,
           isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
       }));
   }
@@ -181,13 +182,21 @@ class Store {
     const typeLabel = this.getTypeLabel(req.typeId);
     const dates = `${new Date(req.startDate).toLocaleDateString()}${req.endDate ? ' al ' + new Date(req.endDate).toLocaleDateString() : ''}`;
     
+    // Buscar nombre del supervisor/admin que resolvió
+    const supervisor = req.resolvedBy ? (this.users.find(u => u.id === req.resolvedBy)?.name || 'Administración') : 'Administración';
+
     const replaceVars = (text: string) => {
+        if (!text) return '';
         return text
-            .replace(/{empleado}/g, worker.name)
-            .replace(/{tipo}/g, typeLabel)
-            .replace(/{fechas}/g, dates)
+            .replace(/{empleado}/g, worker.name || '')
+            .replace(/{tipo}/g, typeLabel || '')
+            .replace(/{fechas}/g, dates || '')
             .replace(/{motivo}/g, req.reason || 'No especificado')
-            .replace(/{comentario}/g, req.adminComment || '');
+            .replace(/{comentario}/g, req.adminComment || '')
+            .replace(/{comentario_admin}/g, req.adminComment || 'Sin observaciones')
+            .replace(/{supervisor}/g, supervisor)
+            .replace(/{horas}/g, String(Math.abs(req.hours || 0)))
+            .replace(/{saldo_horas}/g, worker.overtimeHours.toFixed(1));
     };
 
     const subject = replaceVars(template.subject);
@@ -281,17 +290,22 @@ class Store {
       const isOvertime = this.isOvertimeRequest(data.typeId);
       const finalHours = data.typeId === RequestType.WORKED_HOLIDAY ? 4 : data.hours;
 
+      // Si se crea aprobada directamente, guardar quién la creó/aprobó
+      const finalResolvedBy = status === RequestStatus.APPROVED ? this.currentUser?.id : null;
+
       const { data: newReqData } = await supabase.from('requests').insert({
           id, user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
           hours: finalHours, reason: data.reason, status: status, created_at: new Date().toISOString(),
-          overtime_usage: data.overtimeUsage || []
+          overtime_usage: data.overtimeUsage || [],
+          resolved_by: finalResolvedBy
       }).select().single();
 
       if (newReqData) {
           const req = {
               id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
-              status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at
+              status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at,
+              resolvedBy: newReqData.resolved_by
           } as LeaveRequest;
 
           if (!isOvertime || status === RequestStatus.APPROVED) {
@@ -359,6 +373,13 @@ class Store {
       if (!oldReq) return;
 
       const isOvertime = this.isOvertimeRequest(oldReq.typeId);
+      // Garantía: Si adminId no llega, forzamos el ID del usuario logueado en el store
+      const finalAdminId = adminId || this.currentUser?.id;
+
+      if (!finalAdminId) {
+          console.error("Error: No se pudo identificar al administrador que resuelve la solicitud.");
+          return;
+      }
 
       if (oldReq.status === RequestStatus.PENDING && status === RequestStatus.APPROVED) {
           if (isOvertime) {
@@ -376,20 +397,31 @@ class Store {
           await this.applyRequestToBalanceDB(oldReq, false);
       }
 
-      await supabase.from('requests').update({ status, admin_comment: comment }).eq('id', id);
+      const { error } = await supabase.from('requests').update({ 
+          status, 
+          admin_comment: comment || '', 
+          resolved_by: finalAdminId 
+      }).eq('id', id);
 
-      let templateName = '';
-      if (status === RequestStatus.APPROVED) {
-          templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
-      } else if (status === RequestStatus.REJECTED) {
-          templateName = 'Ausencia: Rechazada';
-      }
-
-      if (templateName) {
-          this.sendEmailNotification(templateName, { ...oldReq, status, adminComment: comment });
+      if (error) {
+          console.error("Error actualizando estado en Supabase:", error);
       }
 
       await this.refresh();
+      
+      const refreshedReq = this.requests.find(r => r.id === id);
+      if (refreshedReq) {
+          let templateName = '';
+          if (status === RequestStatus.APPROVED) {
+              templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
+          } else if (status === RequestStatus.REJECTED) {
+              templateName = 'Ausencia: Rechazada';
+          }
+
+          if (templateName) {
+              this.sendEmailNotification(templateName, refreshedReq);
+          }
+      }
   }
 
   async deleteRequest(id: string) {
