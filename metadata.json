@@ -1,6 +1,6 @@
 {
   "name": "GdA RRHH",
-  "version": "1.0.0-ESTABLE-RESTAURACION-202508",
-  "description": "Sistema de Gestión de RRHH y EPIs. Punto de restauración: Lógica de EPIs (Solicitado/Entregado) y Filtros Admin completados.",
+  "version": "1.0.0-BACKUP-130126",
+  "description": "Punto de restauración backup_130126: Implementada lógica de Festivo Trabajado (+1 día y +4 horas extra) con desglose visual en el panel de aprobaciones.",
   "requestFramePermissions": []
 }

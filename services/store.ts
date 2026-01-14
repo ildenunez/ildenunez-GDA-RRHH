@@ -82,16 +82,16 @@ class Store {
             id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
         if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: p.name, sizes: p.sizes || [] }));
-        if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, type_id: p.type_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
         if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ 
-            id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id 
+            id: a.id, userId: a.user_id, date: a.date, shift_type_id: a.shift_type_id 
         }));
         if (trucksData) this.config.trucks = trucksData;
         if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
         if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
-            id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
+            id: p.id, driverId: p.driver_id, type_id: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
         if (settingsRows) {
@@ -163,8 +163,75 @@ class Store {
       return [RequestType.OVERTIME_EARN, RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME].includes(typeId as RequestType);
   }
 
+  private async sendEmailNotification(templateLabel: string, req: LeaveRequest) {
+    if (!this.config.smtpSettings.enabled) return;
+
+    const worker = this.users.find(u => u.id === req.userId);
+    if (!worker) return;
+
+    // Buscamos la plantilla que coincida exactamente con la etiqueta
+    const template = this.config.emailTemplates.find(t => 
+        t.label === templateLabel || t.label.toLowerCase().includes(templateLabel.toLowerCase())
+    );
+    
+    if (!template) {
+        console.warn(`No se encontró plantilla de email con etiqueta: "${templateLabel}"`);
+        return;
+    }
+
+    const typeLabel = this.getTypeLabel(req.typeId);
+    const dates = `${new Date(req.startDate).toLocaleDateString()}${req.endDate ? ' al ' + new Date(req.endDate).toLocaleDateString() : ''}`;
+    
+    const replaceVars = (text: string) => {
+        return text
+            .replace(/{empleado}/g, worker.name)
+            .replace(/{tipo}/g, typeLabel)
+            .replace(/{fechas}/g, dates)
+            .replace(/{motivo}/g, req.reason || 'No especificado')
+            .replace(/{comentario}/g, req.adminComment || '');
+    };
+
+    const subject = replaceVars(template.subject);
+    const body = replaceVars(template.body);
+    const html = body.replace(/\n/g, '<br>');
+
+    const recipients: string[] = [];
+    if (template.recipients.worker && worker.email) recipients.push(worker.email);
+    
+    if (template.recipients.supervisor || template.recipients.admin) {
+        const dept = this.departments.find(d => d.id === worker.departmentId);
+        if (template.recipients.supervisor && dept) {
+            dept.supervisorIds.forEach(sid => {
+                const sup = this.users.find(u => u.id === sid);
+                if (sup?.email) recipients.push(sup.email);
+            });
+        }
+        if (template.recipients.admin) {
+            this.users.filter(u => u.role === Role.ADMIN).forEach(adm => {
+                if (adm.email) recipients.push(adm.email);
+            });
+        }
+    }
+
+    const uniqueRecipients = Array.from(new Set(recipients)).join(', ');
+    if (!uniqueRecipients) return;
+
+    try {
+        await supabase.functions.invoke('send-test-email', {
+            body: {
+                to: uniqueRecipients,
+                config: this.config.smtpSettings,
+                subject,
+                message: body,
+                html
+            }
+        });
+    } catch (error) {
+        console.error("Error enviando notificación por email:", error);
+    }
+  }
+
   async applyRequestToBalanceDB(req: LeaveRequest, undo: boolean = false) {
-    // Recargar el usuario del estado actual para evitar problemas de concurrencia
     const user = this.users.find(u => u.id === req.userId);
     if (!user) return;
 
@@ -172,20 +239,16 @@ class Store {
     let daysDelta = 0;
     let hoursDelta = 0;
 
-    // Lógica especial para FESTIVO TRABAJADO: Suma 1 día y 4 horas
     if (req.typeId === RequestType.WORKED_HOLIDAY) {
         daysDelta = 1;
         hoursDelta = 4;
     } 
-    // Otros registros de horas
     else if (this.isOvertimeRequest(req.typeId)) {
         hoursDelta = req.hours || 0;
-        // Si es canje o pago, restamos del saldo
         if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY].includes(req.typeId as RequestType)) {
             hoursDelta = -Math.abs(hoursDelta);
         }
     } 
-    // Ausencias y ajustes de días
     else {
         const typeConfig = this.config.leaveTypes.find(t => t.id === req.typeId);
         if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
@@ -205,7 +268,6 @@ class Store {
             overtime_hours: newHours 
         }).eq('id', user.id);
         
-        // Actualizar localmente para cálculos inmediatos
         user.daysAvailable = newDays;
         user.overtimeHours = newHours;
     }
@@ -215,8 +277,6 @@ class Store {
       const id = crypto.randomUUID();
       const label = data.label || this.getTypeLabel(data.typeId);
       const isOvertime = this.isOvertimeRequest(data.typeId);
-
-      // Aseguramos que para festivo trabajado se guarden las 4h por defecto si no vienen
       const finalHours = data.typeId === RequestType.WORKED_HOLIDAY ? 4 : data.hours;
 
       const { data: newReqData } = await supabase.from('requests').insert({
@@ -229,14 +289,30 @@ class Store {
           const req = {
               id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
-              status: newReqData.status
+              status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at
           } as LeaveRequest;
 
-          // Lógica de aplicación inmediata:
-          // 1. Si es Ausencia/Vacaciones: Aplicamos siempre (para reservar días aunque esté PENDIENTE)
-          // 2. Si es Registro de Horas o Festivo: Solo aplicamos si ya nace como APROBADO (por un admin)
           if (!isOvertime || status === RequestStatus.APPROVED) {
               await this.applyRequestToBalanceDB(req);
+          }
+
+          // Selección de plantilla según el tipo de solicitud (basado en la imagen)
+          let templateName = '';
+          if (isOvertime) {
+              if (req.typeId === RequestType.OVERTIME_SPEND_DAYS) {
+                  templateName = 'Horas: Canje por Días';
+              } else {
+                  templateName = 'Horas: Nuevo Registro';
+              }
+          } else {
+              templateName = 'Ausencia: Nueva Solicitud';
+          }
+
+          this.sendEmailNotification(templateName, req);
+
+          // Aviso especial si es Baja Médica
+          if (req.typeId === RequestType.SICKNESS) {
+              this.sendEmailNotification('Ausencia: Baja Médica (Aviso)', req);
           }
       }
       await this.refresh();
@@ -248,7 +324,6 @@ class Store {
 
     const isOvertime = this.isOvertimeRequest(oldReq.typeId);
     
-    // Si la solicitud antigua ya había afectado al saldo, revertimos antes de aplicar cambios
     if (oldReq.status === RequestStatus.APPROVED || (!isOvertime && oldReq.status === RequestStatus.PENDING)) {
         await this.applyRequestToBalanceDB(oldReq, true);
     }
@@ -271,6 +346,7 @@ class Store {
             status: updatedReqData.status
         } as LeaveRequest;
         
+        // Fix: Use local constant instead of incorrectly assigning to this.isNewOvertime
         const isNewOvertime = this.isOvertimeRequest(req.typeId);
         if (req.status === RequestStatus.APPROVED || (!isNewOvertime && req.status === RequestStatus.PENDING)) {
             await this.applyRequestToBalanceDB(req);
@@ -285,32 +361,36 @@ class Store {
 
       const isOvertime = this.isOvertimeRequest(oldReq.typeId);
 
-      // CASO 1: Aprobando una solicitud que estaba pendiente
       if (oldReq.status === RequestStatus.PENDING && status === RequestStatus.APPROVED) {
           if (isOvertime) {
-              // Si es horas extra o festivo, aplicamos el cambio al saldo ahora que se aprueba
               await this.applyRequestToBalanceDB(oldReq, false);
           }
-          // Si es vacaciones, no hacemos nada extra porque ya se restaron al crearse (reserva)
       }
-      
-      // CASO 2: Rechazando una solicitud que estaba aprobada o pendiente (reserva)
       else if (status === RequestStatus.REJECTED) {
           if (oldReq.status === RequestStatus.APPROVED) {
-              // Si estaba aprobada, restamos lo que se sumó (o sumamos lo que se restó)
               await this.applyRequestToBalanceDB(oldReq, true);
           } else if (oldReq.status === RequestStatus.PENDING && !isOvertime) {
-              // Si eran vacaciones pendientes, liberamos la reserva
               await this.applyRequestToBalanceDB(oldReq, true);
           }
       }
-
-      // CASO 3: Rehabilitando una rechazada
       else if (oldReq.status === RequestStatus.REJECTED && status === RequestStatus.APPROVED) {
           await this.applyRequestToBalanceDB(oldReq, false);
       }
 
       await supabase.from('requests').update({ status, admin_comment: comment }).eq('id', id);
+
+      // Selección de plantilla según el cambio de estado (basado en la imagen)
+      let templateName = '';
+      if (status === RequestStatus.APPROVED) {
+          templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
+      } else if (status === RequestStatus.REJECTED) {
+          templateName = 'Ausencia: Rechazada';
+      }
+
+      if (templateName) {
+          this.sendEmailNotification(templateName, { ...oldReq, status, adminComment: comment });
+      }
+
       await this.refresh();
   }
 
