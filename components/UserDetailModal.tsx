@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// Add missing React, useState, and useEffect imports.
+import React, { useState, useEffect } from 'react';
 import { User, Role, RequestStatus, LeaveRequest, RequestType } from '../types';
 import { store } from '../services/store';
-import { X, Save, HardHat, Plus, Camera, ChevronRight, Loader2, Users, Clock, Sun, Trash2, Info, MessageSquare, AlertCircle } from 'lucide-react';
+import { X, Save, HardHat, Plus, Camera, ChevronRight, Loader2, Users, Clock, Sun, Trash2, Info, MessageSquare, Lock } from 'lucide-react';
 import RequestFormModal from './RequestFormModal';
 import PPERequestModal from './PPERequestModal';
 
@@ -27,6 +28,7 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
   const [deptId, setDeptId] = useState(user.departmentId);
   const [birthdate, setBirthdate] = useState(user.birthdate || '');
   const [avatar, setAvatar] = useState(user.avatar || '');
+  const [password, setPassword] = useState('');
   const [daysAdjust, setDaysAdjust] = useState('');
   const [hoursAdjust, setHoursAdjust] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
@@ -41,9 +43,21 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
+        const payloadBirthdate = birthdate && birthdate.trim() !== '' ? birthdate : null;
+
         if (isNew) {
-            const data = { name, email, role, departmentId: deptId, birthdate, avatar, daysAvailable: 22, overtimeHours: 0 };
-            await store.createUser(data, 'pass123');
+            const data = { 
+                name, 
+                email, 
+                role, 
+                departmentId: deptId, 
+                birthdate: payloadBirthdate, 
+                avatar, 
+                daysAvailable: 22, 
+                overtimeHours: 0 
+            };
+            await store.createUser(data, password || 'pass123');
+            onClose();
         } else {
             if (daysAdjust && !isNaN(parseFloat(daysAdjust))) {
                 await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: parseFloat(daysAdjust), reason: adjustReason || 'Ajuste manual de días (Admin)' }, user.id, RequestStatus.APPROVED);
@@ -51,11 +65,30 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
             if (hoursAdjust && !isNaN(parseFloat(hoursAdjust))) {
                 await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: parseFloat(hoursAdjust), reason: adjustReason || 'Ajuste manual de horas (Admin)' }, user.id, RequestStatus.APPROVED);
             }
-            const updatedUser = store.users.find(u => u.id === user.id) || user;
-            await store.updateUserAdmin(user.id, { name, email, role, departmentId: deptId, birthdate, avatar, daysAvailable: updatedUser.daysAvailable, overtimeHours: updatedUser.overtimeHours });
+            
+            // Forzamos el mapeo de department_id por si acaso hay discrepancias
+            const updatePayload = { 
+                name, 
+                email, 
+                role, 
+                departmentId: deptId, 
+                department_id: deptId, 
+                birthdate: payloadBirthdate, 
+                avatar, 
+                daysAvailable: user.daysAvailable, 
+                overtimeHours: user.overtimeHours,
+                password: password.trim() || undefined
+            };
+
+            await store.updateUserAdmin(user.id, updatePayload);
+            onClose();
         }
-        onClose();
-    } catch (error) { console.error("Error al actualizar:", error); } finally { setIsSaving(false); }
+    } catch (error: any) { 
+        console.error("Error al actualizar usuario:", error); 
+        alert(`Error al guardar: ${error.message || 'Error desconocido'}. Revisa si el email ya existe o los datos son correctos.`);
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   const calculateAmountStr = (req: LeaveRequest) => {
@@ -100,6 +133,16 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
                     </div>
                     <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Rol</label><select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none" value={role} onChange={e=>setRole(e.target.value as Role)}><option value={Role.WORKER}>Trabajador</option><option value={Role.SUPERVISOR}>Supervisor</option><option value={Role.ADMIN}>Administrador</option></select></div>
                     <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Departamento</label><select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none" value={deptId} onChange={e=>setDeptId(e.target.value)}>{store.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                    <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Fecha de Nacimiento</label>
+                        <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:bg-white" value={birthdate} onChange={e=>setBirthdate(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Nueva Contraseña</label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-3.5 text-slate-400" size={16}/>
+                        <input type="password" placeholder="Dejar en blanco para mantener actual" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" value={password} onChange={e=>setPassword(e.target.value)} />
+                    </div>
+                    </div>
                 </div>
             </section>
             {!isNew && (

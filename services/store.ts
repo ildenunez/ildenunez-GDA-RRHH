@@ -169,7 +169,6 @@ class Store {
     const worker = this.users.find(u => u.id === req.userId);
     if (!worker) return;
 
-    // Buscamos la plantilla que coincida exactamente con la etiqueta
     const template = this.config.emailTemplates.find(t => 
         t.label === templateLabel || t.label.toLowerCase().includes(templateLabel.toLowerCase())
     );
@@ -217,7 +216,7 @@ class Store {
     if (!uniqueRecipients) return;
 
     try {
-        await supabase.functions.invoke('send-test-email', {
+        const { data, error } = await supabase.functions.invoke('send-test-email', {
             body: {
                 to: uniqueRecipients,
                 config: this.config.smtpSettings,
@@ -226,8 +225,11 @@ class Store {
                 html
             }
         });
+        if (error || !data?.success) {
+            console.error("Error en Edge Function de Email:", error || data?.error);
+        }
     } catch (error) {
-        console.error("Error enviando notificación por email:", error);
+        console.error("Error fatal enviando notificación por email:", error);
     }
   }
 
@@ -296,7 +298,6 @@ class Store {
               await this.applyRequestToBalanceDB(req);
           }
 
-          // Selección de plantilla según el tipo de solicitud (basado en la imagen)
           let templateName = '';
           if (isOvertime) {
               if (req.typeId === RequestType.OVERTIME_SPEND_DAYS) {
@@ -310,7 +311,6 @@ class Store {
 
           this.sendEmailNotification(templateName, req);
 
-          // Aviso especial si es Baja Médica
           if (req.typeId === RequestType.SICKNESS) {
               this.sendEmailNotification('Ausencia: Baja Médica (Aviso)', req);
           }
@@ -346,7 +346,6 @@ class Store {
             status: updatedReqData.status
         } as LeaveRequest;
         
-        // Fix: Use local constant instead of incorrectly assigning to this.isNewOvertime
         const isNewOvertime = this.isOvertimeRequest(req.typeId);
         if (req.status === RequestStatus.APPROVED || (!isNewOvertime && req.status === RequestStatus.PENDING)) {
             await this.applyRequestToBalanceDB(req);
@@ -379,7 +378,6 @@ class Store {
 
       await supabase.from('requests').update({ status, admin_comment: comment }).eq('id', id);
 
-      // Selección de plantilla según el cambio de estado (basado en la imagen)
       let templateName = '';
       if (status === RequestStatus.APPROVED) {
           templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
@@ -502,20 +500,42 @@ class Store {
   }
 
   async createUser(data: any, pass: string) {
-    await supabase.from('users').insert({
-        id: crypto.randomUUID(), name: data.name, email: data.email, role: data.role || Role.WORKER,
-        department_id: data.departmentId, days_available: Number(data.daysAvailable || 0),
-        overtime_hours: Number(data.overtime_hours || 0), birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
+    const { error } = await supabase.from('users').insert({
+        id: crypto.randomUUID(), 
+        name: data.name, 
+        email: data.email, 
+        role: data.role || Role.WORKER,
+        department_id: data.departmentId || data.department_id, 
+        days_available: Number(data.daysAvailable || 0),
+        overtime_hours: Number(data.overtime_hours || 0), 
+        birthdate: data.birthdate || null, 
+        avatar: data.avatar, 
+        truck_number: data.truckNumber,
+        password: pass
     });
+    if (error) throw error;
     await this.refresh();
   }
 
   async updateUserAdmin(id: string, data: any) {
-    await supabase.from('users').update({
-        name: data.name, email: data.email, role: data.role, department_id: data.department_id,
-        days_available: Number(data.daysAvailable || 0), overtime_hours: Number(data.overtimeHours || 0),
-        birthdate: data.birthdate, avatar: data.avatar, truck_number: data.truckNumber
-    }).eq('id', id);
+    const updateData: any = {
+        name: data.name, 
+        email: data.email, 
+        role: data.role, 
+        department_id: data.departmentId || data.department_id,
+        days_available: Number(data.daysAvailable || 0), 
+        overtime_hours: Number(data.overtimeHours || 0),
+        birthdate: data.birthdate || null, 
+        avatar: data.avatar, 
+        truck_number: data.truckNumber
+    };
+    if (data.password && data.password.trim() !== '') updateData.password = data.password;
+    
+    const { error } = await supabase.from('users').update(updateData).eq('id', id);
+    if (error) {
+        console.error("Supabase User Update Error:", error);
+        throw error;
+    }
     await this.refresh();
   }
 
@@ -525,7 +545,10 @@ class Store {
   }
 
   async updateUserProfile(id: string, data: any) {
-    await supabase.from('users').update({ name: data.name, email: data.email, avatar: data.avatar }).eq('id', id);
+    const updateData: any = { name: data.name, email: data.email, avatar: data.avatar };
+    if (data.password && data.password.trim() !== '') updateData.password = data.password;
+    const { error } = await supabase.from('users').update(updateData).eq('id', id);
+    if (error) throw error;
     await this.refresh();
   }
 

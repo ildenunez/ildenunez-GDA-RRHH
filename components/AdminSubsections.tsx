@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
+import { supabase } from '../services/supabase';
 
 // Estadísticas Inteligentes
 export const AdminStats = () => {
@@ -368,6 +369,11 @@ export const CommunicationsManager = () => {
     const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
     const [isSavingSmtp, setIsSavingSmtp] = useState(false);
     const [isSavingTemplates, setIsSavingTemplates] = useState(false);
+    
+    // Testing states
+    const [testEmail, setTestEmail] = useState('');
+    const [isTesting, setIsTesting] = useState(false);
+    const [testLog, setTestLog] = useState('');
 
     useEffect(() => {
         setSmtp(store.config.smtpSettings);
@@ -388,6 +394,34 @@ export const CommunicationsManager = () => {
             alert('Error al guardar SMTP');
         } finally {
             setIsSavingSmtp(false);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        if (!testEmail) return;
+        setIsTesting(true);
+        setTestLog('⏳ Iniciando prueba de conexión...');
+        try {
+            const { data, error } = await supabase.functions.invoke('send-test-email', {
+                body: {
+                    to: testEmail,
+                    config: smtp,
+                    subject: "Test de Conexión SMTP - GdA RRHH",
+                    message: "Esta es una prueba de configuración SMTP desde el panel de administración. Si lees esto, el servidor SMTP y la función Edge están vinculados correctamente."
+                }
+            });
+            
+            if (error) {
+                setTestLog(`❌ Error de Red / Invocación:\n${JSON.stringify(error, null, 2)}`);
+            } else if (data?.success) {
+                setTestLog('✅ Éxito: El correo ha sido aceptado por el servidor SMTP y enviado satisfactoriamente.');
+            } else {
+                setTestLog(`⚠️ Fallo de Servidor SMTP:\nError: ${data?.error || 'Desconocido'}\nDetalles: ${data?.details || 'No se proporcionaron detalles adicionales'}`);
+            }
+        } catch (e: any) {
+            setTestLog(`❌ Error Crítico de Aplicación:\n${e.message || e}`);
+        } finally {
+            setIsTesting(false);
         }
     };
 
@@ -419,7 +453,7 @@ export const CommunicationsManager = () => {
     };
 
     return (
-        <div className="max-w-2xl space-y-8 animate-fade-in">
+        <div className="max-w-2xl space-y-8 animate-fade-in pb-12">
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                     <h4 className="font-bold text-slate-800 flex items-center gap-2"><Server className="text-blue-500"/> Configuración Servidor SMTP</h4>
@@ -458,6 +492,37 @@ export const CommunicationsManager = () => {
                         {isSavingSmtp ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                         Guardar Configuración SMTP
                     </button>
+                </div>
+                
+                {/* Email Testing Section */}
+                <div className="mt-10 pt-8 border-t border-slate-100">
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest flex items-center gap-2"><Send size={12}/> Diagnóstico de Envío Real</h5>
+                    <p className="text-[11px] text-slate-500 mb-4 italic">Esta herramienta utiliza la configuración SMTP guardada arriba para enviar un correo de prueba.</p>
+                    <div className="flex gap-2 mb-4">
+                        <input 
+                            type="email" 
+                            className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all font-medium" 
+                            placeholder="Introduce email para recibir la prueba..." 
+                            value={testEmail}
+                            onChange={e => setTestEmail(e.target.value)}
+                        />
+                        <button 
+                            onClick={handleTestEmail}
+                            disabled={isTesting || !testEmail}
+                            className="bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                            {isTesting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Probar Envío
+                        </button>
+                    </div>
+                    {testLog && (
+                        <div className="bg-slate-900 rounded-2xl p-5 font-mono text-[10px] text-blue-300 overflow-hidden relative border border-slate-800 shadow-inner">
+                            <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
+                                <span className="flex items-center gap-2 text-white font-bold tracking-widest"><AlertCircle size={14} className="text-blue-400"/> DEBUG LOG / SALIDA DE CONSOLA</span>
+                                <button onClick={() => setTestLog('')} className="text-white/40 hover:text-white transition-colors" title="Limpiar log"><X size={14}/></button>
+                            </div>
+                            <pre className="whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">{testLog}</pre>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -499,7 +564,7 @@ export const CommunicationsManager = () => {
                                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-3 ml-1 tracking-widest">¿Quién recibe esta notificación?</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     <button type="button" onClick={() => toggleRecipient('worker')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.worker ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-200'}`}><UserCheck size={18} /><span className="text-[9px] font-black uppercase">Empleado</span></button>
-                                    <button type="button" onClick={() => toggleRecipient('supervisor')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.supervisor ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-purple-200'}`}><Briefcase size={18} /><span className="text-[9px] font-black uppercase">Supervisor</span></button>
+                                    <button type="button" onClick={() => toggleRecipient('supervisor')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.supervisor ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-200'}`}><Briefcase size={18} /><span className="text-[9px] font-black uppercase">Supervisor</span></button>
                                     <button type="button" onClick={() => toggleRecipient('admin')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.admin ? 'bg-slate-800 border-slate-800 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}><ShieldAlert size={18} /><span className="text-[9px] font-black uppercase">Admin</span></button>
                                 </div>
                             </div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info
@@ -249,7 +250,13 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
 export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
     const today = new Date().toISOString().split('T')[0];
     const upcoming = useMemo(() => {
-        let list = store.requests.filter((r: LeaveRequest) => r.status === RequestStatus.APPROVED && !store.isOvertimeRequest(r.typeId) && (r.endDate || r.startDate) >= today);
+        // Ajustamos el filtro para incluir OVERTIME_SPEND_DAYS (Canjes por días libres)
+        let list = store.requests.filter((r: LeaveRequest) => 
+            r.status === RequestStatus.APPROVED && 
+            (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) && 
+            (r.endDate || r.startDate) >= today
+        );
+
         if (user.role === Role.SUPERVISOR) {
             const myDeptIds = store.departments.filter(d => (d.supervisorIds || []).includes(user.id)).map(d => d.id);
             list = list.filter((r: LeaveRequest) => {
