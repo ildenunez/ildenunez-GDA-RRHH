@@ -210,7 +210,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen h-[100dvh] bg-slate-50 overflow-hidden">
-      <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-64 xl:w-60 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl`}>
+      <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-64 xl:w-60 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl print:hidden`}>
         <div className="p-6 xl:p-5 flex flex-col items-center border-b border-slate-800 shrink-0">
             <div className="w-20 h-20 xl:w-16 xl:h-16 bg-white rounded-xl p-2 mb-3 flex items-center justify-center"><img src={LOGO_URL} className="w-full h-full object-contain" /></div>
             <h1 className="text-xl xl:text-lg font-extrabold">GdA <span className="text-blue-500">RRHH</span></h1>
@@ -255,12 +255,12 @@ export default function App() {
       </aside>
 
       <main className="flex-1 md:ml-64 xl:ml-60 flex flex-col h-screen h-[100dvh]">
-        <header className="h-16 xl:h-14 bg-white border-b flex items-center justify-between px-6 xl:px-5 z-30 shrink-0">
+        <header className="h-16 xl:h-14 bg-white border-b flex items-center justify-between px-6 xl:px-5 z-30 shrink-0 print:hidden">
           <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-slate-600"><Menu/></button>
           <h2 className="text-lg xl:text-base font-semibold text-slate-800 capitalize">{activeTab.replace(/_/g, ' ')}</h2>
           <button onClick={() => {setModalInitialTab('absence'); setEditingRequest(null); setShowRequestModal(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 xl:py-1.5 rounded-lg text-sm xl:text-xs font-medium flex items-center gap-2 shadow-lg"><Plus size={16} /> Nueva Solicitud</button>
         </header>
-        <div className="flex-1 overflow-auto p-4 md:p-8 xl:p-6 2xl:p-8">
+        <div className={`flex-1 overflow-auto p-4 md:p-8 xl:p-6 2xl:p-8 ${viewingRequest ? 'print:hidden' : ''}`}>
            <ErrorBoundary>
              {activeTab === 'dashboard' && <Dashboard user={user} onNewRequest={t => {setModalInitialTab(t); setShowRequestModal(true);}} onEditRequest={r => {setEditingRequest(r); setShowRequestModal(true);}} onViewRequest={setViewingRequest} />}
              {activeTab === 'calendar' && <CalendarView user={user} />}

@@ -15,6 +15,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
   // Buscar quién resolvió la solicitud
   const approver = request.resolvedBy ? store.users.find(u => u.id === request.resolvedBy) : null;
 
+  // Trazabilidad de las horas vinculadas a registros específicos
   const usageDetails = request.overtimeUsage?.map(usage => {
       const sourceReq = store.requests.find(r => r.id === usage.requestId);
       return {
@@ -22,15 +23,19 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
           sourceDate: sourceReq?.startDate,
           sourceReason: sourceReq?.reason
       };
-  });
+  }) || [];
+
+  // Calcular si hay horas que provienen del saldo histórico (no vinculadas a un ID de solicitud)
+  const totalTracedHours = usageDetails.reduce((sum, u) => sum + u.hoursUsed, 0);
+  const untracedHours = Math.max(0, (request.hours || 0) - totalTracedHours);
 
   const handlePrint = () => {
       window.print();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm print:p-0 print:bg-white print:items-start">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
+    <div className="fixed inset-0 bg-black/60 flex justify-center items-start z-[150] p-4 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:items-start print:static print:block">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up my-8 print:my-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
         
         {/* Header (No Print Actions) */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:hidden">
@@ -152,7 +157,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
             )}
 
             {/* Trazabilidad de Horas (Si aplica) */}
-            {usageDetails && usageDetails.length > 0 && (
+            {((usageDetails && usageDetails.length > 0) || untracedHours > 0) && (
                 <div className="mb-8">
                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Trazabilidad de Horas Consumidas</h3>
                      <table className="w-full text-sm text-left">
@@ -171,7 +176,21 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                                      <td className="p-2 text-right font-mono font-bold">{u.hoursUsed}h</td>
                                  </tr>
                              ))}
+                             {/* Fila para completar las horas que vienen del saldo histórico */}
+                             {untracedHours > 0 && (
+                                 <tr className="bg-blue-50/30">
+                                     <td className="p-2 text-blue-600 font-medium italic">Histórico</td>
+                                     <td className="p-2 text-slate-500 italic text-xs">Saldo acumulado anterior o ajustes de administración</td>
+                                     <td className="p-2 text-right font-mono font-bold text-blue-700">{untracedHours}h</td>
+                                 </tr>
+                             )}
                          </tbody>
+                         <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                             <tr>
+                                 <td colSpan={2} className="p-2 text-right text-slate-600 uppercase text-[10px]">Suma Total del Desglose:</td>
+                                 <td className="p-2 text-right font-mono text-slate-900">{(totalTracedHours + untracedHours)}h</td>
+                             </tr>
+                         </tfoot>
                      </table>
                 </div>
             )}
