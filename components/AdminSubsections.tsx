@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
@@ -317,7 +317,7 @@ export const EPIManager = () => {
                     <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                         <div className="flex justify-between items-start mb-4">
                             <div className="bg-orange-50 p-2 rounded-lg text-orange-600"><HardHat size={20}/></div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => setEditingPPE(p)} className="p-2 text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
                                 <button onClick={() => store.deletePPEType(p.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
                             </div>
@@ -588,14 +588,174 @@ export const CommunicationsManager = () => {
 
 // Consultas de Ausencias
 export const AbsenceQueryManager = () => {
+    const [start, setStart] = useState('');
+    const [end, setEnd] = useState('');
+    const [results, setResults] = useState<any[]>([]);
+    const [hasSearched, setHasSearched] = useState(false);
+
+    const handleQuery = () => {
+        if (!start || !end) {
+            alert("Por favor, selecciona un rango de fechas completo.");
+            return;
+        }
+        
+        const filtered = store.requests.filter(req => {
+            // Solo ausencias aprobadas
+            if (req.status !== RequestStatus.APPROVED) return false;
+            
+            // EXCLUIR REGULARIZACIONES
+            if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
+            
+            // Excluir registros que son puramente de horas extra (a menos que sea canje por días)
+            const isPureOvertime = store.isOvertimeRequest(req.typeId);
+            const isDayOffExchange = req.typeId === RequestType.OVERTIME_SPEND_DAYS;
+            
+            // Queremos: Bajas médicas, Vacaciones, Asuntos Propios, Ausencias justificables y Canjes por días
+            if (isPureOvertime && !isDayOffExchange) return false;
+            
+            const rStart = req.startDate.split('T')[0];
+            const rEnd = (req.endDate || req.startDate).split('T')[0];
+            
+            // Lógica de solapamiento de fechas
+            return rStart <= end && rEnd >= start;
+        }).map(req => {
+            const u = store.users.find(usr => usr.id === req.userId);
+            return { ...req, user: u };
+        });
+
+        setResults(filtered);
+        setHasSearched(true);
+    };
+
+    const handlePrint = () => {
+        window.print();
+    };
+
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex gap-4">
-                <input type="date" className="p-3 bg-white border border-slate-200 rounded-xl text-sm" />
-                <input type="date" className="p-3 bg-white border border-slate-200 rounded-xl text-sm" />
-                <button className="px-6 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg">Consultar</button>
+            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-wrap gap-4 items-end print:hidden">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Inicial</label>
+                    <input 
+                        type="date" 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
+                        value={start} 
+                        onChange={e => setStart(e.target.value)} 
+                    />
+                </div>
+                <div className="flex-1 min-w-[200px]">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Final</label>
+                    <input 
+                        type="date" 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
+                        value={end} 
+                        onChange={e => setEnd(e.target.value)} 
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={handleQuery} 
+                        className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+                    >
+                        <Search size={18}/> Consultar
+                    </button>
+                    {hasSearched && results.length > 0 && (
+                        <button 
+                            onClick={handlePrint} 
+                            className="px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                        >
+                            <Printer size={18}/> Imprimir
+                        </button>
+                    )}
+                </div>
             </div>
-            <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-400 italic">No hay resultados en el rango seleccionado.</div>
+
+            {hasSearched && results.length > 0 ? (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in-up">
+                    <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center print:bg-white">
+                        <h4 className="font-bold text-slate-800">Informe de Ausencias y Bajas</h4>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Rango: {new Date(start).toLocaleDateString()} al {new Date(end).toLocaleDateString()}
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                                <tr>
+                                    <th className="px-6 py-4">Empleado / Departamento</th>
+                                    <th className="px-6 py-4">Tipo de Ausencia</th>
+                                    <th className="px-6 py-4">Periodo Completo</th>
+                                    <th className="px-6 py-4 text-center">Días en Rango</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {results.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => {
+                                    // Calculamos el solapamiento real para mostrar los días ausentes DENTRO del rango consultado
+                                    const rStart = req.startDate.split('T')[0];
+                                    const rEnd = (req.endDate || req.startDate).split('T')[0];
+                                    
+                                    const overlapStartStr = rStart > start ? rStart : start;
+                                    const overlapEndStr = rEnd < end ? rEnd : end;
+                                    
+                                    const d1 = new Date(overlapStartStr);
+                                    const d2 = new Date(overlapEndStr);
+                                    d1.setHours(0,0,0,0);
+                                    d2.setHours(0,0,0,0);
+                                    
+                                    const daysInRange = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                    
+                                    return (
+                                        <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <img src={req.user?.avatar} className="w-8 h-8 rounded-full border border-slate-100 shadow-sm" />
+                                                    <div>
+                                                        <div className="font-bold text-slate-800">{req.user?.name || 'Desconocido'}</div>
+                                                        <div className="text-[10px] text-slate-400 font-black uppercase">
+                                                            {store.departments.find(d => d.id === req.user?.departmentId)?.name}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-lg font-bold text-[10px] uppercase border ${
+                                                    req.typeId === RequestType.SICKNESS 
+                                                        ? 'bg-red-50 text-red-600 border-red-100' 
+                                                        : req.typeId === RequestType.OVERTIME_SPEND_DAYS 
+                                                            ? 'bg-purple-50 text-purple-600 border-purple-100'
+                                                            : 'bg-blue-50 text-blue-600 border-blue-100'
+                                                }`}>
+                                                    {store.getTypeLabel(req.typeId)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-600 font-medium">
+                                                {new Date(req.startDate).toLocaleDateString()} {req.endDate ? `- ${new Date(req.endDate).toLocaleDateString()}` : ''}
+                                            </td>
+                                            <td className="px-6 py-4 text-center font-black text-blue-700 bg-blue-50/30">
+                                                {daysInRange}d
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                hasSearched && (
+                    <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-400 italic animate-fade-in">
+                        <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} />
+                        No se han encontrado ausencias aprobadas o bajas en el rango seleccionado.
+                    </div>
+                )
+            )}
+            
+            {!hasSearched && (
+                <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-300 italic flex flex-col items-center gap-4">
+                    <Calendar size={64} className="opacity-10" />
+                    <p className="max-w-xs mx-auto">Selecciona un rango de fechas arriba para generar el informe de personal ausente o de baja.</p>
+                </div>
+            )}
         </div>
     );
 };
