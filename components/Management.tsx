@@ -295,8 +295,38 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                                     </td>
                                     <td className="px-6 py-4">
                                         {conflicts.length > 0 ? (
-                                            <span className="flex items-center gap-1 text-red-600 font-black text-[10px] uppercase bg-red-50 px-2 py-1 rounded-lg border border-red-100 w-fit"><AlertTriangle size={12}/> {conflicts.length} Coincidencias</span>
-                                        ) : <span className="text-green-600 font-bold text-[10px] uppercase bg-green-50 px-2 py-1 rounded-lg">Sin conflictos</span>}
+                                            <div className="flex flex-col gap-1.5 max-w-[220px]">
+                                                <span className="flex items-center gap-1 text-red-600 font-black text-[10px] uppercase bg-red-50 px-2 py-1 rounded-lg border border-red-100 w-fit">
+                                                    <AlertTriangle size={12}/> {conflicts.length} Coincidencias
+                                                </span>
+                                                <div className="space-y-1">
+                                                    {conflicts.map(other => {
+                                                        const otherUser = store.users.find(usr => usr.id === other.userId);
+                                                        // Cálculo de fechas de solapamiento
+                                                        const s1 = req.startDate.split('T')[0];
+                                                        const e1 = (req.endDate || req.startDate).split('T')[0];
+                                                        const s2 = other.startDate.split('T')[0];
+                                                        const e2 = (other.endDate || other.startDate).split('T')[0];
+                                                        
+                                                        const overlapStartStr = s1 > s2 ? s1 : s2;
+                                                        const overlapEndStr = e1 < e2 ? e1 : e2;
+                                                        
+                                                        const rangeStr = overlapStartStr === overlapEndStr 
+                                                            ? new Date(overlapStartStr).toLocaleDateString()
+                                                            : `${new Date(overlapStartStr).toLocaleDateString()} al ${new Date(overlapEndStr).toLocaleDateString()}`;
+
+                                                        return (
+                                                            <div key={other.id} className="text-[9px] bg-red-50/40 p-1.5 rounded-lg border border-red-100/50 leading-tight">
+                                                                <span className="font-black text-red-800 uppercase tracking-tighter">Coincide con: {otherUser?.name || 'Desconocido'}</span>
+                                                                <div className="text-slate-500 font-medium italic mt-0.5">Días: {rangeStr}</div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-green-600 font-bold text-[10px] uppercase bg-green-50 px-2 py-1 rounded-lg">Sin conflictos</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
                                         <div className="flex justify-end gap-2">

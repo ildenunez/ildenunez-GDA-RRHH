@@ -1,4 +1,3 @@
-
 import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
 import { User, Role, LeaveRequest, Notification } from './types';
@@ -30,7 +29,9 @@ import {
   HardHat,
   CalendarClock,
   AlertTriangle,
-  Truck
+  Truck,
+  ShieldAlert,
+  ArrowUpRight
 } from 'lucide-react';
 
 const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
@@ -142,6 +143,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const [unreadToModal, setUnreadToModal] = useState<Notification | null>(null);
+  const [showSupervisorReminder, setShowSupervisorReminder] = useState(false);
 
   useEffect(() => {
     const initApp = async () => {
@@ -175,6 +177,19 @@ export default function App() {
       }
     }
   }, [user, user?.id, store.notifications]);
+
+  // Nuevo efecto para mostrar el recordatorio de aprobaciones pendientes a supervisores/admins
+  useEffect(() => {
+    if (user && !initializing) {
+      const isSupervisor = user.role === Role.SUPERVISOR || user.role === Role.ADMIN;
+      if (isSupervisor) {
+        const pendingCount = store.getPendingApprovalsForUser(user.id).length;
+        if (pendingCount > 0) {
+          setShowSupervisorReminder(true);
+        }
+      }
+    }
+  }, [user, initializing]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
@@ -278,6 +293,38 @@ export default function App() {
         {showRequestModal && <RequestFormModal onClose={() => { setShowRequestModal(false); store.refresh(); }} user={user} initialTab={modalInitialTab} editingRequest={editingRequest} />}
         {viewingRequest && <RequestDetailModal request={viewingRequest} onClose={() => setViewingRequest(null)} />}
         {unreadToModal && <UnreadNotificationsModal notification={unreadToModal} onClose={() => setUnreadToModal(null)} />}
+        
+        {/* Modal Recordatorio para Supervisores */}
+        {showSupervisorReminder && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-scale-in border border-blue-100">
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <ShieldAlert size={40} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2">Tareas Pendientes</h3>
+                <p className="text-slate-500 mb-8">
+                  Hola <span className="font-bold text-slate-700">{user.name}</span>, tienes <span className="text-blue-600 font-black text-lg">{pendingCount}</span> solicitudes de tu equipo esperando ser revisadas.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => { setShowSupervisorReminder(false); handleTabChange('approvals'); }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 group"
+                  >
+                    Ir a Aprobaciones
+                    <ArrowUpRight size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                  </button>
+                  <button 
+                    onClick={() => setShowSupervisorReminder(false)}
+                    className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors"
+                  >
+                    Revisar más tarde
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
