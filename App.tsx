@@ -144,6 +144,7 @@ export default function App() {
   
   const [unreadToModal, setUnreadToModal] = useState<Notification | null>(null);
   const [showSupervisorReminder, setShowSupervisorReminder] = useState(false);
+  const [reminderDismissed, setReminderDismissed] = useState(false);
 
   useEffect(() => {
     const initApp = async () => {
@@ -178,9 +179,9 @@ export default function App() {
     }
   }, [user, user?.id, store.notifications]);
 
-  // Nuevo efecto para mostrar el recordatorio de aprobaciones pendientes a supervisores/admins
+  // Efecto para mostrar el recordatorio de aprobaciones pendientes solo una vez por sesión
   useEffect(() => {
-    if (user && !initializing) {
+    if (user && !initializing && !reminderDismissed) {
       const isSupervisor = user.role === Role.SUPERVISOR || user.role === Role.ADMIN;
       if (isSupervisor) {
         const pendingCount = store.getPendingApprovalsForUser(user.id).length;
@@ -189,7 +190,7 @@ export default function App() {
         }
       }
     }
-  }, [user, initializing]);
+  }, [user, initializing, reminderDismissed]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
@@ -208,6 +209,7 @@ export default function App() {
   const handleLogout = () => {
       store.logout();
       setUser(null);
+      setReminderDismissed(false); // Reset para el próximo login
   };
 
   const isSupervisor = user.role === Role.SUPERVISOR || user.role === Role.ADMIN;
@@ -308,14 +310,14 @@ export default function App() {
                 </p>
                 <div className="flex flex-col gap-3">
                   <button 
-                    onClick={() => { setShowSupervisorReminder(false); handleTabChange('approvals'); }}
+                    onClick={() => { setShowSupervisorReminder(false); setReminderDismissed(true); handleTabChange('approvals'); }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 group"
                   >
                     Ir a Aprobaciones
                     <ArrowUpRight size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                   </button>
                   <button 
-                    onClick={() => setShowSupervisorReminder(false)}
+                    onClick={() => { setShowSupervisorReminder(false); setReminderDismissed(true); }}
                     className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors"
                   >
                     Revisar más tarde
