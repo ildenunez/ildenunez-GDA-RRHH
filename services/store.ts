@@ -56,7 +56,6 @@ class Store {
 
   async refresh() {
     try {
-        // OPTIMIZACIÓN: Lanzar todas las peticiones en paralelo para evitar el cuello de botella secuencial
         const [
             usersRes, deptsRes, reqsRes, leaveTypesRes, ppeTypesRes, 
             ppeReqsRes, newsRes, holidaysRes, shiftTypesRes, shiftAssignmentsRes,
@@ -298,7 +297,6 @@ class Store {
       const isOvertime = this.isOvertimeRequest(data.typeId);
       const finalHours = data.typeId === RequestType.WORKED_HOLIDAY ? 4 : data.hours;
 
-      // Si se crea aprobada directamente, guardar quién la creó/aprobó
       const finalResolvedBy = status === RequestStatus.APPROVED ? this.currentUser?.id : null;
 
       const { data: newReqData } = await supabase.from('requests').insert({
@@ -381,7 +379,6 @@ class Store {
       if (!oldReq) return;
 
       const isOvertime = this.isOvertimeRequest(oldReq.typeId);
-      // Garantía: Si adminId no llega, forzamos el ID del usuario logueado en el store
       const finalAdminId = adminId || this.currentUser?.id;
 
       if (!finalAdminId) {
@@ -679,14 +676,12 @@ class Store {
   }
   
   async updatePPEStock(id: string, stock: Record<string, number>) {
-    // OPTIMISTIC UPDATE: Actualizar localmente primero para respuesta instantánea
     const idx = this.config.ppeTypes.findIndex(t => t.id === id);
     if (idx !== -1) {
         this.config.ppeTypes[idx].stock = stock;
         this.notify();
     }
     await supabase.from('ppe_types').update({ stock }).eq('id', id);
-    // Refresh en segundo plano sin esperar para no bloquear la UI
     this.refresh();
   }
 
@@ -705,14 +700,13 @@ class Store {
     await this.refresh();
   }
 
-  async deliverPPERequest(id: string) {
+  async deliverPPERequest(id: string, quantity: number = 1) {
     const req = this.config.ppeRequests.find(p => p.id === id);
     if (req) {
         const type = this.config.ppeTypes.find(t => t.id === req.typeId);
         if (type && type.stock && type.stock[req.size] !== undefined) {
             const newStock = { ...type.stock };
-            newStock[req.size] = Math.max(0, newStock[req.size] - 1);
-            // Actualización optimista local antes de Supabase
+            newStock[req.size] = Math.max(0, (newStock[req.size] || 0) - quantity);
             type.stock = newStock;
             this.notify();
             await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);
@@ -778,7 +772,7 @@ class Store {
     await this.refresh();
   }
 
-  async updateDriverPPEStatus(id: string, status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO') {
+  async updateDriverPPEStatus(id: string, status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO', quantity: number = 1) {
     const data: any = { status };
     if (status === 'SOLICITADO') data.requested_date = new Date().toISOString();
     if (status === 'ENTREGADO') {
@@ -788,8 +782,7 @@ class Store {
             const type = this.config.ppeTypes.find(t => t.id === req.typeId);
             if (type && type.stock && type.stock[req.size] !== undefined) {
                 const newStock = { ...type.stock };
-                newStock[req.size] = Math.max(0, newStock[req.size] - 1);
-                // Optimización: actualización local
+                newStock[req.size] = Math.max(0, (newStock[req.size] || 0) - quantity);
                 type.stock = newStock;
                 this.notify();
                 await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);

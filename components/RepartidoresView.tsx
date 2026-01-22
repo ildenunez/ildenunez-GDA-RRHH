@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { store } from '../services/store';
 import { User, Truck as TruckIcon, Driver, DriverPPE, Role, Truck as TruckType } from '../types';
@@ -28,7 +27,6 @@ interface RepartidoresViewProps {
   user: User;
 }
 
-// Fixed DriverRow to handle React props properly and avoid the 'key' error
 interface DriverRowProps {
     driver: Driver;
     driverPPE: DriverPPE[];
@@ -74,7 +72,6 @@ const DriverRow: React.FC<DriverRowProps> = ({ driver, driverPPE, getPpeTypeName
                 </div>
             </div>
             
-            {/* Mini Listado de EPIs recientes del repartidor */}
             {driverPPE.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-50 space-y-1">
                     {driverPPE.slice(0, 2).map(ppe => (
@@ -197,10 +194,7 @@ const DriverPPEQuantityReportModal: React.FC<{ onClose: () => void, ppeRequests:
     const handlePrint = () => window.print();
 
     const summaryData = useMemo(() => {
-        // Solo pendientes y solicitados
         const filtered = ppeRequests.filter(p => p.status !== 'ENTREGADO');
-        
-        // Agrupar por tipo y luego por talla
         const groups: Record<string, Record<string, number>> = {};
         
         filtered.forEach(p => {
@@ -294,8 +288,8 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
   const [activeSubTab, setActiveSubTab] = useState<'flota' | 'epis'>('flota');
   const [expandedTruck, setExpandedTruck] = useState<string | null>(null);
   const [showAddTruck, setShowAddTruck] = useState(false);
-  const [showAddDriver, setShowAddDriver] = useState<string | null>(null); // truckId
-  const [showAddPPE, setShowAddPPE] = useState<string | null>(null); // driverId
+  const [showAddDriver, setShowAddDriver] = useState<string | null>(null);
+  const [showAddPPE, setShowAddPPE] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [showQtyReport, setShowQtyReport] = useState(false);
   const [newTruckName, setNewTruckName] = useState('');
@@ -338,11 +332,21 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
       alert('EPI registrado correctamente.');
   };
 
+  const handleDeliver = async (reqId: string) => {
+      const qtyStr = window.prompt('Indique la cantidad de unidades entregadas al repartidor:', '1');
+      if (qtyStr === null) return;
+      const qty = parseInt(qtyStr);
+      if (isNaN(qty) || qty <= 0) {
+          alert('Cantidad no válida.');
+          return;
+      }
+      await store.updateDriverPPEStatus(reqId, 'ENTREGADO', qty);
+  };
+
   const getPpeTypeName = (id: string) => store.config.ppeTypes.find(t => t.id === id)?.name || id;
 
   return (
     <div className="space-y-6 animate-fade-in">
-        {/* Cabecera y Tabs */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
                 <button 
@@ -398,7 +402,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             </div>
         </div>
 
-        {/* Contenido Principal */}
         <div className="min-h-[500px]">
             {activeSubTab === 'flota' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -519,7 +522,7 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
                                                     )}
                                                     {req.status !== 'ENTREGADO' && (
                                                         <button 
-                                                            onClick={() => store.updateDriverPPEStatus(req.id, 'ENTREGADO')}
+                                                            onClick={() => handleDeliver(req.id)}
                                                             className="bg-slate-900 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-black"
                                                         >
                                                             Entregar
@@ -543,7 +546,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             )}
         </div>
 
-        {/* Modal Añadir Camión */}
         {showAddTruck && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-scale-in">
@@ -565,7 +567,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             </div>
         )}
 
-        {/* Modal Añadir Repartidor */}
         {showAddDriver && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-scale-in">
@@ -587,7 +588,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             </div>
         )}
 
-        {/* Modal Añadir EPI a Repartidor */}
         {showAddPPE && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-scale-in">
@@ -637,7 +637,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             </div>
         )}
 
-        {/* Modal de Informe de EPIs Pendientes */}
         {showReport && (
             <DriverPPEReportModal 
                 onClose={() => setShowReport(false)} 
@@ -648,7 +647,6 @@ const RepartidoresView: React.FC<RepartidoresViewProps> = ({ user }) => {
             />
         )}
 
-        {/* Modal de Resumen de Cantidades */}
         {showQtyReport && (
             <DriverPPEQuantityReportModal 
                 onClose={() => setShowQtyReport(false)} 

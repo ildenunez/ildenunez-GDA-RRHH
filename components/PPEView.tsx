@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { User, Role, PPERequest } from '../types';
 import { store } from '../services/store';
@@ -14,7 +13,8 @@ import {
   Filter, 
   BarChart3, 
   Printer, 
-  X 
+  X,
+  ChevronRight
 } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 import PPEReportModal from './PPEReportModal';
@@ -27,10 +27,7 @@ const PPEQuantityReportModal: React.FC<{ onClose: () => void, ppeRequests: PPERe
     const handlePrint = () => window.print();
 
     const summaryData = useMemo(() => {
-        // Solo pendientes y solicitados
         const filtered = ppeRequests.filter(p => p.status !== 'ENTREGADO');
-        
-        // Agrupar por tipo y luego por talla
         const groups: Record<string, Record<string, number>> = {};
         
         filtered.forEach(p => {
@@ -127,11 +124,8 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   const [reportFilter, setReportFilter] = useState<'PENDIENTE' | 'SOLICITADO'>('PENDIENTE');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
 
-  // Logic: Admin sees all, Supervisor sees team + own, Worker sees own
   const requests = store.config.ppeRequests.filter(req => {
       const reqUser = store.users.find(u => u.id === req.userId);
-      
-      // Primero, determinar si la solicitud está en el alcance del usuario actual
       let inScope = false;
       if (user.role === Role.ADMIN) {
           inScope = true;
@@ -145,14 +139,31 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
       }
 
       if (!inScope) return false;
-
-      // Segundo, aplicar el filtro de departamento si está seleccionado (solo para admins)
       if (user.role === Role.ADMIN && selectedDeptId) {
           return reqUser?.departmentId === selectedDeptId;
       }
-
       return true;
   });
+
+  // Agrupación por empleado para el modo árbol
+  const groupedByEmployee = useMemo(() => {
+    const groups: Record<string, PPERequest[]> = {};
+    requests.forEach(req => {
+      if (!groups[req.userId]) groups[req.userId] = [];
+      groups[req.userId].push(req);
+    });
+    
+    return Object.entries(groups).map(([userId, userRequests]) => {
+      const u = store.users.find(u => u.id === userId);
+      return {
+        userId,
+        userName: u?.name || 'Desconocido',
+        userAvatar: u?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u?.name || 'U')}`,
+        deptName: store.departments.find(d => d.id === u?.departmentId)?.name || 'Sin Dpto.',
+        userRequests: userRequests.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      };
+    }).sort((a, b) => a.userName.localeCompare(b.userName));
+  }, [requests]);
 
   const handleMarkRequested = async (reqId: string) => {
       if(confirm('¿Marcar este EPI como pedido al proveedor? Pasará a estado "SOLICITADO".')) {
@@ -161,9 +172,14 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   };
 
   const handleDeliver = async (reqId: string) => {
-      if(confirm('¿Confirmar entrega de EPI al empleado?')) {
-          await store.deliverPPERequest(reqId);
+      const qtyStr = window.prompt('Indique la cantidad de unidades que se entregan al empleado:', '1');
+      if (qtyStr === null) return;
+      const qty = parseInt(qtyStr);
+      if (isNaN(qty) || qty <= 0) {
+          alert('Cantidad no válida.');
+          return;
       }
+      await store.deliverPPERequest(reqId, qty);
   };
 
   const handleDelete = async (reqId: string) => {
@@ -173,7 +189,6 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
   };
 
   const getTypeName = (id: string) => store.config.ppeTypes.find(t => t.id === id)?.name || id;
-  const getUserName = (id: string) => store.users.find(u => u.id === id)?.name || 'Usuario desconocido';
   
   const isManager = user.role === Role.ADMIN || user.role === Role.SUPERVISOR;
 
@@ -191,7 +206,6 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                    </div>
                </div>
                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                   {/* Filtro de Departamento para Admins */}
                    {user.role === Role.ADMIN && (
                        <div className="relative flex items-center mr-2">
                            <Filter className="absolute left-3 text-slate-400 w-4 h-4" />
@@ -250,8 +264,7 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                        <table className="w-full text-sm text-left">
                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
                                <tr>
-                                   <th className="px-6 py-4">Empleado</th>
-                                   <th className="px-6 py-4">Material</th>
+                                   <th className="px-6 py-4">Empleado / Material</th>
                                    <th className="px-6 py-4">Talla</th>
                                    <th className="px-6 py-4">Fecha Solicitud</th>
                                    <th className="px-6 py-4">Estado</th>
@@ -259,64 +272,88 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-100">
-                               {requests.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(req => (
-                                   <tr key={req.id} className="hover:bg-slate-50">
-                                       <td className="px-6 py-4 font-medium text-slate-800">{getUserName(req.userId)}</td>
-                                       <td className="px-6 py-4">{getTypeName(req.typeId)}</td>
-                                       <td className="px-6 py-4">
-                                           <span className="bg-slate-100 px-2 py-1 rounded font-mono font-bold">{req.size}</span>
-                                       </td>
-                                       <td className="px-6 py-4 text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</td>
-                                       <td className="px-6 py-4">
-                                           {req.status === 'ENTREGADO' ? (
-                                               <div className="flex flex-col">
-                                                   <span className="flex items-center gap-1 text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded-full w-fit">
-                                                       <Check size={12}/> ENTREGADO
-                                                   </span>
-                                                   <span className="text-[10px] text-slate-400 mt-1">
-                                                       {req.deliveryDate ? new Date(req.deliveryDate).toLocaleDateString() : '-'}
+                               {groupedByEmployee.map(group => (
+                                   <React.Fragment key={group.userId}>
+                                       {/* Fila del Empleado (Nodo Padre) */}
+                                       <tr className="bg-slate-50/50">
+                                           <td colSpan={isManager ? 5 : 4} className="px-6 py-3 border-y border-slate-100">
+                                               <div className="flex items-center gap-3">
+                                                   <img src={group.userAvatar} className="w-8 h-8 rounded-full border border-white shadow-sm object-cover" />
+                                                   <div>
+                                                       <span className="font-black text-slate-900 text-sm uppercase tracking-tight">{group.userName}</span>
+                                                       <span className="ml-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{group.deptName}</span>
+                                                   </div>
+                                                   <span className="ml-auto bg-white px-2 py-0.5 rounded-full border border-slate-200 text-[10px] font-black text-slate-500">
+                                                       {group.userRequests.length} Solicitud{group.userRequests.length !== 1 ? 'es' : ''}
                                                    </span>
                                                </div>
-                                           ) : req.status === 'SOLICITADO' ? (
-                                               <span className="flex items-center gap-1 text-blue-600 font-bold text-xs bg-blue-50 px-2 py-1 rounded-full w-fit">
-                                                   <ShoppingCart size={12}/> SOLICITADO
-                                               </span>
-                                           ) : (
-                                               <span className="flex items-center gap-1 text-orange-600 font-bold text-xs bg-orange-50 px-2 py-1 rounded-full w-fit">
-                                                   <Clock size={12}/> PENDIENTE
-                                               </span>
-                                           )}
-                                       </td>
-                                       {isManager && (
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    {req.status === 'PENDIENTE' && (
-                                                        <button 
-                                                            onClick={() => handleMarkRequested(req.id)}
-                                                            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
-                                                        >
-                                                            Solicitar
-                                                        </button>
-                                                    )}
-                                                    {req.status !== 'ENTREGADO' && (
-                                                        <button 
-                                                            onClick={() => handleDeliver(req.id)}
-                                                            className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
-                                                        >
-                                                            Entregar
-                                                        </button>
-                                                    )}
-                                                    <button 
-                                                        onClick={() => handleDelete(req.id)}
-                                                        className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
-                                                        title="Eliminar solicitud"
-                                                    >
-                                                        <Trash2 size={16}/>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                       )}
-                                   </tr>
+                                           </td>
+                                       </tr>
+                                       {/* Solicitudes del Empleado (Desglose) */}
+                                       {group.userRequests.map(req => (
+                                           <tr key={req.id} className="hover:bg-slate-50/30 transition-colors">
+                                               <td className="px-6 py-4 pl-12">
+                                                   <div className="flex items-center gap-2">
+                                                       <ChevronRight size={14} className="text-slate-300" />
+                                                       <span className="font-medium text-slate-700">{getTypeName(req.typeId)}</span>
+                                                   </div>
+                                               </td>
+                                               <td className="px-6 py-4">
+                                                   <span className="bg-slate-100 px-2 py-1 rounded font-mono font-bold text-xs">{req.size}</span>
+                                               </td>
+                                               <td className="px-6 py-4 text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</td>
+                                               <td className="px-6 py-4">
+                                                   {req.status === 'ENTREGADO' ? (
+                                                       <div className="flex flex-col">
+                                                           <span className="flex items-center gap-1 text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded-full w-fit">
+                                                               <Check size={12}/> ENTREGADO
+                                                           </span>
+                                                           <span className="text-[10px] text-slate-400 mt-1">
+                                                               {req.deliveryDate ? new Date(req.deliveryDate).toLocaleDateString() : '-'}
+                                                           </span>
+                                                       </div>
+                                                   ) : req.status === 'SOLICITADO' ? (
+                                                       <span className="flex items-center gap-1 text-blue-600 font-bold text-xs bg-blue-50 px-2 py-1 rounded-full w-fit">
+                                                           <ShoppingCart size={12}/> SOLICITADO
+                                                       </span>
+                                                   ) : (
+                                                       <span className="flex items-center gap-1 text-orange-600 font-bold text-xs bg-orange-50 px-2 py-1 rounded-full w-fit">
+                                                           <Clock size={12}/> PENDIENTE
+                                                       </span>
+                                                   )}
+                                               </td>
+                                               {isManager && (
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            {req.status === 'PENDIENTE' && (
+                                                                <button 
+                                                                    onClick={() => handleMarkRequested(req.id)}
+                                                                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                                                                >
+                                                                    Solicitar
+                                                                </button>
+                                                            )}
+                                                            {req.status !== 'ENTREGADO' && (
+                                                                <button 
+                                                                    onClick={() => handleDeliver(req.id)}
+                                                                    className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                                                                >
+                                                                    Entregar
+                                                                </button>
+                                                            )}
+                                                            <button 
+                                                                onClick={() => handleDelete(req.id)}
+                                                                className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                                                                title="Eliminar solicitud"
+                                                            >
+                                                                <Trash2 size={16}/>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                               )}
+                                           </tr>
+                                       ))}
+                                   </React.Fragment>
                                ))}
                            </tbody>
                        </table>
