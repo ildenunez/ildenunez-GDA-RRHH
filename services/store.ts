@@ -56,49 +56,55 @@ class Store {
 
   async refresh() {
     try {
-        const { data: usersData } = await supabase.from('users').select('*');
-        const { data: deptsData } = await supabase.from('departments').select('*');
-        const { data: reqsData } = await supabase.from('requests').select('*');
-        const { data: typesData } = await supabase.from('leave_types').select('*');
-        const { data: ppeTypes } = await supabase.from('ppe_types').select('*');
-        const { data: ppeReqsData } = await supabase.from('ppe_requests').select('*');
-        const { data: newsData } = await supabase.from('news').select('*').order('created_at', { ascending: false });
-        const { data: holidayData } = await supabase.from('holidays').select('*');
-        const { data: shiftTypesData } = await supabase.from('shift_types').select('*');
-        const { data: assignmentsData } = await supabase.from('shift_assignments').select('*');
-        const { data: trucksData } = await supabase.from('trucks').select('*');
-        const { data: driversData } = await supabase.from('drivers').select('*');
-        const { data: driversPpeData } = await supabase.from('drivers_ppe').select('*');
-        
-        const { data: settingsRows } = await supabase.from('settings').select('*');
+        // OPTIMIZACIÓN: Lanzar todas las peticiones en paralelo para evitar el cuello de botella secuencial
+        const [
+            usersRes, deptsRes, reqsRes, leaveTypesRes, ppeTypesRes, 
+            ppeReqsRes, newsRes, holidaysRes, shiftTypesRes, shiftAssignmentsRes,
+            trucksRes, driversRes, driversPpeRes, settingsRes
+        ] = await Promise.all([
+            supabase.from('users').select('*'),
+            supabase.from('departments').select('*'),
+            supabase.from('requests').select('*'),
+            supabase.from('leave_types').select('*'),
+            supabase.from('ppe_types').select('*'),
+            supabase.from('ppe_requests').select('*'),
+            supabase.from('news').select('*').order('created_at', { ascending: false }),
+            supabase.from('holidays').select('*'),
+            supabase.from('shift_types').select('*'),
+            supabase.from('shift_assignments').select('*'),
+            supabase.from('trucks').select('*'),
+            supabase.from('drivers').select('*'),
+            supabase.from('drivers_ppe').select('*'),
+            supabase.from('settings').select('*')
+        ]);
 
-        if (usersData) this.users = this.mapUsersFromDB(usersData);
-        if (deptsData) this.departments = deptsData.map((d: any) => ({ 
+        if (usersRes.data) this.users = this.mapUsersFromDB(usersRes.data);
+        if (deptsRes.data) this.departments = deptsRes.data.map((d: any) => ({ 
             id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] 
         }));
-        if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
-        if (newsData) this.config.news = newsData;
-        if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ 
+        if (reqsRes.data) this.requests = this.mapRequestsFromDB(reqsRes.data);
+        if (newsRes.data) this.config.news = newsRes.data;
+        if (leaveTypesRes.data) this.config.leaveTypes = leaveTypesRes.data.map((t: any) => ({ 
             id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
-        if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ 
+        if (ppeTypesRes.data) this.config.ppeTypes = ppeTypesRes.data.map((p: any) => ({ 
             id: p.id, name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
         }));
-        if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, type_id: p.type_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
-        if (holidayData) this.config.holidays = holidayData;
-        if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
-        if (assignmentsData) this.config.shiftAssignments = assignmentsData.map((a: any) => ({ 
+        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: p.id, userId: p.user_id, type_id: p.type_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        if (holidaysRes.data) this.config.holidays = holidaysRes.data;
+        if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data;
+        if (shiftAssignmentsRes.data) this.config.shiftAssignments = shiftAssignmentsRes.data.map((a: any) => ({ 
             id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id 
         }));
-        if (trucksData) this.config.trucks = trucksData;
-        if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
-        if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
+        if (trucksRes.data) this.config.trucks = trucksRes.data;
+        if (driversRes.data) this.config.drivers = driversRes.data.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
+        if (driversPpeRes.data) this.config.driversPpe = driversPpeRes.data.map((p: any) => ({ 
             id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
-        if (settingsRows) {
-            const smtpRow = settingsRows.find(r => r.key === 'smtp');
-            const templatesRow = settingsRows.find(r => r.key === 'email_templates');
+        if (settingsRes.data) {
+            const smtpRow = settingsRes.data.find(r => r.key === 'smtp');
+            const templatesRow = settingsRes.data.find(r => r.key === 'email_templates');
 
             if (smtpRow && smtpRow.value) {
                 this.config.smtpSettings = {
@@ -673,8 +679,15 @@ class Store {
   }
   
   async updatePPEStock(id: string, stock: Record<string, number>) {
+    // OPTIMISTIC UPDATE: Actualizar localmente primero para respuesta instantánea
+    const idx = this.config.ppeTypes.findIndex(t => t.id === id);
+    if (idx !== -1) {
+        this.config.ppeTypes[idx].stock = stock;
+        this.notify();
+    }
     await supabase.from('ppe_types').update({ stock }).eq('id', id);
-    await this.refresh();
+    // Refresh en segundo plano sin esperar para no bloquear la UI
+    this.refresh();
   }
 
   async deletePPEType(id: string) {
@@ -699,6 +712,9 @@ class Store {
         if (type && type.stock && type.stock[req.size] !== undefined) {
             const newStock = { ...type.stock };
             newStock[req.size] = Math.max(0, newStock[req.size] - 1);
+            // Actualización optimista local antes de Supabase
+            type.stock = newStock;
+            this.notify();
             await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);
         }
     }
@@ -773,6 +789,9 @@ class Store {
             if (type && type.stock && type.stock[req.size] !== undefined) {
                 const newStock = { ...type.stock };
                 newStock[req.size] = Math.max(0, newStock[req.size] - 1);
+                // Optimización: actualización local
+                type.stock = newStock;
+                this.notify();
                 await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);
             }
         }

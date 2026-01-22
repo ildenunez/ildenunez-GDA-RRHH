@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { 
@@ -290,6 +289,13 @@ export const EPIManager = () => {
     const [view, setView] = useState<'catalog' | 'stock'>('catalog');
     const [editingPPE, setEditingPPE] = useState<PPEType | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [, setRefresh] = useState(0);
+
+    // Suscripción al store para refrescar la vista cuando cambie el stock en la base de datos
+    useEffect(() => {
+        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
+        return unsubscribe;
+    }, []);
 
     const handleSave = async () => {
         if (!editingPPE) return;
