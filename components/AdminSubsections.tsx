@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
@@ -284,8 +285,9 @@ export const HRConfigManager = () => {
     );
 };
 
-// Gestión de Catálogo de EPIs
+// Gestión de Catálogo de EPIs y Stock
 export const EPIManager = () => {
+    const [view, setView] = useState<'catalog' | 'stock'>('catalog');
     const [editingPPE, setEditingPPE] = useState<PPEType | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -301,34 +303,97 @@ export const EPIManager = () => {
         setIsSaving(false);
     };
 
+    const handleUpdateStock = async (typeId: string, size: string, newQty: number) => {
+        const type = store.config.ppeTypes.find(t => t.id === typeId);
+        if (type) {
+            const updatedStock = { ...(type.stock || {}) };
+            updatedStock[size] = Math.max(0, newQty);
+            await store.updatePPEStock(typeId, updatedStock);
+        }
+    };
+
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center px-2">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Catálogo de Protección (EPI)</h3>
-                <button 
-                    onClick={() => setEditingPPE({ id: 'new', name: '', sizes: ['S', 'M', 'L', 'XL'] })}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
-                >
-                    <Plus size={16}/> Nuevo Material
-                </button>
+        <div className="space-y-6 animate-fade-in pb-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl shrink-0">
+                    <button onClick={() => setView('catalog')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'catalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Catálogo</button>
+                    <button onClick={() => setView('stock')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'stock' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Control de Stock</button>
+                </div>
+                
+                {view === 'catalog' && (
+                    <button onClick={() => setEditingPPE({ id: 'new', name: '', sizes: ['S', 'M', 'L', 'XL'], stock: {} })} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20"><Plus size={16}/> Nuevo Material</button>
+                )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {store.config.ppeTypes.map(p => (
-                    <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="bg-orange-50 p-2 rounded-lg text-orange-600"><HardHat size={20}/></div>
-                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => setEditingPPE(p)} className="p-2 text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
-                                <button onClick={() => store.deletePPEType(p.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+
+            {view === 'catalog' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {store.config.ppeTypes.map(p => (
+                        <div key={p.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500 opacity-20"></div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="bg-orange-50 p-2 rounded-xl text-orange-600"><HardHat size={20}/></div>
+                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setEditingPPE(p)} className="p-2 text-slate-400 hover:text-blue-500 bg-slate-50 rounded-lg"><Edit2 size={16}/></button>
+                                    <button onClick={() => store.deletePPEType(p.id)} className="p-2 text-slate-400 hover:text-red-500 bg-slate-50 rounded-lg"><Trash2 size={16}/></button>
+                                </div>
+                            </div>
+                            <h4 className="font-bold text-slate-800 mb-4">{p.name}</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                                {p.sizes.map(s => (
+                                    <span key={s} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-black rounded border border-slate-100">{s}</span>
+                                ))}
                             </div>
                         </div>
-                        <h4 className="font-bold text-slate-800 mb-2">{p.name}</h4>
-                        <div className="flex flex-wrap gap-1.5">
-                            {p.sizes.map(s => <span key={s} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-bold rounded border border-slate-100">{s}</span>)}
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+                            <tr>
+                                <th className="px-6 py-4">Tipo de Material</th>
+                                <th className="px-6 py-4">Tallas y Existencias Disponibles</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {store.config.ppeTypes.map(p => (
+                                <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-6 py-4 font-bold text-slate-700">{p.name}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                            {p.sizes.map(size => {
+                                                const currentStock = p.stock?.[size] || 0;
+                                                return (
+                                                    <div key={size} className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm flex flex-col items-center">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase mb-2">Talla {size}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button 
+                                                                onClick={() => handleUpdateStock(p.id, size, currentStock - 1)}
+                                                                className="p-1 text-slate-400 hover:text-red-500 bg-slate-50 rounded transition-colors"
+                                                            >
+                                                                <Minus size={14}/>
+                                                            </button>
+                                                            <span className={`w-8 text-center font-black text-lg ${currentStock <= 0 ? 'text-red-600' : currentStock < 5 ? 'text-orange-600' : 'text-green-600'}`}>
+                                                                {currentStock}
+                                                            </span>
+                                                            <button 
+                                                                onClick={() => handleUpdateStock(p.id, size, currentStock + 1)}
+                                                                className="p-1 text-slate-400 hover:text-blue-500 bg-slate-50 rounded transition-colors"
+                                                            >
+                                                                <Plus size={14}/>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {editingPPE && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[130] p-4 backdrop-blur-sm">
@@ -342,11 +407,12 @@ export const EPIManager = () => {
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Tallas / Medidas (Separadas por comas)</label>
                                 <input 
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" 
                                     value={editingPPE.sizes.join(', ')} 
                                     onChange={e => setEditingPPE({...editingPPE, sizes: e.target.value.split(',').map(s => s.trim())})} 
                                     placeholder="Ej: S, M, L, XL o 38, 40, 42..."
                                 />
+                                <p className="text-[9px] text-slate-400 mt-2 italic px-1">Al añadir tallas nuevas, aparecerán con stock 0 en la sección de control.</p>
                             </div>
                             <div className="flex gap-3 pt-2">
                                 <button onClick={() => setEditingPPE(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancelar</button>
@@ -362,226 +428,60 @@ export const EPIManager = () => {
     );
 };
 
-// Comunicaciones (SMTP y Plantillas)
+// Gestión de Comunicaciones (Muro de anuncios, etc.)
 export const CommunicationsManager = () => {
-    const [smtp, setSmtp] = useState(store.config.smtpSettings);
-    const [templates, setTemplates] = useState(store.config.emailTemplates);
-    const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
-    const [isSavingSmtp, setIsSavingSmtp] = useState(false);
-    const [isSavingTemplates, setIsSavingTemplates] = useState(false);
-    
-    // Testing states
-    const [testEmail, setTestEmail] = useState('');
-    const [isTesting, setIsTesting] = useState(false);
-    const [testLog, setTestLog] = useState('');
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        setSmtp(store.config.smtpSettings);
-        setTemplates(store.config.emailTemplates);
-        const unsubscribe = store.subscribe(() => {
-            setSmtp(store.config.smtpSettings);
-            setTemplates(store.config.emailTemplates);
-        });
-        return unsubscribe;
-    }, []);
-
-    const handleSaveSmtp = async () => {
-        setIsSavingSmtp(true);
-        try {
-            await store.saveSmtpSettings(smtp);
-            alert('Configuración SMTP guardada correctamente');
-        } catch (e) {
-            alert('Error al guardar SMTP');
-        } finally {
-            setIsSavingSmtp(false);
-        }
-    };
-
-    const handleTestEmail = async () => {
-        if (!testEmail) return;
-        setIsTesting(true);
-        setTestLog('⏳ Iniciando prueba de conexión...');
-        try {
-            const { data, error } = await supabase.functions.invoke('send-test-email', {
-                body: {
-                    to: testEmail,
-                    config: smtp,
-                    subject: "Test de Conexión SMTP - GdA RRHH",
-                    message: "Esta es una prueba de configuración SMTP desde el panel de administración. Si lees esto, el servidor SMTP y la función Edge están vinculados correctamente."
-                }
-            });
-            
-            if (error) {
-                setTestLog(`❌ Error de Red / Invocación:\n${JSON.stringify(error, null, 2)}`);
-            } else if (data?.success) {
-                setTestLog('✅ Éxito: El correo ha sido aceptado por el servidor SMTP y enviado satisfactoriamente.');
-            } else {
-                setTestLog(`⚠️ Fallo de Servidor SMTP:\nError: ${data?.error || 'Desconocido'}\nDetalles: ${data?.details || 'No se proporcionaron detalles adicionales'}`);
-            }
-        } catch (e: any) {
-            setTestLog(`❌ Error Crítico de Aplicación:\n${e.message || e}`);
-        } finally {
-            setIsTesting(false);
-        }
-    };
-
-    const handleUpdateTemplate = async () => {
-        if (!editingTemplate) return;
-        setIsSavingTemplates(true);
-        try {
-            const newTemplates = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
-            await store.saveEmailTemplates(newTemplates);
-            setTemplates(newTemplates);
-            setEditingTemplate(null);
-            alert('Plantilla actualizada correctamente');
-        } catch (e) {
-            alert('Error al actualizar plantilla');
-        } finally {
-            setIsSavingTemplates(false);
-        }
-    };
-
-    const toggleRecipient = (key: 'admin' | 'supervisor' | 'worker') => {
-        if (!editingTemplate) return;
-        setEditingTemplate({
-            ...editingTemplate,
-            recipients: {
-                ...editingTemplate.recipients,
-                [key]: !editingTemplate.recipients[key]
-            }
-        });
+    const handleCreatePost = async () => {
+        if (!title.trim() || !content.trim()) return;
+        setIsSaving(true);
+        await store.createNewsPost(title, content, store.currentUser?.id || 'admin');
+        setTitle('');
+        setContent('');
+        setIsSaving(false);
     };
 
     return (
-        <div className="max-w-2xl space-y-8 animate-fade-in pb-12">
+        <div className="space-y-8 animate-fade-in">
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2"><Server className="text-blue-500"/> Configuración Servidor SMTP</h4>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Estado: {smtp.enabled ? 'Activo' : 'Inactivo'}</span>
-                        <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={smtp.enabled} onChange={e => setSmtp({...smtp, enabled: e.target.checked})} />
-                    </label>
-                </div>
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Megaphone size={20} className="text-blue-500"/> Crear Comunicado en el Muro</h4>
                 <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Host del Servidor</label>
-                            <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="ej: smtp.gmail.com" value={smtp.host} onChange={e => setSmtp({...smtp, host: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Puerto</label>
-                            <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="587" value={smtp.port} onChange={e => setSmtp({...smtp, port: parseInt(e.target.value) || 0})} />
-                        </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Título del Anuncio</label>
+                        <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Nueva política de vestuario..." />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Usuario / Email de Envío</label>
-                        <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="email@empresa.com" value={smtp.user} onChange={e => setSmtp({...smtp, user: e.target.value})} />
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Contenido del Mensaje</label>
+                        <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32" value={content} onChange={e => setContent(e.target.value)} placeholder="Escribe aquí el mensaje para todos los empleados..." />
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Contraseña de Aplicación</label>
-                        <div className="relative">
-                            <input type="password" px-3 className="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="••••••••" value={smtp.password || ''} onChange={e => setSmtp({...smtp, password: e.target.value})} />
-                            <Lock className="absolute left-3 top-3.5 text-slate-300" size={16}/>
-                        </div>
-                    </div>
-                    <button 
-                        onClick={handleSaveSmtp}
-                        disabled={isSavingSmtp}
-                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition-all flex justify-center items-center gap-2"
-                    >
-                        {isSavingSmtp ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                        Guardar Configuración SMTP
+                    <button onClick={handleCreatePost} disabled={isSaving} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2 transition-all">
+                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                        Publicar Anuncio
                     </button>
-                </div>
-                
-                {/* Email Testing Section */}
-                <div className="mt-10 pt-8 border-t border-slate-100">
-                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest flex items-center gap-2"><Send size={12}/> Diagnóstico de Envío Real</h5>
-                    <p className="text-[11px] text-slate-500 mb-4 italic">Esta herramienta utiliza la configuración SMTP guardada arriba para enviar un correo de prueba.</p>
-                    <div className="flex gap-2 mb-4">
-                        <input 
-                            type="email" 
-                            className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all font-medium" 
-                            placeholder="Introduce email para recibir la prueba..." 
-                            value={testEmail}
-                            onChange={e => setTestEmail(e.target.value)}
-                        />
-                        <button 
-                            onClick={handleTestEmail}
-                            disabled={isTesting || !testEmail}
-                            className="bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                        >
-                            {isTesting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Probar Envío
-                        </button>
-                    </div>
-                    {testLog && (
-                        <div className="bg-slate-900 rounded-2xl p-5 font-mono text-[10px] text-blue-300 overflow-hidden relative border border-slate-800 shadow-inner">
-                            <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
-                                <span className="flex items-center gap-2 text-white font-bold tracking-widest"><AlertCircle size={14} className="text-blue-400"/> DEBUG LOG / SALIDA DE CONSOLA</span>
-                                <button onClick={() => setTestLog('')} className="text-white/40 hover:text-white transition-colors" title="Limpiar log"><X size={14}/></button>
-                            </div>
-                            <pre className="whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">{testLog}</pre>
-                        </div>
-                    )}
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 px-2"><Mail className="text-blue-500"/> Plantillas de Notificación</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {templates.map(t => (
-                        <div key={t.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
-                            <div className="flex justify-between items-start mb-3">
-                                <div>
-                                    <h4 className="font-bold text-slate-800">{t.label}</h4>
-                                    <p className="text-[10px] text-slate-400 italic font-medium line-clamp-1">"{t.subject}"</p>
-                                </div>
-                                <button onClick={() => setEditingTemplate(t)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors bg-slate-50 rounded-lg"><Edit2 size={16}/></button>
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><History size={20} className="text-slate-400"/> Historial de Anuncios</h4>
+                <div className="space-y-4">
+                    {store.config.news.length === 0 ? (
+                        <p className="text-center text-slate-400 italic py-4">No hay anuncios publicados.</p>
+                    ) : store.config.news.map(post => (
+                        <div key={post.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-2xl border border-slate-100 group">
+                            <div className="flex-1">
+                                <h5 className="font-bold text-slate-800">{post.title}</h5>
+                                <p className="text-xs text-slate-500 line-clamp-2 mt-1">{post.content}</p>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase mt-2 block">{new Date(post.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <div className="flex gap-1.5 border-t border-slate-50 pt-3 mt-auto">
-                                {t.recipients?.worker && <span className="text-[8px] font-black uppercase bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded" title="Recibe el empleado">Emp</span>}
-                                {t.recipients?.supervisor && <span className="text-[8px] font-black uppercase bg-purple-50 text-purple-500 px-1.5 py-0.5 rounded" title="Recibe el supervisor">Sup</span>}
-                                {t.recipients?.admin && <span className="text-[8px] font-black uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded" title="Recibe el administrador">Adm</span>}
-                            </div>
+                            <button onClick={() => store.deleteNewsPost(post.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                                <Trash2 size={16}/>
+                            </button>
                         </div>
                     ))}
                 </div>
             </div>
-
-            {editingTemplate && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[130] p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-8 animate-scale-in max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-slate-800">Editar Plantilla</h3>
-                            <button onClick={() => setEditingTemplate(null)} className="p-2 hover:bg-slate-100 rounded-full"><X/></button>
-                        </div>
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Etiqueta Identificativa</label>
-                                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingTemplate.label} readOnly />
-                            </div>
-                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-3 ml-1 tracking-widest">¿Quién recibe esta notificación?</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button type="button" onClick={() => toggleRecipient('worker')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.worker ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-200'}`}><UserCheck size={18} /><span className="text-[9px] font-black uppercase">Empleado</span></button>
-                                    <button type="button" onClick={() => toggleRecipient('supervisor')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.supervisor ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-200'}`}><Briefcase size={18} /><span className="text-[9px] font-black uppercase">Supervisor</span></button>
-                                    <button type="button" onClick={() => toggleRecipient('admin')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTemplate.recipients?.admin ? 'bg-slate-800 border-slate-800 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}><ShieldAlert size={18} /><span className="text-[9px] font-black uppercase">Admin</span></button>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Asunto del Email</label>
-                                <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm" value={editingTemplate.subject} onChange={e => setEditingTemplate({...editingTemplate, subject: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Cuerpo del Mensaje (HTML compatible)</label>
-                                <textarea className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm h-32" value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} />
-                                <p className="text-[9px] text-slate-400 mt-2 italic px-1">Variables: {'{empleado}'}, {'{tipo}'}, {'{fechas}'}, {'{supervisor}'}, {'{comentario_admin}'}, {'{horas}'}</p>
-                            </div>
-                            <button onClick={handleUpdateTemplate} disabled={isSavingTemplates} className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black transition-all flex justify-center items-center gap-2">{isSavingTemplates ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Actualizar Plantilla</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

@@ -81,7 +81,9 @@ class Store {
         if (typesData) this.config.leaveTypes = typesData.map((t: any) => ({ 
             id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
-        if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ id: p.id, name: p.name, sizes: p.sizes || [] }));
+        if (ppeTypes) this.config.ppeTypes = ppeTypes.map((p: any) => ({ 
+            id: p.id, name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
+        }));
         if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: p.id, userId: p.user_id, type_id: p.type_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidayData) this.config.holidays = holidayData;
         if (shiftTypesData) this.config.shiftTypes = shiftTypesData;
@@ -661,12 +663,17 @@ class Store {
   }
 
   async createPPEType(name: string, sizes: string[]) {
-    await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes });
+    await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name, sizes, stock: {} });
     await this.refresh();
   }
 
   async updatePPEType(id: string, name: string, sizes: string[]) {
     await supabase.from('ppe_types').update({ name, sizes }).eq('id', id);
+    await this.refresh();
+  }
+  
+  async updatePPEStock(id: string, stock: Record<string, number>) {
+    await supabase.from('ppe_types').update({ stock }).eq('id', id);
     await this.refresh();
   }
 
@@ -686,6 +693,15 @@ class Store {
   }
 
   async deliverPPERequest(id: string) {
+    const req = this.config.ppeRequests.find(p => p.id === id);
+    if (req) {
+        const type = this.config.ppeTypes.find(t => t.id === req.typeId);
+        if (type && type.stock && type.stock[req.size] !== undefined) {
+            const newStock = { ...type.stock };
+            newStock[req.size] = Math.max(0, newStock[req.size] - 1);
+            await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);
+        }
+    }
     await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id);
     await this.refresh();
   }
@@ -749,7 +765,18 @@ class Store {
   async updateDriverPPEStatus(id: string, status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO') {
     const data: any = { status };
     if (status === 'SOLICITADO') data.requested_date = new Date().toISOString();
-    if (status === 'ENTREGADO') data.delivery_date = new Date().toISOString();
+    if (status === 'ENTREGADO') {
+        data.delivery_date = new Date().toISOString();
+        const req = this.config.driversPpe.find(p => p.id === id);
+        if (req) {
+            const type = this.config.ppeTypes.find(t => t.id === req.typeId);
+            if (type && type.stock && type.stock[req.size] !== undefined) {
+                const newStock = { ...type.stock };
+                newStock[req.size] = Math.max(0, newStock[req.size] - 1);
+                await supabase.from('ppe_types').update({ stock: newStock }).eq('id', type.id);
+            }
+        }
+    }
     await supabase.from('drivers_ppe').update(data).eq('id', id);
     await this.refresh();
   }

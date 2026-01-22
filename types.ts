@@ -1,4 +1,3 @@
-
 export enum Role {
   WORKER = 'TRABAJADOR',
   SUPERVISOR = 'SUPERVISOR',
@@ -168,6 +167,7 @@ export interface PPEType {
   id: string;
   name: string;
   sizes: string[];
+  stock?: Record<string, number>;
 }
 
 export interface PPERequest {
