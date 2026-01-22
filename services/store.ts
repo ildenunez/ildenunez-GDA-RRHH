@@ -278,6 +278,7 @@ class Store {
         }
     }
 
+    // 1. Actualizar saldo del usuario
     if (daysDelta !== 0 || hoursDelta !== 0) {
         const newDays = user.daysAvailable + (daysDelta * multiplier);
         const newHours = user.overtimeHours + (hoursDelta * multiplier);
@@ -289,6 +290,55 @@ class Store {
         user.daysAvailable = newDays;
         user.overtimeHours = newHours;
     }
+
+    // 2. Trazabilidad de registros consumidos (Crucial para que no vuelvan a aparecer como disponibles)
+    if (req.overtimeUsage && req.overtimeUsage.length > 0) {
+        for (const usage of req.overtimeUsage) {
+            const sourceReq = this.requests.find(r => r.id === usage.requestId);
+            if (sourceReq) {
+                // Sumamos (o restamos si es deshacer) las horas consumidas al registro original
+                const newConsumed = (sourceReq.consumedHours || 0) + (usage.hoursUsed * multiplier);
+                await supabase.from('requests')
+                    .update({ consumed_hours: newConsumed })
+                    .eq('id', usage.requestId);
+                
+                // Actualizamos el estado local inmediatamente
+                sourceReq.consumedHours = newConsumed;
+            }
+        }
+    }
+  }
+
+  async repairOvertimeIntegrity() {
+      // 1. Buscamos todas las solicitudes de consumo APROBADAS que tienen uso de horas registrado
+      const approvedConsumption = this.requests.filter(r => 
+          r.status === RequestStatus.APPROVED && 
+          (r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_PAY) &&
+          r.overtimeUsage && r.overtimeUsage.length > 0
+      );
+
+      // 2. Mapa para acumular cuántas horas se han consumido de cada ID de origen
+      const consumptionMap: Record<string, number> = {};
+
+      approvedConsumption.forEach(req => {
+          req.overtimeUsage?.forEach(usage => {
+              consumptionMap[usage.requestId] = (consumptionMap[usage.requestId] || 0) + usage.hoursUsed;
+          });
+      });
+
+      // 3. Actualizamos en la base de datos cada registro de origen con su nuevo valor de consumed_hours
+      for (const [requestId, totalConsumed] of Object.entries(consumptionMap)) {
+          // Solo actualizamos si el ID existe en nuestra lista de peticiones locales
+          const exists = this.requests.some(r => r.id === requestId);
+          if (exists) {
+              await supabase.from('requests')
+                  .update({ consumed_hours: totalConsumed })
+                  .eq('id', requestId);
+          }
+      }
+
+      await this.refresh();
+      alert('Trazabilidad de horas sincronizada correctamente. Los registros consumidos ya no aparecerán disponibles.');
   }
 
   async createRequest(data: any, userId: string, status: RequestStatus) {
@@ -311,7 +361,7 @@ class Store {
               id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
               status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at,
-              resolvedBy: newReqData.resolved_by
+              resolvedBy: newReqData.resolved_by, overtimeUsage: newReqData.overtime_usage || []
           } as LeaveRequest;
 
           if (!isOvertime || status === RequestStatus.APPROVED) {
@@ -363,7 +413,7 @@ class Store {
         const req = {
             id: String(updatedReqData.id), userId: updatedReqData.user_id, typeId: updatedReqData.type_id,
             startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
-            status: updatedReqData.status
+            status: updatedReqData.status, overtimeUsage: updatedReqData.overtime_usage || []
         } as LeaveRequest;
         
         const isNewOvertime = this.isOvertimeRequest(req.typeId);
@@ -560,7 +610,7 @@ class Store {
         email: data.email, 
         role: data.role, 
         department_id: data.departmentId || data.department_id,
-        days_available: Number(data.daysAvailable || 0), 
+        days_available: Number(data.daysAvailable || 0),
         overtime_hours: Number(data.overtimeHours || 0),
         birthdate: data.birthdate || null, 
         avatar: data.avatar, 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
@@ -668,6 +668,16 @@ export const AbsenceQueryManager = () => {
 
 // Mantenimiento
 export const MaintenanceManager = () => {
+    const [isRepairing, setIsRepairing] = useState(false);
+
+    const handleRepair = async () => {
+        if (confirm('¿Deseas sincronizar la trazabilidad de horas extra? Esto corregirá registros antiguos marcándolos como consumidos si están vinculados a solicitudes aprobadas.')) {
+            setIsRepairing(true);
+            await store.repairOvertimeIntegrity();
+            setIsRepairing(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="bg-blue-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden">
@@ -677,6 +687,19 @@ export const MaintenanceManager = () => {
                     <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Download size={18}/> Exportar JSON</button>
                     <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Upload size={18}/> Importar Backup</button>
                 </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-500"/> Integridad de Datos</h4>
+                <p className="text-sm text-slate-500 mb-6">Si detectas que a algunos empleados les siguen apareciendo registros de horas extra que ya deberían estar consumidos, usa esta herramienta para sincronizar la base de datos.</p>
+                <button 
+                    onClick={handleRepair} 
+                    disabled={isRepairing}
+                    className="bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-100 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                    {isRepairing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18}/>}
+                    Sincronizar Trazabilidad de Horas
+                </button>
             </div>
         </div>
     );
