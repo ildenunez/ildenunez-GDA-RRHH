@@ -196,9 +196,10 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                         <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{m.monthName} {m.mYear}</h3>
                     </div>
                     
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto overflow-y-hidden">
                         <div className="inline-block min-w-full align-middle">
-                            <div className="grid" style={{ gridTemplateColumns: `160px repeat(${m.days.length}, minmax(32px, 1fr))` }}>
+                            {/* Grid ajustado: Columna Empleado 130px, resto fr para ocupar el ancho disponible */}
+                            <div className="grid" style={{ gridTemplateColumns: `130px repeat(${m.days.length}, 1fr)` }}>
                                 {/* Cabecera Días */}
                                 <div className="sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 p-2 h-10 flex items-center text-[9px] font-black text-slate-400 uppercase">Empleado</div>
                                 {m.days.map((d) => {
