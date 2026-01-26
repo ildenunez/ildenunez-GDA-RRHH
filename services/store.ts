@@ -79,26 +79,32 @@ class Store {
 
         if (usersRes.data) this.users = this.mapUsersFromDB(usersRes.data);
         if (deptsRes.data) this.departments = deptsRes.data.map((d: any) => ({ 
-            id: d.id, name: String(d.name || ''), supervisorIds: d.supervisor_ids || [] 
+            id: String(d.id), name: String(d.name || ''), supervisorIds: (d.supervisor_ids || []).map((id: any) => String(id))
         }));
         if (reqsRes.data) this.requests = this.mapRequestsFromDB(reqsRes.data);
         if (newsRes.data) this.config.news = newsRes.data;
         if (leaveTypesRes.data) this.config.leaveTypes = leaveTypesRes.data.map((t: any) => ({ 
-            id: t.id, label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
+            id: String(t.id), label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
         if (ppeTypesRes.data) this.config.ppeTypes = ppeTypesRes.data.map((p: any) => ({ 
-            id: p.id, name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
+            id: String(p.id), name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
         }));
-        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: p.id, userId: p.user_id, type_id: p.type_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
-        if (holidaysRes.data) this.config.holidays = holidaysRes.data;
-        if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data;
+        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: String(p.id), userId: String(p.user_id), type_id: String(p.type_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        if (holidaysRes.data) this.config.holidays = holidaysRes.data.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
+        if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data.map((s: any) => ({ ...s, id: String(s.id) }));
+        
+        // CORRECCIÓN CRÍTICA: Normalizar datos de turnos al cargar para que coincidan con los formatos de la UI (YYYY-MM-DD y Strings)
         if (shiftAssignmentsRes.data) this.config.shiftAssignments = shiftAssignmentsRes.data.map((a: any) => ({ 
-            id: a.id, userId: a.user_id, date: a.date, shiftTypeId: a.shift_type_id 
+            id: String(a.id), 
+            userId: String(a.user_id), 
+            date: a.date ? a.date.split('T')[0] : a.date, 
+            shiftTypeId: String(a.shift_type_id || '') 
         }));
-        if (trucksRes.data) this.config.trucks = trucksRes.data;
-        if (driversRes.data) this.config.drivers = driversRes.data.map((d: any) => ({ id: d.id, name: d.name, truckId: d.truck_id }));
+
+        if (trucksRes.data) this.config.trucks = trucksRes.data.map((t: any) => ({ id: String(t.id), name: t.name }));
+        if (driversRes.data) this.config.drivers = driversRes.data.map((d: any) => ({ id: String(d.id), name: d.name, truckId: String(d.truck_id) }));
         if (driversPpeRes.data) this.config.driversPpe = driversPpeRes.data.map((p: any) => ({ 
-            id: p.id, driverId: p.driver_id, typeId: p.type_id, size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
+            id: String(p.id), driverId: String(p.driver_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
         if (settingsRes.data) {
@@ -117,7 +123,7 @@ class Store {
 
             if (templatesRow && Array.isArray(templatesRow.value)) {
                 this.config.emailTemplates = templatesRow.value.map((t: any) => ({
-                    id: t.id,
+                    id: String(t.id),
                     label: t.label,
                     subject: t.subject,
                     body: t.body,
@@ -131,7 +137,7 @@ class Store {
             if (updatedSelf) this.currentUser = updatedSelf;
 
             const { data: notifsData } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
-            if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: n.id, userId: n.user_id, message: n.message, read: n.read, date: n.date, type: n.type }));
+            if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: String(n.id), userId: String(n.user_id), message: n.message, read: n.read, date: n.date, type: n.type }));
         }
 
         this.notify();
@@ -150,7 +156,7 @@ class Store {
 
   private mapUsersFromDB(data: any[]): User[] {
       return data.map(u => ({
-          id: u.id, name: u.name, email: u.email, role: u.role, department_id: u.department_id, departmentId: u.department_id,
+          id: String(u.id), name: u.name, email: u.email, role: u.role, department_id: String(u.department_id), departmentId: String(u.department_id),
           daysAvailable: Number(u.days_available || 0), overtimeHours: Number(u.overtime_hours || 0),
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`, 
           birthdate: u.birthdate, truckNumber: u.truck_number
@@ -159,10 +165,10 @@ class Store {
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          id: String(r.id), userId: r.user_id, type_id: r.type_id, typeId: r.type_id, label: r.label, 
+          id: String(r.id), userId: String(r.user_id), type_id: String(r.type_id), typeId: String(r.type_id), label: r.label, 
           startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
           status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
-          resolvedBy: r.resolved_by,
+          resolvedBy: r.resolved_by ? String(r.resolved_by) : undefined,
           isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
       }));
   }
@@ -358,10 +364,11 @@ class Store {
 
       if (newReqData) {
           const req = {
-              id: String(newReqData.id), userId: newReqData.user_id, typeId: newReqData.type_id,
+              id: String(newReqData.id), userId: String(newReqData.user_id), typeId: String(newReqData.type_id),
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
               status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at,
-              resolvedBy: newReqData.resolved_by, overtimeUsage: newReqData.overtime_usage || []
+              resolvedBy: newReqData.resolved_by ? String(newReqData.resolved_by) : undefined, 
+              overtimeUsage: newReqData.overtime_usage || []
           } as LeaveRequest;
 
           if (!isOvertime || status === RequestStatus.APPROVED) {
@@ -411,7 +418,7 @@ class Store {
 
     if (updatedReqData) {
         const req = {
-            id: String(updatedReqData.id), userId: updatedReqData.user_id, typeId: updatedReqData.type_id,
+            id: String(updatedReqData.id), userId: String(updatedReqData.user_id), typeId: String(updatedReqData.type_id),
             startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
             status: updatedReqData.status, overtimeUsage: updatedReqData.overtime_usage || []
         } as LeaveRequest;
@@ -561,7 +568,7 @@ class Store {
   }
 
   getShiftForUserDate(userId: string, date: string) {
-    const a = this.config.shiftAssignments.find(a => a.userId === userId && a.date === date);
+    const a = this.config.shiftAssignments.find(a => String(a.userId) === String(userId) && a.date === date);
     return a ? this.config.shiftTypes.find(s => s.id === a.shiftTypeId) : undefined;
   }
 
@@ -690,51 +697,50 @@ class Store {
   }
 
   async assignShift(userId: string, date: string, shiftTypeId: string) {
-    // ACTUALIZACIÓN QUIRÚRGICA DEL CACHÉ LOCAL (Inmediata y Optimista)
-    const existingIdx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+    // NORMALIZAR FECHA Y USERID PARA COMPARACIÓN ROBUSTA
+    const normalizedDate = date.split('T')[0];
+    const targetUserId = String(userId);
+    
+    const existingIdx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
     const originalValue = existingIdx > -1 ? { ...this.config.shiftAssignments[existingIdx] } : null;
 
     if (!shiftTypeId) {
         if (existingIdx > -1) this.config.shiftAssignments.splice(existingIdx, 1);
     } else {
         if (existingIdx > -1) {
-            this.config.shiftAssignments[existingIdx].shiftTypeId = shiftTypeId;
+            this.config.shiftAssignments[existingIdx].shiftTypeId = String(shiftTypeId);
         } else {
             this.config.shiftAssignments.push({
                 id: 'temp-' + Date.now(),
-                userId,
-                date,
-                shiftTypeId
+                userId: targetUserId,
+                date: normalizedDate,
+                shiftTypeId: String(shiftTypeId)
             });
         }
     }
     
-    // Notificar cambio local instantáneo
     this.notify();
 
     try {
-        // Operación en Base de Datos
         if (!shiftTypeId) {
-            await supabase.from('shift_assignments').delete().match({ user_id: userId, date: date });
+            await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
         } else {
-            // Borrado preventivo para evitar duplicados por constraint
-            await supabase.from('shift_assignments').delete().match({ user_id: userId, date: date });
+            await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
             await supabase.from('shift_assignments').insert({ 
                 id: crypto.randomUUID(), 
-                user_id: userId, 
-                date, 
-                shift_type_id: shiftTypeId 
+                user_id: targetUserId, 
+                date: normalizedDate, 
+                shift_type_id: String(shiftTypeId) 
             });
         }
     } catch (error) {
         console.error("Error al persistir turno:", error);
-        // Revertir localmente si falla
         if (originalValue) {
-            const idx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+            const idx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
             if (idx > -1) this.config.shiftAssignments[idx] = originalValue;
             else this.config.shiftAssignments.push(originalValue);
         } else {
-            const idx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+            const idx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
             if (idx > -1) this.config.shiftAssignments.splice(idx, 1);
         }
         this.notify();
@@ -789,6 +795,13 @@ class Store {
   }
 
   async markPPEAsRequested(id: string) {
+    await supabase.from('notifications').insert({
+        id: crypto.randomUUID(),
+        user_id: String(this.currentUser?.id),
+        message: `Se ha marcado el EPI ${id} como solicitado.`,
+        read: false,
+        date: new Date().toISOString()
+    });
     await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
     await this.refresh();
   }

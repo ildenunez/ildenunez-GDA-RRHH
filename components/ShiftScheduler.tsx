@@ -129,15 +129,15 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[800px]">
-        {/* Herramientas superiores - AHORA FIXED CON STICKY */}
-        <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row justify-start items-start xl:items-center bg-slate-50 gap-4 shrink-0 sticky top-0 z-50 shadow-sm">
+        {/* Herramientas superiores */}
+        <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row justify-start items-start xl:items-center bg-white gap-4 shrink-0 sticky top-0 z-50 shadow-sm">
             <div className="flex items-center gap-2 shrink-0">
-                <button onClick={prevQuarter} className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"><ChevronLeft size={20}/></button>
+                <button onClick={prevQuarter} className="p-1.5 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200"><ChevronLeft size={20}/></button>
                 <div className="flex flex-col items-center min-w-[140px]">
                     <h2 className="text-xs font-black uppercase text-slate-800 tracking-tight">Planificación</h2>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Trimestre Actual</p>
                 </div>
-                <button onClick={nextQuarter} className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"><ChevronRight size={20}/></button>
+                <button onClick={nextQuarter} className="p-1.5 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200"><ChevronRight size={20}/></button>
             </div>
             
             <button 
@@ -187,39 +187,37 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
             {inFlightKeys.size > 0 && <div className="ml-auto flex items-center gap-2 text-blue-600 animate-pulse"><Loader2 className="animate-spin" size={14}/><span className="text-[9px] font-black uppercase">Sincronizando...</span></div>}
         </div>
 
-        {/* Listado vertical de meses */}
-        <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 space-y-12">
+        {/* Listado vertical de meses - AHORA CON FONDO BLANCO */}
+        <div className="flex-1 overflow-y-auto bg-white p-4 space-y-12">
             {monthsData.map((m) => (
                 <div key={`${m.monthName}-${m.mYear}`} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="bg-slate-100 p-3 border-b border-slate-200 flex items-center gap-3 sticky top-0 z-40">
-                        <Calendar size={16} className="text-slate-500"/>
-                        <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{m.monthName} {m.mYear}</h3>
+                    <div className="bg-white p-3 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-40">
+                        <Calendar size={16} className="text-blue-500"/>
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">{m.monthName} {m.mYear}</h3>
                     </div>
                     
                     <div className="overflow-x-auto overflow-y-hidden">
                         <div className="inline-block min-w-full align-middle">
-                            {/* Grid ajustado: Columna Empleado 130px, resto fr para ocupar el ancho disponible */}
-                            <div className="grid" style={{ gridTemplateColumns: `130px repeat(${m.days.length}, 1fr)` }}>
-                                {/* Cabecera Días */}
-                                <div className="sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 p-2 h-10 flex items-center text-[9px] font-black text-slate-400 uppercase">Empleado</div>
+                            <div className="grid" style={{ gridTemplateColumns: `140px repeat(${m.days.length}, 1fr)` }}>
+                                {/* Cabecera Días - Altura reducida */}
+                                <div className="sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 p-2 h-8 flex items-center text-[9px] font-black text-slate-400 uppercase">Empleado</div>
                                 {m.days.map((d) => {
                                     const holiday = store.config.holidays.find(h => h.date === d.dateStr);
                                     return (
-                                        <div key={d.dateStr} className={`border-b border-r border-slate-100 p-1 flex flex-col items-center justify-center h-10 ${holiday ? 'bg-red-100 text-red-700' : d.isWeekend ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-500'}`}>
-                                            <span className="text-[10px] font-black leading-none">{d.day}</span>
-                                            <span className="text-[7px] font-bold uppercase opacity-50 mt-0.5">{d.weekdayShort}</span>
+                                        <div key={d.dateStr} className={`border-b border-r border-slate-100 p-0.5 flex flex-col items-center justify-center h-8 ${holiday ? 'bg-red-100 text-red-700' : d.isWeekend ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-500'}`}>
+                                            <span className="text-[9px] font-black leading-none">{d.day}</span>
+                                            <span className="text-[6px] font-bold uppercase opacity-50 mt-0.5">{d.weekdayShort}</span>
                                         </div>
                                     );
                                 })}
 
-                                {/* Filas Usuarios */}
+                                {/* Filas Usuarios - Altura reducida y nombre más grande */}
                                 {filteredUsers.map(user => (
                                     <React.Fragment key={`${m.monthName}-${user.id}`}>
-                                        <div className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 p-2 flex items-center gap-2 h-11 shadow-sm">
-                                            <img src={user.avatar} className="w-6 h-6 rounded-full border border-slate-100 object-cover shrink-0"/>
+                                        <div className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 px-2 flex items-center gap-2 h-9 shadow-sm">
+                                            <img src={user.avatar} className="w-5 h-5 rounded-full border border-slate-100 object-cover shrink-0"/>
                                             <div className="flex flex-col min-w-0">
-                                                <span className="text-[10px] font-black text-slate-700 truncate">{user.name}</span>
-                                                <span className="text-[7px] text-slate-400 font-bold uppercase truncate">{store.departments.find(d => d.id === user.departmentId)?.name}</span>
+                                                <span className="text-[11px] font-black text-slate-800 truncate leading-tight">{user.name}</span>
                                             </div>
                                         </div>
                                         {m.days.map((d) => {
@@ -233,19 +231,21 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                                 return r.userId === user.id && d.dateStr >= s && d.dateStr <= e && !store.isOvertimeRequest(r.typeId) && (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING); 
                                             });
 
-                                            let bgColor = '';
-                                            let content = null;
                                             let style = {};
+                                            let content = null;
 
-                                            if (holiday) bgColor = 'bg-red-50/50';
-                                            else if (activeRequest) {
+                                            // Lógica de coloreado prioritario según leyenda
+                                            if (holiday) {
+                                                style = { backgroundColor: '#fee2e2' }; // Color Festivo (Red 100)
+                                            } else if (activeRequest) {
                                                 const isAppr = activeRequest.status === RequestStatus.APPROVED;
-                                                bgColor = isAppr ? 'bg-green-100 hover:bg-green-200' : 'bg-yellow-50 hover:bg-yellow-100';
+                                                // Verde para aprobadas, Amarillo para pendientes (Igual que leyenda inferior)
+                                                style = { backgroundColor: isAppr ? '#dcfce7' : '#fefce8' }; 
                                                 content = <span className={`text-[8px] font-black ${isAppr ? 'text-green-700' : 'text-yellow-700'}`}>{activeRequest.label.charAt(0).toUpperCase()}</span>;
                                             } else if (shift) {
                                                 style = { backgroundColor: shift.color };
                                             } else if (d.isWeekend) {
-                                                bgColor = 'bg-slate-50/30';
+                                                style = { backgroundColor: '#f8fafc' }; // Fin de semana suave
                                             }
 
                                             const isPending = pendingChanges.has(key);
@@ -255,11 +255,11 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                                 <div 
                                                     key={`${user.id}-${d.dateStr}`}
                                                     onClick={() => handleCellClick(user.id, d.dateStr)}
-                                                    className={`border-b border-r border-slate-100 h-11 cursor-pointer transition-all hover:ring-1 hover:ring-blue-300 flex items-center justify-center relative ${bgColor} ${isPending ? 'opacity-70 ring-1 ring-blue-400' : ''}`}
+                                                    className={`border-b border-r border-slate-100 h-9 cursor-pointer transition-all hover:ring-1 hover:ring-blue-300 flex items-center justify-center relative ${isPending ? 'opacity-70 ring-1 ring-blue-400' : ''}`}
                                                     style={style}
                                                 >
                                                     {content}
-                                                    {isInFlight && <Loader2 size={12} className="absolute text-white animate-spin drop-shadow-md z-10" />}
+                                                    {isInFlight && <Loader2 size={10} className="absolute text-white animate-spin drop-shadow-md z-10" />}
                                                 </div>
                                             );
                                         })}
@@ -272,10 +272,10 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
             ))}
         </div>
 
-        <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-6 text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">
-            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded"></div> Vacaciones</div>
-            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-yellow-50 border border-yellow-200 rounded"></div> Pendiente</div>
-            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-red-100 rounded"></div> Festivo</div>
+        <div className="p-3 bg-white border-t border-slate-100 flex items-center justify-center gap-6 text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 border border-green-200 rounded" style={{ backgroundColor: '#dcfce7' }}></div> Vacaciones</div>
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 border border-yellow-200 rounded" style={{ backgroundColor: '#fefce8' }}></div> Pendiente</div>
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded" style={{ backgroundColor: '#fee2e2' }}></div> Festivo</div>
             <div className="flex items-center gap-1.5 italic font-medium text-blue-500"><RefreshCcw size={10}/> Puedes marcar todos los días que quieras seguidos.</div>
         </div>
     </div>
