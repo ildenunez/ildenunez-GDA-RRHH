@@ -27,7 +27,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
   const news = store.config.news;
   const isRepartidor = store.departments.find(d => d.id === currentUser.departmentId)?.name === 'Repartidores';
 
-  // Lógica para obtener el horario de la semana actual y la siguiente
+  // Lógica para obtener el horario de la semana actual y la siguiente (14 días)
   const scheduleData = useMemo(() => {
       const today = new Date();
       const currentDay = today.getDay(); 
@@ -40,7 +40,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       for (let i = 0; i < 14; i++) {
           const d = new Date(monday);
           d.setDate(monday.getDate() + i);
-          const dateStr = d.toISOString().split('T')[0];
+          // Corregido: Generar dateStr local para evitar desfase de zona horaria por toISOString
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           const assignment = store.config.shiftAssignments.find(a => a.userId === currentUser.id && a.date === dateStr);
           const shift = assignment ? store.config.shiftTypes.find(s => s.id === assignment.shiftTypeId) : null;
           const holiday = store.config.holidays.find(h => h.date === dateStr);
@@ -100,8 +101,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
   });
 
   const goToCalendar = () => {
-      const calendarBtn = document.querySelector('button[onClick*="calendar"]') as HTMLButtonElement;
-      if (calendarBtn) calendarBtn.click();
+      // Corregido: Buscar el botón del sidebar por su texto 'Calendario' para disparar el cambio de pestaña
+      const navButtons = Array.from(document.querySelectorAll('aside nav button'));
+      const calendarBtn = navButtons.find(btn => btn.textContent?.toLowerCase().includes('calendario')) as HTMLButtonElement;
+      if (calendarBtn) {
+          calendarBtn.click();
+      }
   };
 
   if (detailView !== 'none') {
@@ -168,14 +173,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 xl:gap-4">
-        {/* NUEVA TARJETA DE HORARIO SEMANAL */}
+        {/* TARJETA DE HORARIO SEMANAL ACTUALIZADA */}
         <div 
             onClick={goToCalendar}
             className="md:col-span-2 bg-slate-900 text-white p-6 xl:p-5 rounded-3xl shadow-xl relative overflow-hidden group cursor-pointer border border-slate-800 hover:border-blue-500 transition-all"
         >
              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform"><CalendarDays size={120}/></div>
              <div className="flex justify-between items-center mb-4 relative z-10">
-                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Mi Planificación de Turnos</p>
+                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Mi Planificación (2 Semanas)</p>
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-blue-400 transition-colors"/>
              </div>
 
@@ -185,7 +190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                          <span className="text-[8px] font-black text-slate-500 mb-1">{d.dayLabel}</span>
                          <div 
                             title={d.holiday ? `Festivo: ${d.holiday.name}` : d.shift ? d.shift.name : 'Libre'}
-                            className={`w-7 h-7 xl:w-6 xl:h-6 rounded-lg flex items-center justify-center text-[10px] font-black transition-all border
+                            className={`w-8 h-8 xl:w-7 xl:h-7 rounded-lg flex items-center justify-center text-[10px] font-black transition-all border
                                 ${d.isToday ? 'ring-2 ring-blue-500 border-transparent shadow-lg scale-110 z-20' : 'border-slate-800'}
                                 ${d.holiday ? 'bg-red-500/20 text-red-500 border-red-500/30' : 
                                   d.activeRequest ? 'bg-green-500/20 text-green-500 border-green-500/30' :
@@ -195,14 +200,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                          >
                              {d.dayNumber}
                          </div>
-                         {idx === 6 && <div className="absolute top-1/2 left-0 w-full h-[1px] bg-slate-800 pointer-events-none mt-4"></div>}
                      </div>
                  ))}
              </div>
 
              {/* LEYENDA DINÁMICA DE TURNOS */}
-             <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 relative z-10 py-2 border-t border-slate-800/50">
-                 {activeShiftsInPeriod.length === 0 && <span className="text-[9px] text-slate-500 italic">No hay turnos específicos asignados estas 2 semanas</span>}
+             <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 relative z-10 py-3 border-t border-slate-800/50">
+                 {activeShiftsInPeriod.length === 0 && scheduleData.every(d => !d.holiday && !d.activeRequest) && <span className="text-[9px] text-slate-500 italic">No hay turnos específicos asignados</span>}
                  {activeShiftsInPeriod.map(s => (
                      <div key={s.id} className="flex items-center gap-1.5">
                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color }}></div>
@@ -212,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
              </div>
 
              <div className="mt-2 flex justify-between items-center relative z-10 border-t border-slate-800 pt-3">
-                 <div className="flex gap-3 text-[8px] font-black uppercase tracking-tighter text-slate-400">
+                 <div className="flex gap-4 text-[8px] font-black uppercase tracking-tighter text-slate-400">
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Hoy</span>
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Festivo</span>
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Vacaciones</span>

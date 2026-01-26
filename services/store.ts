@@ -150,7 +150,7 @@ class Store {
 
   private mapUsersFromDB(data: any[]): User[] {
       return data.map(u => ({
-          id: u.id, name: u.name, email: u.email, role: u.role, departmentId: u.department_id,
+          id: u.id, name: u.name, email: u.email, role: u.role, department_id: u.department_id, departmentId: u.department_id,
           daysAvailable: Number(u.days_available || 0), overtimeHours: Number(u.overtime_hours || 0),
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`, 
           birthdate: u.birthdate, truckNumber: u.truck_number
@@ -690,14 +690,56 @@ class Store {
   }
 
   async assignShift(userId: string, date: string, shiftTypeId: string) {
+    // ACTUALIZACIÓN QUIRÚRGICA DEL CACHÉ LOCAL (Inmediata y Optimista)
+    const existingIdx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+    const originalValue = existingIdx > -1 ? { ...this.config.shiftAssignments[existingIdx] } : null;
+
     if (!shiftTypeId) {
-        await supabase.from('shift_assignments').delete().eq('user_id', userId).eq('date', date);
+        if (existingIdx > -1) this.config.shiftAssignments.splice(existingIdx, 1);
     } else {
-        const { data: existing } = await supabase.from('shift_assignments').select('*').eq('user_id', userId).eq('date', date).maybeSingle();
-        if (existing) await supabase.from('shift_assignments').update({ shift_type_id: shiftTypeId }).eq('id', existing.id);
-        else await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: userId, date, shift_type_id: shiftTypeId });
+        if (existingIdx > -1) {
+            this.config.shiftAssignments[existingIdx].shiftTypeId = shiftTypeId;
+        } else {
+            this.config.shiftAssignments.push({
+                id: 'temp-' + Date.now(),
+                userId,
+                date,
+                shiftTypeId
+            });
+        }
     }
-    await this.refresh();
+    
+    // Notificar cambio local instantáneo
+    this.notify();
+
+    try {
+        // Operación en Base de Datos
+        if (!shiftTypeId) {
+            await supabase.from('shift_assignments').delete().match({ user_id: userId, date: date });
+        } else {
+            // Borrado preventivo para evitar duplicados por constraint
+            await supabase.from('shift_assignments').delete().match({ user_id: userId, date: date });
+            await supabase.from('shift_assignments').insert({ 
+                id: crypto.randomUUID(), 
+                user_id: userId, 
+                date, 
+                shift_type_id: shiftTypeId 
+            });
+        }
+    } catch (error) {
+        console.error("Error al persistir turno:", error);
+        // Revertir localmente si falla
+        if (originalValue) {
+            const idx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+            if (idx > -1) this.config.shiftAssignments[idx] = originalValue;
+            else this.config.shiftAssignments.push(originalValue);
+        } else {
+            const idx = this.config.shiftAssignments.findIndex(a => a.userId === userId && a.date === date);
+            if (idx > -1) this.config.shiftAssignments.splice(idx, 1);
+        }
+        this.notify();
+        throw error;
+    }
   }
 
   async createHoliday(date: string, name: string) {
@@ -736,6 +778,7 @@ class Store {
   }
 
   async deletePPEType(id: string) {
+    await supabase.from('ppe_requests').delete().eq('type_id', id);
     await supabase.from('ppe_types').delete().eq('id', id);
     await this.refresh();
   }
