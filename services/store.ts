@@ -43,6 +43,7 @@ class Store {
           [RequestType.PERSONAL]: 'Asuntos Propios',
           [RequestType.OVERTIME_EARN]: 'Registro Horas Extra',
           [RequestType.OVERTIME_SPEND_DAYS]: 'Canje por Días Libres',
+          [RequestType.OVERTIME_TO_DAYS]: 'Pasar horas a días',
           [RequestType.OVERTIME_PAY]: 'Abono en Nómina',
           [RequestType.WORKED_HOLIDAY]: 'Festivo Trabajado',
           [RequestType.UNJUSTIFIED]: 'Ausencia Justificada',
@@ -173,7 +174,7 @@ class Store {
   }
 
   isOvertimeRequest(typeId: string): boolean {
-      return [RequestType.OVERTIME_EARN, RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME].includes(typeId as RequestType);
+      return [RequestType.OVERTIME_EARN, RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_TO_DAYS, RequestType.OVERTIME_PAY, RequestType.WORKED_HOLIDAY, RequestType.ADJUSTMENT_OVERTIME].includes(typeId as RequestType);
   }
 
   private async sendEmailNotification(templateLabel: string, req: LeaveRequest) {
@@ -266,9 +267,14 @@ class Store {
         daysDelta = 1;
         hoursDelta = 4;
     } 
+    else if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
+        const h = Math.abs(req.hours || 0);
+        hoursDelta = -h;
+        daysDelta = h / 8;
+    }
     else if (this.isOvertimeRequest(req.typeId)) {
         hoursDelta = req.hours || 0;
-        if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY].includes(req.typeId as RequestType)) {
+        if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType)) {
             hoursDelta = -Math.abs(hoursDelta);
         }
     } 
@@ -318,7 +324,7 @@ class Store {
       // 1. Buscamos todas las solicitudes de consumo APROBADAS que tienen uso de horas registrado
       const approvedConsumption = this.requests.filter(r => 
           r.status === RequestStatus.APPROVED && 
-          (r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_PAY) &&
+          (r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_PAY || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
           r.overtimeUsage && r.overtimeUsage.length > 0
       );
 
@@ -376,7 +382,7 @@ class Store {
 
           let templateName = '';
           if (isOvertime) {
-              if (req.typeId === RequestType.OVERTIME_SPEND_DAYS) {
+              if (req.typeId === RequestType.OVERTIME_SPEND_DAYS || req.typeId === RequestType.OVERTIME_TO_DAYS) {
                   templateName = 'Horas: Canje por Días';
               } else {
                   templateName = 'Horas: Nuevo Registro';
@@ -412,7 +418,7 @@ class Store {
         end_date: data.endDate,
         hours: data.hours,
         reason: data.reason,
-        overtime_usage: data.overtimeUsage || []
+        overtime_usage: data.overtime_usage || []
     }).eq('id', id).select().single();
 
     if (updatedReqData) {

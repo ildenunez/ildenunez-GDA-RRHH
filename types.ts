@@ -29,6 +29,7 @@ export enum RequestType {
   PERSONAL = 'asuntos_propios',
   OVERTIME_EARN = 'registro_horas_extra',
   OVERTIME_SPEND_DAYS = 'canje_horas_por_dias',
+  OVERTIME_TO_DAYS = 'pasar_horas_a_dias',
   OVERTIME_PAY = 'abono_en_nomina',
   WORKED_HOLIDAY = 'festivo_trabajado',
   UNJUSTIFIED = 'ausencia_justificable',

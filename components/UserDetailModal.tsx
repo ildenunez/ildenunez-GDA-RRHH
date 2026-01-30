@@ -92,6 +92,9 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
   };
 
   const calculateAmountStr = (req: LeaveRequest) => {
+    if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
+        return `+${(Math.abs(req.hours || 0) / 8).toFixed(1)}d`;
+    }
     if (store.isOvertimeRequest(req.typeId)) {
         const h = req.hours || 0; return h > 0 ? `+${h}h` : `${h}h`;
     } else {

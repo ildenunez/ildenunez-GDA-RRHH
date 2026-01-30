@@ -209,7 +209,7 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
             const deptUsers = store.users.filter(u => u.departmentId === dept.id).map(u => u.id);
             const deptReqs = store.requests.filter(r => 
                 (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
-                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) &&
+                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
                 deptUsers.includes(r.userId) &&
                 (r.endDate || r.startDate) >= today
             );
@@ -303,6 +303,15 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                                                     </span>
                                                     <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-green-100 text-green-700">
                                                         +4h
+                                                    </span>
+                                                </>
+                                            ) : req.typeId === RequestType.OVERTIME_TO_DAYS ? (
+                                                <>
+                                                    <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-green-100 text-green-700">
+                                                        +{(Math.abs(req.hours || 0) / 8).toFixed(1)}d
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-lg font-black text-[10px] bg-red-100 text-red-700">
+                                                        -{Math.abs(req.hours || 0)}h
                                                     </span>
                                                 </>
                                             ) : store.isOvertimeRequest(req.typeId) ? (
@@ -431,7 +440,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
     const upcoming = useMemo(() => {
         let list = store.requests.filter((r: LeaveRequest) => 
             r.status === RequestStatus.APPROVED && 
-            (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) && 
+            (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_TO_DAYS) && 
             (r.endDate || r.startDate) >= today
         );
 
@@ -463,7 +472,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
             const deptUsers = store.users.filter(u => u.departmentId === dept.id).map(u => u.id);
             const deptReqs = store.requests.filter(r => 
                 r.status === RequestStatus.APPROVED && 
-                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) &&
+                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
                 deptUsers.includes(r.userId) &&
                 (r.endDate || r.startDate) >= today
             );

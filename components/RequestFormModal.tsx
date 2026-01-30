@@ -196,6 +196,7 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
                      <option value={RequestType.OVERTIME_EARN}>Registrar Horas Realizadas</option>
                      <option value={RequestType.WORKED_HOLIDAY}>Festivo Trabajado (+1 día / +4h)</option>
                      <option value={RequestType.OVERTIME_SPEND_DAYS}>Canjear por Días Libres</option>
+                     <option value={RequestType.OVERTIME_TO_DAYS}>Pasar horas a días (8h = 1 día)</option>
                      <option value={RequestType.OVERTIME_PAY}>Abono en Nómina</option>
                  </select>
                 </div>
