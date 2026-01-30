@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info, UserCheck
+  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info, UserCheck, Trash2
 } from 'lucide-react';
 import { store } from '../services/store';
 import { User, Role, LeaveRequest, RequestStatus, RequestType } from '../types';
@@ -84,6 +84,21 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
         return list.sort((a,b) => a.name.localeCompare(b.name));
     }, [search, selectedDept, currentUser, store.users, refresh]);
 
+    const handleDeleteUser = async (e: React.MouseEvent, userToDelete: User) => {
+        e.stopPropagation();
+        if (userToDelete.id === currentUser.id) {
+            alert("No puedes eliminar tu propia cuenta.");
+            return;
+        }
+        if (confirm(`¿Estás seguro de que deseas eliminar permanentemente a ${userToDelete.name}? Se borrarán también todos sus registros asociados.`)) {
+            try {
+                await store.deleteUser(userToDelete.id);
+            } catch (error) {
+                alert("Error al eliminar el usuario. Es posible que tenga dependencias en la base de datos.");
+            }
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -121,7 +136,16 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                                     <h4 className="font-bold text-slate-800 truncate">{u.name}</h4>
                                     <p className="text-[10px] text-slate-400 font-bold truncate uppercase tracking-tighter">{u.email}</p>
                                 </div>
-                                <ChevronRight className="text-slate-200 group-hover:text-blue-500 transition-colors" size={20}/>
+                                <div className="flex items-center gap-1">
+                                    <button 
+                                        onClick={(e) => handleDeleteUser(e, u)}
+                                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                        title="Eliminar empleado"
+                                    >
+                                        <Trash2 size={18}/>
+                                    </button>
+                                    <ChevronRight className="text-slate-200 group-hover:text-blue-500 transition-colors" size={20}/>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-50 p-4 rounded-2xl text-center border border-slate-100/50">
