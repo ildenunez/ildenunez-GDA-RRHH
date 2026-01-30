@@ -93,7 +93,6 @@ class Store {
         if (holidaysRes.data) this.config.holidays = holidaysRes.data.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
         if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data.map((s: any) => ({ ...s, id: String(s.id) }));
         
-        // CORRECCIÓN CRÍTICA: Normalizar datos de turnos al cargar para que coincidan con los formatos de la UI (YYYY-MM-DD y Strings)
         if (shiftAssignmentsRes.data) this.config.shiftAssignments = shiftAssignmentsRes.data.map((a: any) => ({ 
             id: String(a.id), 
             userId: String(a.user_id), 
@@ -604,7 +603,7 @@ class Store {
         overtime_hours: Number(data.overtime_hours || 0), 
         birthdate: data.birthdate || null, 
         avatar: data.avatar, 
-        truck_number: data.truckNumber,
+        truck_number: data.truck_number,
         password: pass
     });
     if (error) throw error;
@@ -621,7 +620,7 @@ class Store {
         overtime_hours: Number(data.overtimeHours || 0),
         birthdate: data.birthdate || null, 
         avatar: data.avatar, 
-        truck_number: data.truckNumber
+        truck_number: data.truck_number
     };
     if (data.password && data.password.trim() !== '') updateData.password = data.password;
     
@@ -647,8 +646,23 @@ class Store {
   }
 
   async deleteUser(id: string) {
-    await supabase.from('users').delete().eq('id', id);
-    await this.refresh();
+    // ELIMINACIÓN DE REGISTROS VINCULADOS (LIMPIEZA DE INTEGRIDAD)
+    try {
+        await Promise.all([
+            supabase.from('requests').delete().eq('user_id', id),
+            supabase.from('notifications').delete().eq('user_id', id),
+            supabase.from('shift_assignments').delete().eq('user_id', id),
+            supabase.from('ppe_requests').delete().eq('user_id', id)
+        ]);
+
+        const { error } = await supabase.from('users').delete().eq('id', id);
+        if (error) throw error;
+
+        await this.refresh();
+    } catch (error) {
+        console.error("Error al eliminar usuario completo:", error);
+        throw error;
+    }
   }
 
   async createDepartment(name: string, supervisorIds: string[]) {
@@ -697,7 +711,6 @@ class Store {
   }
 
   async assignShift(userId: string, date: string, shiftTypeId: string) {
-    // NORMALIZAR FECHA Y USERID PARA COMPARACIÓN ROBUSTA
     const normalizedDate = date.split('T')[0];
     const targetUserId = String(userId);
     
