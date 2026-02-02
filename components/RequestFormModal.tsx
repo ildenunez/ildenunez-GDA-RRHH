@@ -23,8 +23,6 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const [adminStatus, setAdminStatus] = useState<RequestStatus>(RequestStatus.PENDING);
   const [availableOvertime, setAvailableOvertime] = useState<LeaveRequest[]>([]);
   const [usageMap, setUsageMap] = useState<Record<string, number>>({});
-  
-  // New State for Fixed Range Selection
   const [selectedRangeIndex, setSelectedRangeIndex] = useState<string>('');
 
   const effectiveTargetUser = targetUser || user;
@@ -40,7 +38,7 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
           setTypeId(editingRequest.typeId);
           setStartDate(editingRequest.startDate.split('T')[0]);
           setEndDate(editingRequest.endDate ? editingRequest.endDate.split('T')[0] : '');
-          setHours(editingRequest.hours || 0);
+          setHours(Math.abs(editingRequest.hours || 0));
           setReason(editingRequest.reason || '');
       }
   }, [editingRequest]);
@@ -81,17 +79,10 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
 
   useEffect(() => {
     const selectedType = absenceTypes.find(t => t.id === typeId);
-    
-    // Check for fixedRanges (array) or backward compatible single fixedRange
     const ranges = selectedType?.fixedRanges;
-
     if (activeTab === 'absence' && ranges && ranges.length > 0) {
         setIsDatesLocked(true);
-        // If editing, try to match current dates to a range index
-        if (editingRequest && editingRequest.typeId === typeId) {
-             // Logic to find index... skipped for simplicity or set manual
-        } else if (selectedRangeIndex === '') {
-             // Default to empty or first? Let's default to empty to force user choice
+        if (!editingRequest && selectedRangeIndex === '') {
              setStartDate('');
              setEndDate('');
         }
@@ -100,7 +91,6 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
     }
   }, [typeId, activeTab, absenceTypes]);
 
-  // Handle Range Selection
   const handleRangeSelect = (indexStr: string) => {
       setSelectedRangeIndex(indexStr);
       const selectedType = absenceTypes.find(t => t.id === typeId);
@@ -146,7 +136,12 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
             .filter(([id]) => id !== 'historical_balance')
             .map(([id, hoursUsed]) => ({ requestId: id, hoursUsed: hoursUsed as number }));
     }
-    const reqData = { typeId, startDate, endDate, hours, reason, overtimeUsage: finalOvertimeUsage, isJustified: false, reportedToAdmin: false };
+
+    // FORZAR SIGNO NEGATIVO PARA TIPOS DE CONSUMO
+    const isConsumption = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(typeId as RequestType);
+    const finalHoursValue = isConsumption ? -Math.abs(hours) : hours;
+
+    const reqData = { typeId, startDate, endDate, hours: finalHoursValue, reason, overtimeUsage: finalOvertimeUsage, isJustified: false, reportedToAdmin: false };
     if (editingRequest) await store.updateRequest(editingRequest.id, reqData);
     else await store.createRequest(reqData, effectiveTargetUser.id, isManagerMode && typeId === RequestType.UNJUSTIFIED ? RequestStatus.APPROVED : (isManagerMode && isAdminCreatingForOther ? adminStatus : RequestStatus.PENDING));
     setIsSubmitting(false);
@@ -156,7 +151,6 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const isConsumptionType = activeTab === 'overtime' && ![RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(typeId as RequestType);
   const isWorkedHoliday = typeId === RequestType.WORKED_HOLIDAY;
   const isUnjustified = typeId === RequestType.UNJUSTIFIED;
-  
   const currentLeaveType = absenceTypes.find(t => t.id === typeId);
   const hasFixedRanges = activeTab === 'absence' && currentLeaveType?.fixedRanges && currentLeaveType.fixedRanges.length > 0;
 
@@ -202,7 +196,6 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
                 </div>
            )}
 
-           {/* Range Selector for Fixed Dates */}
            {hasFixedRanges && (
                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                    <label className="block text-sm font-bold text-blue-800 mb-2">Selecciona un turno / fecha disponible:</label>
@@ -229,7 +222,6 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
                <input 
                     type="date" 
                     required 
-                    // Lock if fixed ranges exist, unless editing (though logic for editing fixed ranges is complex, simplified here)
                     disabled={isDatesLocked} 
                     className={`w-full p-3 border border-slate-200 rounded-xl ${isDatesLocked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`} 
                     value={startDate} 

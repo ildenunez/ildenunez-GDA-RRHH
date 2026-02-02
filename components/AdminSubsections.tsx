@@ -522,6 +522,8 @@ export const AbsenceQueryManager = () => {
             } else {
                 // Queremos solo registros de horas extra (incluidos festivos trabajados, abonos, etc)
                 if (!isOvertime) return false;
+                // SOLO POSITIVAS para saber cuántas extras han registrado (devengado)
+                if ((req.hours || 0) <= 0) return false;
             }
             
             const rStart = req.startDate.split('T')[0];
@@ -619,7 +621,7 @@ export const AbsenceQueryManager = () => {
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in-up">
                     <div className={`p-6 border-b border-slate-50 ${queryMode === 'absences' ? 'bg-blue-50/30' : 'bg-indigo-50/30'} flex justify-between items-center print:bg-white`}>
                         <h4 className="font-bold text-slate-800">
-                            {queryMode === 'absences' ? 'Informe de Ausencias y Bajas' : 'Informe Detallado de Horas Extra'}
+                            {queryMode === 'absences' ? 'Informe de Ausencias y Bajas' : 'Informe Detallado de Horas Extra (Devengadas)'}
                         </h4>
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             Rango: {new Date(start).toLocaleDateString()} al {new Date(end).toLocaleDateString()}

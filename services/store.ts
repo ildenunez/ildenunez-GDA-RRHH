@@ -268,15 +268,14 @@ class Store {
         hoursDelta = 4;
     } 
     else if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
+        // En este caso req.hours vendrá negativo (ej: -8)
         const h = Math.abs(req.hours || 0);
-        hoursDelta = -h;
+        hoursDelta = -h; 
         daysDelta = h / 8;
     }
     else if (this.isOvertimeRequest(req.typeId)) {
+        // Al guardarse ya con el signo correcto en el DB, solo sumamos el delta directamente
         hoursDelta = req.hours || 0;
-        if ([RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType)) {
-            hoursDelta = -Math.abs(hoursDelta);
-        }
     } 
     else {
         const typeConfig = this.config.leaveTypes.find(t => t.id === req.typeId);
@@ -302,18 +301,15 @@ class Store {
         user.overtimeHours = newHours;
     }
 
-    // 2. Trazabilidad de registros consumidos (Crucial para que no vuelvan a aparecer como disponibles)
+    // 2. Trazabilidad de registros consumidos
     if (req.overtimeUsage && req.overtimeUsage.length > 0) {
         for (const usage of req.overtimeUsage) {
             const sourceReq = this.requests.find(r => r.id === usage.requestId);
             if (sourceReq) {
-                // Sumamos (o restamos si es deshacer) las horas consumidas al registro original
                 const newConsumed = (sourceReq.consumedHours || 0) + (usage.hoursUsed * multiplier);
                 await supabase.from('requests')
                     .update({ consumed_hours: newConsumed })
                     .eq('id', usage.requestId);
-                
-                // Actualizamos el estado local inmediatamente
                 sourceReq.consumedHours = newConsumed;
             }
         }
@@ -321,25 +317,18 @@ class Store {
   }
 
   async repairOvertimeIntegrity() {
-      // 1. Buscamos todas las solicitudes de consumo APROBADAS que tienen uso de horas registrado
       const approvedConsumption = this.requests.filter(r => 
           r.status === RequestStatus.APPROVED && 
           (r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_PAY || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
           r.overtimeUsage && r.overtimeUsage.length > 0
       );
-
-      // 2. Mapa para acumular cuántas horas se han consumido de cada ID de origen
       const consumptionMap: Record<string, number> = {};
-
       approvedConsumption.forEach(req => {
           req.overtimeUsage?.forEach(usage => {
               consumptionMap[usage.requestId] = (consumptionMap[usage.requestId] || 0) + usage.hoursUsed;
           });
       });
-
-      // 3. Actualizamos en la base de datos cada registro de origen con su nuevo valor de consumed_hours
       for (const [requestId, totalConsumed] of Object.entries(consumptionMap)) {
-          // Solo actualizamos si el ID existe en nuestra lista de peticiones locales
           const exists = this.requests.some(r => r.id === requestId);
           if (exists) {
               await supabase.from('requests')
@@ -347,9 +336,8 @@ class Store {
                   .eq('id', requestId);
           }
       }
-
       await this.refresh();
-      alert('Trazabilidad de horas sincronizada correctamente. Los registros consumidos ya no aparecerán disponibles.');
+      alert('Trazabilidad de horas sincronizada correctamente.');
   }
 
   async createRequest(data: any, userId: string, status: RequestStatus) {
@@ -379,7 +367,6 @@ class Store {
           if (!isOvertime || status === RequestStatus.APPROVED) {
               await this.applyRequestToBalanceDB(req);
           }
-
           let templateName = '';
           if (isOvertime) {
               if (req.typeId === RequestType.OVERTIME_SPEND_DAYS || req.typeId === RequestType.OVERTIME_TO_DAYS) {
@@ -390,9 +377,7 @@ class Store {
           } else {
               templateName = 'Ausencia: Nueva Solicitud';
           }
-
           this.sendEmailNotification(templateName, req);
-
           if (req.typeId === RequestType.SICKNESS) {
               this.sendEmailNotification('Ausencia: Baja Médica (Aviso)', req);
           }
@@ -403,13 +388,10 @@ class Store {
   async updateRequest(id: string, data: any) {
     const oldReq = this.requests.find(r => r.id === id);
     if (!oldReq) return;
-
     const isOvertime = this.isOvertimeRequest(oldReq.typeId);
-    
     if (oldReq.status === RequestStatus.APPROVED || (!isOvertime && oldReq.status === RequestStatus.PENDING)) {
         await this.applyRequestToBalanceDB(oldReq, true);
     }
-
     const label = data.label || this.getTypeLabel(data.typeId);
     const { data: updatedReqData } = await supabase.from('requests').update({
         type_id: data.typeId,
@@ -420,14 +402,12 @@ class Store {
         reason: data.reason,
         overtime_usage: data.overtime_usage || []
     }).eq('id', id).select().single();
-
     if (updatedReqData) {
         const req = {
             id: String(updatedReqData.id), userId: String(updatedReqData.user_id), typeId: String(updatedReqData.type_id),
             startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
             status: updatedReqData.status, overtimeUsage: updatedReqData.overtime_usage || []
         } as LeaveRequest;
-        
         const isNewOvertime = this.isOvertimeRequest(req.typeId);
         if (req.status === RequestStatus.APPROVED || (!isNewOvertime && req.status === RequestStatus.PENDING)) {
             await this.applyRequestToBalanceDB(req);
@@ -439,55 +419,28 @@ class Store {
   async updateRequestStatus(id: string, status: RequestStatus, adminId: string, comment?: string) {
       const oldReq = this.requests.find(r => r.id === id);
       if (!oldReq) return;
-
       const isOvertime = this.isOvertimeRequest(oldReq.typeId);
       const finalAdminId = adminId || this.currentUser?.id;
-
-      if (!finalAdminId) {
-          console.error("Error: No se pudo identificar al administrador que resuelve la solicitud.");
-          return;
-      }
-
+      if (!finalAdminId) return;
       if (oldReq.status === RequestStatus.PENDING && status === RequestStatus.APPROVED) {
-          if (isOvertime) {
-              await this.applyRequestToBalanceDB(oldReq, false);
-          }
+          if (isOvertime) await this.applyRequestToBalanceDB(oldReq, false);
       }
       else if (status === RequestStatus.REJECTED) {
-          if (oldReq.status === RequestStatus.APPROVED) {
-              await this.applyRequestToBalanceDB(oldReq, true);
-          } else if (oldReq.status === RequestStatus.PENDING && !isOvertime) {
+          if (oldReq.status === RequestStatus.APPROVED || (oldReq.status === RequestStatus.PENDING && !isOvertime)) {
               await this.applyRequestToBalanceDB(oldReq, true);
           }
       }
       else if (oldReq.status === RequestStatus.REJECTED && status === RequestStatus.APPROVED) {
           await this.applyRequestToBalanceDB(oldReq, false);
       }
-
-      const { error } = await supabase.from('requests').update({ 
-          status, 
-          admin_comment: comment || '', 
-          resolved_by: finalAdminId 
-      }).eq('id', id);
-
-      if (error) {
-          console.error("Error actualizando estado en Supabase:", error);
-      }
-
+      await supabase.from('requests').update({ status, admin_comment: comment || '', resolved_by: finalAdminId }).eq('id', id);
       await this.refresh();
-      
       const refreshedReq = this.requests.find(r => r.id === id);
       if (refreshedReq) {
           let templateName = '';
-          if (status === RequestStatus.APPROVED) {
-              templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
-          } else if (status === RequestStatus.REJECTED) {
-              templateName = 'Ausencia: Rechazada';
-          }
-
-          if (templateName) {
-              this.sendEmailNotification(templateName, refreshedReq);
-          }
+          if (status === RequestStatus.APPROVED) templateName = isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada';
+          else if (status === RequestStatus.REJECTED) templateName = 'Ausencia: Rechazada';
+          if (templateName) this.sendEmailNotification(templateName, refreshedReq);
       }
   }
 
@@ -629,12 +582,8 @@ class Store {
         truck_number: data.truck_number
     };
     if (data.password && data.password.trim() !== '') updateData.password = data.password;
-    
     const { error } = await supabase.from('users').update(updateData).eq('id', id);
-    if (error) {
-        console.error("Supabase User Update Error:", error);
-        throw error;
-    }
+    if (error) throw error;
     await this.refresh();
   }
 
@@ -652,7 +601,6 @@ class Store {
   }
 
   async deleteUser(id: string) {
-    // ELIMINACIÓN DE REGISTROS VINCULADOS (LIMPIEZA DE INTEGRIDAD)
     try {
         await Promise.all([
             supabase.from('requests').delete().eq('user_id', id),
@@ -660,15 +608,10 @@ class Store {
             supabase.from('shift_assignments').delete().eq('user_id', id),
             supabase.from('ppe_requests').delete().eq('user_id', id)
         ]);
-
         const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) throw error;
-
         await this.refresh();
-    } catch (error) {
-        console.error("Error al eliminar usuario completo:", error);
-        throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async createDepartment(name: string, supervisorIds: string[]) {
@@ -719,41 +662,21 @@ class Store {
   async assignShift(userId: string, date: string, shiftTypeId: string) {
     const normalizedDate = date.split('T')[0];
     const targetUserId = String(userId);
-    
     const existingIdx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
     const originalValue = existingIdx > -1 ? { ...this.config.shiftAssignments[existingIdx] } : null;
-
-    if (!shiftTypeId) {
-        if (existingIdx > -1) this.config.shiftAssignments.splice(existingIdx, 1);
-    } else {
-        if (existingIdx > -1) {
-            this.config.shiftAssignments[existingIdx].shiftTypeId = String(shiftTypeId);
-        } else {
-            this.config.shiftAssignments.push({
-                id: 'temp-' + Date.now(),
-                userId: targetUserId,
-                date: normalizedDate,
-                shiftTypeId: String(shiftTypeId)
-            });
-        }
+    if (!shiftTypeId) { if (existingIdx > -1) this.config.shiftAssignments.splice(existingIdx, 1); }
+    else {
+        if (existingIdx > -1) this.config.shiftAssignments[existingIdx].shiftTypeId = String(shiftTypeId);
+        else this.config.shiftAssignments.push({ id: 'temp-' + Date.now(), userId: targetUserId, date: normalizedDate, shiftTypeId: String(shiftTypeId) });
     }
-    
     this.notify();
-
     try {
-        if (!shiftTypeId) {
+        if (!shiftTypeId) await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
+        else {
             await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
-        } else {
-            await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
-            await supabase.from('shift_assignments').insert({ 
-                id: crypto.randomUUID(), 
-                user_id: targetUserId, 
-                date: normalizedDate, 
-                shift_type_id: String(shiftTypeId) 
-            });
+            await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: targetUserId, date: normalizedDate, shift_type_id: String(shiftTypeId) });
         }
     } catch (error) {
-        console.error("Error al persistir turno:", error);
         if (originalValue) {
             const idx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
             if (idx > -1) this.config.shiftAssignments[idx] = originalValue;
@@ -794,10 +717,7 @@ class Store {
   
   async updatePPEStock(id: string, stock: Record<string, number>) {
     const idx = this.config.ppeTypes.findIndex(t => t.id === id);
-    if (idx !== -1) {
-        this.config.ppeTypes[idx].stock = stock;
-        this.notify();
-    }
+    if (idx !== -1) { this.config.ppeTypes[idx].stock = stock; this.notify(); }
     await supabase.from('ppe_types').update({ stock }).eq('id', id);
     this.refresh();
   }
@@ -814,13 +734,7 @@ class Store {
   }
 
   async markPPEAsRequested(id: string) {
-    await supabase.from('notifications').insert({
-        id: crypto.randomUUID(),
-        user_id: String(this.currentUser?.id),
-        message: `Se ha marcado el EPI ${id} como solicitado.`,
-        read: false,
-        date: new Date().toISOString()
-    });
+    await supabase.from('notifications').insert({ id: crypto.randomUUID(), user_id: String(this.currentUser?.id), message: `Se ha marcado el EPI ${id} como solicitado.`, read: false, date: new Date().toISOString() });
     await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
     await this.refresh();
   }
