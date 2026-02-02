@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
@@ -492,10 +492,11 @@ export const CommunicationsManager = () => {
     );
 };
 
-// Consultas de Ausencias
+// Consultas de Ausencias y Horas Extra
 export const AbsenceQueryManager = () => {
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
+    const [queryMode, setQueryMode] = useState<'absences' | 'overtime'>('absences');
     const [results, setResults] = useState<any[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
 
@@ -506,18 +507,22 @@ export const AbsenceQueryManager = () => {
         }
         
         const filtered = store.requests.filter(req => {
-            // Solo ausencias aprobadas
+            // Solo aprobadas
             if (req.status !== RequestStatus.APPROVED) return false;
             
             // EXCLUIR REGULARIZACIONES
             if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
             
-            // Excluir registros que son puramente de horas extra (a menos que sea canje por días)
-            const isPureOvertime = store.isOvertimeRequest(req.typeId);
+            const isOvertime = store.isOvertimeRequest(req.typeId);
             const isDayOffExchange = req.typeId === RequestType.OVERTIME_SPEND_DAYS;
             
-            // Queremos: Bajas médicas, Vacaciones, Asuntos Propios, Ausencias justificables y Canjes por días
-            if (isPureOvertime && !isDayOffExchange) return false;
+            if (queryMode === 'absences') {
+                // Queremos: Bajas médicas, Vacaciones, Asuntos Propios, Ausencias justificables y Canjes por días
+                if (isOvertime && !isDayOffExchange) return false;
+            } else {
+                // Queremos solo registros de horas extra (incluidos festivos trabajados, abonos, etc)
+                if (!isOvertime) return false;
+            }
             
             const rStart = req.startDate.split('T')[0];
             const rEnd = (req.endDate || req.startDate).split('T')[0];
@@ -537,49 +542,85 @@ export const AbsenceQueryManager = () => {
         window.print();
     };
 
+    // Agrupación para Horas Extra (Árbol)
+    const groupedOvertime = useMemo(() => {
+        if (queryMode !== 'overtime') return [];
+        const groups: Record<string, { user: any, items: any[], total: number }> = {};
+        
+        results.forEach(req => {
+            const userId = req.userId;
+            if (!groups[userId]) {
+                groups[userId] = { user: req.user, items: [], total: 0 };
+            }
+            groups[userId].items.push(req);
+            groups[userId].total += (req.hours || 0);
+        });
+
+        return Object.values(groups).sort((a, b) => a.user?.name.localeCompare(b.user?.name));
+    }, [results, queryMode]);
+
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-wrap gap-4 items-end print:hidden">
-                <div className="flex-1 min-w-[200px]">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Inicial</label>
-                    <input 
-                        type="date" 
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
-                        value={start} 
-                        onChange={e => setStart(e.target.value)} 
-                    />
-                </div>
-                <div className="flex-1 min-w-[200px]">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Final</label>
-                    <input 
-                        type="date" 
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
-                        value={end} 
-                        onChange={e => setEnd(e.target.value)} 
-                    />
-                </div>
-                <div className="flex gap-2">
+            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-6 print:hidden">
+                <div className="flex gap-2 p-1 bg-white border border-slate-200 rounded-xl self-start">
                     <button 
-                        onClick={handleQuery} 
-                        className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+                        onClick={() => { setQueryMode('absences'); setResults([]); setHasSearched(false); }}
+                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'absences' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                     >
-                        <Search size={18}/> Consultar
+                        <Palmtree size={14}/> Ausencias
                     </button>
-                    {hasSearched && results.length > 0 && (
+                    <button 
+                        onClick={() => { setQueryMode('overtime'); setResults([]); setHasSearched(false); }}
+                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'overtime' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        <Timer size={14}/> Horas Extra
+                    </button>
+                </div>
+
+                <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Inicial</label>
+                        <input 
+                            type="date" 
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
+                            value={start} 
+                            onChange={e => setStart(e.target.value)} 
+                        />
+                    </div>
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Final</label>
+                        <input 
+                            type="date" 
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
+                            value={end} 
+                            onChange={e => setEnd(e.target.value)} 
+                        />
+                    </div>
+                    <div className="flex gap-2">
                         <button 
-                            onClick={handlePrint} 
-                            className="px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                            onClick={handleQuery} 
+                            className={`px-8 py-3 ${queryMode === 'absences' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold rounded-xl text-sm shadow-lg transition-all flex items-center gap-2`}
                         >
-                            <Printer size={18}/> Imprimir
+                            <Search size={18}/> Consultar
                         </button>
-                    )}
+                        {hasSearched && results.length > 0 && (
+                            <button 
+                                onClick={handlePrint} 
+                                className="px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                            >
+                                <Printer size={18}/> Imprimir
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {hasSearched && results.length > 0 ? (
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in-up">
-                    <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center print:bg-white">
-                        <h4 className="font-bold text-slate-800">Informe de Ausencias y Bajas</h4>
+                    <div className={`p-6 border-b border-slate-50 ${queryMode === 'absences' ? 'bg-blue-50/30' : 'bg-indigo-50/30'} flex justify-between items-center print:bg-white`}>
+                        <h4 className="font-bold text-slate-800">
+                            {queryMode === 'absences' ? 'Informe de Ausencias y Bajas' : 'Informe Detallado de Horas Extra'}
+                        </h4>
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             Rango: {new Date(start).toLocaleDateString()} al {new Date(end).toLocaleDateString()}
                         </div>
@@ -588,62 +629,119 @@ export const AbsenceQueryManager = () => {
                         <table className="w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                                 <tr>
-                                    <th className="px-6 py-4">Empleado / Departamento</th>
-                                    <th className="px-6 py-4">Tipo de Ausencia</th>
-                                    <th className="px-6 py-4">Periodo Completo</th>
-                                    <th className="px-6 py-4 text-center">Días en Rango</th>
+                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Material / Acción' : 'Empleado / Departamento'}</th>
+                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Motivo' : 'Tipo de Registro'}</th>
+                                    <th className="px-6 py-4">Periodo / Fecha</th>
+                                    {queryMode === 'overtime' ? (
+                                        <th className="px-6 py-4 text-center">Horas</th>
+                                    ) : (
+                                        <th className="px-6 py-4 text-center">Días en Rango</th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {results.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => {
-                                    // Calculamos el solapamiento real para mostrar los días ausentes DENTRO del rango consultado
-                                    const rStart = req.startDate.split('T')[0];
-                                    const rEnd = (req.endDate || req.startDate).split('T')[0];
-                                    
-                                    const overlapStartStr = rStart > start ? rStart : start;
-                                    const overlapEndStr = rEnd < end ? rEnd : end;
-                                    
-                                    const d1 = new Date(overlapStartStr);
-                                    const d2 = new Date(overlapEndStr);
-                                    d1.setHours(0,0,0,0);
-                                    d2.setHours(0,0,0,0);
-                                    
-                                    const daysInRange = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                                    
-                                    return (
-                                        <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <img src={req.user?.avatar} className="w-8 h-8 rounded-full border border-slate-100 shadow-sm" />
-                                                    <div>
-                                                        <div className="font-bold text-slate-800">{req.user?.name || 'Desconocido'}</div>
-                                                        <div className="text-[10px] text-slate-400 font-black uppercase">
-                                                            {store.departments.find(d => d.id === req.user?.departmentId)?.name}
+                                {queryMode === 'absences' ? (
+                                    results.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => {
+                                        const rStart = req.startDate.split('T')[0];
+                                        const rEnd = (req.endDate || req.startDate).split('T')[0];
+                                        const overlapStartStr = rStart > start ? rStart : start;
+                                        const overlapEndStr = rEnd < end ? rEnd : end;
+                                        const d1 = new Date(overlapStartStr);
+                                        const d2 = new Date(overlapEndStr);
+                                        d1.setHours(0,0,0,0); d2.setHours(0,0,0,0);
+                                        const daysInRange = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                        
+                                        return (
+                                            <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={req.user?.avatar} className="w-8 h-8 rounded-full border border-slate-100 shadow-sm" />
+                                                        <div>
+                                                            <div className="font-bold text-slate-800">{req.user?.name || 'Desconocido'}</div>
+                                                            <div className="text-[10px] text-slate-400 font-black uppercase">
+                                                                {store.departments.find(d => d.id === req.user?.departmentId)?.name}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded-lg font-bold text-[10px] uppercase border ${
-                                                    req.typeId === RequestType.SICKNESS 
-                                                        ? 'bg-red-50 text-red-600 border-red-100' 
-                                                        : req.typeId === RequestType.OVERTIME_SPEND_DAYS 
-                                                            ? 'bg-purple-50 text-purple-600 border-purple-100'
-                                                            : 'bg-blue-50 text-blue-600 border-blue-100'
-                                                }`}>
-                                                    {store.getTypeLabel(req.typeId)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-600 font-medium">
-                                                {new Date(req.startDate).toLocaleDateString()} {req.endDate ? `- ${new Date(req.endDate).toLocaleDateString()}` : ''}
-                                            </td>
-                                            <td className="px-6 py-4 text-center font-black text-blue-700 bg-blue-50/30">
-                                                {daysInRange}d
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-lg font-bold text-[10px] uppercase border ${
+                                                        req.typeId === RequestType.SICKNESS 
+                                                            ? 'bg-red-50 text-red-600 border-red-100' 
+                                                            : req.typeId === RequestType.OVERTIME_SPEND_DAYS 
+                                                                ? 'bg-purple-50 text-purple-600 border-purple-100'
+                                                                : 'bg-blue-50 text-blue-600 border-blue-100'
+                                                    }`}>
+                                                        {store.getTypeLabel(req.typeId)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600 font-medium">
+                                                    {new Date(req.startDate).toLocaleDateString()} {req.endDate && req.endDate !== req.startDate ? `- ${new Date(req.endDate).toLocaleDateString()}` : ''}
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-black text-blue-700 bg-blue-50/30">
+                                                    {daysInRange}d
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    groupedOvertime.map(group => (
+                                        <React.Fragment key={group.user?.id}>
+                                            <tr className="bg-indigo-900 text-white">
+                                                <td colSpan={3} className="px-6 py-2.5">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={group.user?.avatar} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
+                                                        <div>
+                                                            <span className="font-black uppercase tracking-tight text-sm">{group.user?.name}</span>
+                                                            <span className="ml-3 text-[9px] font-bold text-white/50 uppercase tracking-widest">
+                                                                {store.departments.find(d => d.id === group.user?.departmentId)?.name}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-2.5 text-center bg-indigo-950 font-black text-blue-400">
+                                                    {group.total.toFixed(1)}h
+                                                </td>
+                                            </tr>
+                                            {group.items.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => (
+                                                <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-6 py-3 pl-12">
+                                                        <div className="flex items-center gap-2">
+                                                            <ChevronRight size={14} className="text-slate-300" />
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                                                                req.typeId === RequestType.OVERTIME_EARN ? 'bg-green-50 text-green-600 border-green-100' :
+                                                                req.typeId === RequestType.WORKED_HOLIDAY ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                                                'bg-red-50 text-red-600 border-red-100'
+                                                            }`}>
+                                                                {store.getTypeLabel(req.typeId)}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-3 italic text-slate-400 text-xs">
+                                                        {req.reason || 'Sin motivo especificado'}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-slate-600 font-medium">
+                                                        {new Date(req.startDate).toLocaleDateString()}
+                                                    </td>
+                                                    <td className={`px-6 py-3 text-center font-black ${req.hours > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {req.hours > 0 ? `+${req.hours}` : req.hours}h
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </React.Fragment>
+                                    ))
+                                )}
                             </tbody>
+                            {queryMode === 'overtime' && (
+                                <tfoot className="bg-slate-50 font-black">
+                                    <tr>
+                                        <td colSpan={3} className="px-6 py-4 text-right text-slate-500 uppercase text-[10px]">Suma Total Global en Rango:</td>
+                                        <td className="px-6 py-4 text-center text-indigo-700 text-lg">
+                                            {results.reduce((sum, r) => sum + (r.hours || 0), 0).toFixed(1)}h
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 </div>
@@ -651,7 +749,7 @@ export const AbsenceQueryManager = () => {
                 hasSearched && (
                     <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-400 italic animate-fade-in">
                         <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} />
-                        No se han encontrado ausencias aprobadas o bajas en el rango seleccionado.
+                        No se han encontrado {queryMode === 'absences' ? 'ausencias aprobadas' : 'registros de horas'} en el rango seleccionado.
                     </div>
                 )
             )}
@@ -659,7 +757,7 @@ export const AbsenceQueryManager = () => {
             {!hasSearched && (
                 <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-300 italic flex flex-col items-center gap-4">
                     <Calendar size={64} className="opacity-10" />
-                    <p className="max-w-xs mx-auto">Selecciona un rango de fechas arriba para generar el informe de personal ausente o de baja.</p>
+                    <p className="max-w-xs mx-auto">Selecciona un rango de fechas arriba para generar el informe de {queryMode === 'absences' ? 'personal ausente o de baja' : 'actividad de horas extra'}.</p>
                 </div>
             )}
         </div>

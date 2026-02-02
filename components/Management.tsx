@@ -192,7 +192,8 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                 return u && u.departmentId === selectedDeptId;
             });
         }
-        return list;
+        // ORDENAR POR FECHA DE INICIO DE LA AUSENCIA
+        return list.sort((a,b) => a.startDate.localeCompare(b.startDate));
     }, [user.id, selectedDeptId, refresh]);
 
     const absenceRequests = filteredPending.filter((r: LeaveRequest) => !store.isOvertimeRequest(r.typeId));
