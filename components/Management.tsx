@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info, UserCheck, Trash2
+  Users, Plus, Search, Palmtree, TrendingUp, ChevronRight, Filter, RotateCcw, CalendarDays, Timer, AlertTriangle, CheckCircle, Clock, Info, UserCheck, Trash2, LayoutGrid, Calendar as CalendarIcon, Printer, ChevronLeft, Star, X
 } from 'lucide-react';
 import { store } from '../services/store';
-import { User, Role, LeaveRequest, RequestStatus, RequestType } from '../types';
+import { User, Role, LeaveRequest, RequestStatus, RequestType, ShiftType } from '../types';
 import UserDetailModal from './UserDetailModal';
 import ShiftScheduler from './ShiftScheduler';
 
@@ -428,9 +429,72 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
     );
 };
 
+// Componente Interno para renderizar meses individuales en el reporte
+// Add missing interface and explicit React.FC typing to resolve TypeScript error in PrintMonth call site.
+interface PrintMonthProps {
+  date: Date;
+  requests: LeaveRequest[];
+  deptId: string;
+}
+
+const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7;
+    const totalDays = lastDay.getDate();
+
+    const monthName = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+    return (
+        <div className="break-inside-avoid mb-10">
+            <h4 className="text-lg font-black uppercase text-slate-800 border-b-2 border-slate-900 mb-4 pb-1">{monthName}</h4>
+            <div className="grid grid-cols-7 border-t border-l border-slate-200">
+                {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => (
+                    <div key={d} className="bg-slate-50 p-2 text-center text-[10px] font-black uppercase border-r border-b border-slate-200">{d}</div>
+                ))}
+                {Array.from({ length: startOffset }).map((_, i) => (
+                    <div key={`empty-${i}`} className="p-2 border-r border-b border-slate-200 min-h-[80px] bg-slate-50/30"></div>
+                ))}
+                {Array.from({ length: totalDays }).map((_, i) => {
+                    const day = i + 1;
+                    const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const dayReqs = requests.filter(r => {
+                        const rs = r.startDate.split('T')[0];
+                        const re = (r.endDate || r.startDate).split('T')[0];
+                        return dStr >= rs && dStr <= re;
+                    });
+                    const holiday = store.config.holidays.find(h => h.date === dStr);
+
+                    return (
+                        <div key={day} className={`p-1.5 border-r border-b border-slate-200 min-h-[80px] flex flex-col gap-1 ${holiday ? 'bg-red-50' : ''}`}>
+                            <span className={`text-[10px] font-black ${holiday ? 'text-red-600' : 'text-slate-400'}`}>{day} {holiday && `(${holiday.name})`}</span>
+                            <div className="space-y-0.5">
+                                {dayReqs.map(r => {
+                                    const u = store.users.find(usr => usr.id === r.userId);
+                                    return (
+                                        <div key={r.id} className="text-[8px] bg-blue-100 text-blue-800 px-1 py-0.5 rounded border border-blue-200 truncate leading-none">
+                                            <strong>{u?.name.split(' ')[0]}</strong>: {store.getTypeLabel(r.typeId)}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRequest: (req: LeaveRequest) => void }) => {
     const today = new Date().toISOString().split('T')[0];
     const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+    const [view, setView] = useState<'list' | 'calendar'>('list');
+    const [showPrintModal, setShowPrintModal] = useState(false);
+    const [printMonths, setPrintMonths] = useState(3);
+    const [currentCalDate, setCurrentCalDate] = useState(new Date());
 
     const allowedDepts = useMemo(() => {
         if (user.role === Role.ADMIN) return store.departments;
@@ -463,56 +527,32 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
         return list.sort((a,b) => (a.startDate || '').localeCompare(b.startDate || ''));
     }, [store.requests, user, selectedDeptId, allowedDepts, today]);
 
-    const conflicts = useMemo(() => {
-        const conflictList: { dateRange: string, users: string[], deptName: string }[] = [];
-        const deptsToCheck = selectedDeptId 
-            ? store.departments.filter(d => d.id === selectedDeptId)
-            : allowedDepts;
+    const handlePrint = () => {
+        window.print();
+        setShowPrintModal(false);
+    };
 
-        deptsToCheck.forEach(dept => {
-            const deptUsers = store.users.filter(u => u.departmentId === dept.id).map(u => u.id);
-            const deptReqs = store.requests.filter(r => 
-                r.status === RequestStatus.APPROVED && 
-                (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
-                deptUsers.includes(r.userId) &&
-                (r.endDate || r.startDate) >= today
-            );
-
-            for (let i = 0; i < deptReqs.length; i++) {
-                for (let j = i + 1; j < deptReqs.length; j++) {
-                    const r1 = deptReqs[i];
-                    const r2 = deptReqs[j];
-                    const s1 = r1.startDate.split('T')[0];
-                    const e1 = (r1.endDate || r1.startDate).split('T')[0];
-                    const s2 = r2.startDate.split('T')[0];
-                    const e2 = (r2.endDate || r2.startDate).split('T')[0];
-
-                    if (s1 <= e2 && e1 >= s2) {
-                        const u1 = store.users.find(u => u.id === r1.userId)?.name || '?';
-                        const u2 = store.users.find(u => u.id === r2.userId)?.name || '?';
-                        
-                        const overlapStart = s1 > s2 ? s1 : s2;
-                        const overlapEnd = e1 < e2 ? e1 : e2;
-                        
-                        conflictList.push({
-                            dateRange: overlapStart === overlapEnd 
-                                ? new Date(overlapStart).toLocaleDateString()
-                                : `${new Date(overlapStart).toLocaleDateString()} - ${new Date(overlapEnd).toLocaleDateString()}`,
-                            users: [u1, u2],
-                            deptName: dept.name
-                        });
-                    }
-                }
-            }
-        });
-        return conflictList;
-    }, [store.requests, store.users, allowedDepts, selectedDeptId, today]);
+    // Lógica para Calendario Mensual
+    const monthYearStr = currentCalDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7;
+    const totalDays = lastDay.getDate();
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* Header con Controles */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden print:hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50 gap-4">
-                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CheckCircle size={20} className="text-blue-600"/> Próximas Ausencias Confirmadas</h3>
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CheckCircle size={20} className="text-blue-600"/> Próximas Ausencias</h3>
+                        <div className="flex p-1 bg-slate-200/50 rounded-xl">
+                            <button onClick={() => setView('list')} className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`} title="Vista Listado"><LayoutGrid size={18}/></button>
+                            <button onClick={() => setView('calendar')} className={`p-2 rounded-lg transition-all ${view === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`} title="Vista Calendario"><CalendarIcon size={18}/></button>
+                        </div>
+                    </div>
                     
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <div className="relative flex-1 md:w-64">
@@ -526,56 +566,146 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
                                 {allowedDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                             </select>
                         </div>
-                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{upcoming.length} Registros</div>
+                        <button 
+                            onClick={() => setShowPrintModal(true)}
+                            className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 hover:bg-black shadow-lg shadow-slate-900/20 transition-all"
+                        >
+                            <Printer size={16}/> Imprimir Calendario
+                        </button>
                     </div>
                 </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas {selectedDeptId ? 'para este departamento' : ''}.</div> : upcoming.map((req: LeaveRequest) => {
-                        const u = store.users.find(usr => usr.id === req.userId);
-                        const approverName = req.resolvedBy ? store.users.find(usr => usr.id === req.resolvedBy)?.name : null;
-                        
-                        return (
-                            <div key={req.id} onClick={() => onViewRequest(req)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-white group relative overflow-hidden flex flex-col justify-between h-full">
-                                <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
-                                <div>
-                                    <div className="flex items-center gap-3 mb-4"><img src={u?.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover" /><div><div className="font-bold text-slate-800 text-sm">{u?.name}</div><div className="text-[10px] text-slate-400 uppercase font-bold">{store.departments.find(d => d.id === u?.departmentId)?.name}</div></div></div>
-                                    <div className="space-y-2 mb-4"><div className="flex justify-between items-center"><span className="text-xs font-black text-blue-600 uppercase">{store.getTypeLabel(req.typeId)}</span><span className="text-[10px] font-bold text-slate-400">{new Date(req.startDate).toLocaleDateString()}</span></div></div>
-                                </div>
-                                {approverName && (
-                                    <div className="mt-auto pt-3 border-t border-slate-50 flex items-center gap-2">
-                                        <div className="p-1 bg-green-50 text-green-600 rounded">
-                                            <UserCheck size={12}/>
-                                        </div>
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Validado por: <span className="text-green-700">{approverName}</span></p>
+
+                {view === 'list' ? (
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {upcoming.length === 0 ? <div className="col-span-full py-12 text-center text-slate-400 italic">No hay ausencias programadas {selectedDeptId ? 'para este departamento' : ''}.</div> : upcoming.map((req: LeaveRequest) => {
+                            const u = store.users.find(usr => usr.id === req.userId);
+                            const approverName = req.resolvedBy ? store.users.find(usr => usr.id === req.resolvedBy)?.name : null;
+                            
+                            return (
+                                <div key={req.id} onClick={() => onViewRequest(req)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all cursor-pointer bg-white group relative overflow-hidden flex flex-col justify-between h-full">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-4"><img src={u?.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover" /><div><div className="font-bold text-slate-800 text-sm">{u?.name}</div><div className="text-[10px] text-slate-400 uppercase font-bold">{store.departments.find(d => d.id === u?.departmentId)?.name}</div></div></div>
+                                        <div className="space-y-2 mb-4"><div className="flex justify-between items-center"><span className="text-xs font-black text-blue-600 uppercase">{store.getTypeLabel(req.typeId)}</span><span className="text-[10px] font-bold text-slate-400">{new Date(req.startDate).toLocaleDateString()}</span></div></div>
                                     </div>
-                                )}
+                                    {approverName && (
+                                        <div className="mt-auto pt-3 border-t border-slate-50 flex items-center gap-2">
+                                            <div className="p-1 bg-green-50 text-green-600 rounded">
+                                                <UserCheck size={12}/>
+                                            </div>
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Validado por: <span className="text-green-700">{approverName}</span></p>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h4 className="font-black uppercase text-slate-800 tracking-tighter text-lg">{monthYearStr}</h4>
+                            <div className="flex gap-2">
+                                <button onClick={() => setCurrentCalDate(new Date(year, month - 1, 1))} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"><ChevronLeft size={18}/></button>
+                                <button onClick={() => setCurrentCalDate(new Date(year, month + 1, 1))} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"><ChevronRight size={18}/></button>
                             </div>
-                        );
-                    })}
+                        </div>
+                        <div className="grid grid-cols-7 border-t border-l border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                            {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => (
+                                <div key={d} className="bg-slate-50 p-3 text-center text-xs font-black uppercase text-slate-400 border-r border-b border-slate-100">{d}</div>
+                            ))}
+                            {Array.from({ length: startOffset }).map((_, i) => (
+                                <div key={`empty-${i}`} className="p-3 border-r border-b border-slate-100 min-h-[120px] bg-slate-50/20"></div>
+                            ))}
+                            {Array.from({ length: totalDays }).map((_, i) => {
+                                const day = i + 1;
+                                const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                const dayReqs = upcoming.filter(r => {
+                                    const rs = r.startDate.split('T')[0];
+                                    const re = (r.endDate || r.startDate).split('T')[0];
+                                    return dStr >= rs && dStr <= re;
+                                });
+                                const holiday = store.config.holidays.find(h => h.date === dStr);
+                                const isToday = new Date().toISOString().split('T')[0] === dStr;
+
+                                return (
+                                    <div key={day} className={`p-3 border-r border-b border-slate-100 min-h-[120px] transition-colors hover:bg-slate-50 flex flex-col gap-1.5 ${isToday ? 'bg-blue-50/30' : holiday ? 'bg-red-50/50' : 'bg-white'}`}>
+                                        <span className={`text-xs font-black ${holiday ? 'text-red-600' : isToday ? 'text-blue-600' : 'text-slate-300'}`}>{day} {holiday && <Star size={10} className="inline ml-1 fill-current"/>}</span>
+                                        <div className="space-y-1 overflow-y-auto max-h-[80px] no-scrollbar">
+                                            {dayReqs.map(r => {
+                                                const u = store.users.find(usr => usr.id === r.userId);
+                                                return (
+                                                    <div key={r.id} onClick={() => onViewRequest(r)} className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-lg border border-blue-200 truncate cursor-pointer hover:bg-blue-200 transition-colors font-bold uppercase tracking-tighter">
+                                                        {u?.name.split(' ')[0]}: {store.getTypeLabel(r.typeId)}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* VISTA DE IMPRESIÓN DINÁMICA (OCULTA EN PANTALLA) */}
+            <div className="hidden print:block bg-white min-h-screen">
+                <div className="flex items-center gap-6 mb-12 border-b-4 border-slate-900 pb-6">
+                    <img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="GdA" className="w-24 h-24 object-contain" />
+                    <div>
+                        <h1 className="text-4xl font-black uppercase tracking-tighter">Planificación de Ausencias</h1>
+                        <p className="text-lg text-slate-500 font-bold uppercase">Personal de {selectedDeptId ? store.departments.find(d => d.id === selectedDeptId)?.name : 'Todos los Departamentos'}</p>
+                        <p className="text-sm text-slate-400">Generado el {new Date().toLocaleDateString()} por el sistema GdA RRHH</p>
+                    </div>
+                </div>
+                
+                {Array.from({ length: printMonths }).map((_, i) => {
+                    const d = new Date(year, month + i, 1);
+                    return <PrintMonth key={i} date={d} requests={upcoming} deptId={selectedDeptId} />;
+                })}
+
+                <div className="mt-12 pt-12 border-t border-slate-200 grid grid-cols-2 gap-20">
+                    <div className="text-center">
+                        <div className="h-1 bg-slate-300 w-full mb-2"></div>
+                        <p className="text-xs font-black uppercase text-slate-400">Firma Responsable Departamento</p>
+                    </div>
+                    <div className="text-center">
+                        <div className="h-1 bg-slate-300 w-full mb-2"></div>
+                        <p className="text-xs font-black uppercase text-slate-400">Firma Dirección RRHH</p>
+                    </div>
                 </div>
             </div>
 
-            <div className={`p-6 rounded-3xl border transition-all ${conflicts.length > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
-                <h3 className={`font-bold flex items-center gap-2 mb-4 text-base ${conflicts.length > 0 ? 'text-red-800' : 'text-green-800'}`}>
-                    {conflicts.length > 0 ? <AlertTriangle size={12} className="text-red-600" /> : <CheckCircle size={12} className="text-green-600" />}
-                    {conflicts.length > 0 ? `Conflictos Detectados en el Equipo (${conflicts.length})` : 'No hay conflictos detectados'}
-                </h3>
-                {conflicts.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {conflicts.map((conf, idx) => (
-                            <div key={idx} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm animate-scale-in">
-                                <div className="text-sm font-bold text-red-600 mb-1">{conf.dateRange}</div>
-                                <div className="text-[10px] font-semibold text-slate-500 uppercase mb-2">{conf.deptName}</div>
-                                <div className="flex flex-wrap gap-1">
-                                    {conf.users.map(u => <span key={u} className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] rounded-full font-medium">{u}</span>)}
+            {/* Modal de Configuración de Impresión */}
+            {showPrintModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl animate-scale-in p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2"><Printer size={24} className="text-blue-600"/> Reporte de Ausencias</h3>
+                            <button onClick={() => setShowPrintModal(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Rango de Meses a Imprimir</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[1, 3, 6, 12].map(m => (
+                                        <button key={m} onClick={() => setPrintMonths(m)} className={`py-3 rounded-xl text-sm font-bold border transition-all ${printMonths === m ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                                            {m} Mes{m > 1 ? 'es' : ''}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
-                        ))}
+                            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-start gap-3">
+                                <Info size={16} className="text-blue-600 mt-0.5"/>
+                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">Se generará un calendario vertical con todas las ausencias aprobadas y festivos configurados para el rango seleccionado.</p>
+                            </div>
+                            <button onClick={handlePrint} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                <Printer size={20}/> Generar Informe
+                            </button>
+                        </div>
                     </div>
-                ) : (
-                    <p className="text-sm text-green-700 italic">No hay solapamientos de ausencias aprobadas para el personal y criterios seleccionados.</p>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };
