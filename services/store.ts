@@ -80,7 +80,7 @@ class Store {
 
         if (usersRes.data) this.users = this.mapUsersFromDB(usersRes.data);
         if (deptsRes.data) this.departments = deptsRes.data.map((d: any) => ({ 
-            id: String(d.id), name: String(d.name || ''), supervisorIds: (d.supervisor_ids || []).map((id: any) => String(id))
+            id: String(d.id), name: String(d.name || ''), supervisorIds: (d.supervisor_ids || []).map((id: any) => String(id).toLowerCase())
         }));
         if (reqsRes.data) this.requests = this.mapRequestsFromDB(reqsRes.data);
         if (newsRes.data) this.config.news = newsRes.data;
@@ -90,14 +90,14 @@ class Store {
         if (ppeTypesRes.data) this.config.ppeTypes = ppeTypesRes.data.map((p: any) => ({ 
             id: String(p.id), name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
         }));
-        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: String(p.id), userId: String(p.user_id), type_id: String(p.type_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: String(p.id), userId: String(p.user_id).toLowerCase(), type_id: String(p.type_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         if (holidaysRes.data) this.config.holidays = holidaysRes.data.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
         if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data.map((s: any) => ({ ...s, id: String(s.id) }));
         
         if (shiftAssignmentsRes.data) this.config.shiftAssignments = shiftAssignmentsRes.data.map((a: any) => ({ 
             id: String(a.id), 
-            userId: String(a.user_id), 
-            date: a.date ? a.date.split('T')[0] : a.date, 
+            userId: String(a.user_id).toLowerCase(), 
+            date: a.date ? String(a.date).substring(0, 10) : a.date, 
             shiftTypeId: String(a.shift_type_id || '') 
         }));
 
@@ -137,7 +137,7 @@ class Store {
             if (updatedSelf) this.currentUser = updatedSelf;
 
             const { data: notifsData } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
-            if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: String(n.id), userId: String(n.user_id), message: n.message, read: n.read, date: n.date, type: n.type }));
+            if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: String(n.id), userId: String(n.user_id).toLowerCase(), message: n.message, read: n.read, date: n.date, type: n.type }));
         }
 
         this.notify();
@@ -156,7 +156,7 @@ class Store {
 
   private mapUsersFromDB(data: any[]): User[] {
       return data.map(u => ({
-          id: String(u.id), name: u.name, email: u.email, role: u.role, department_id: String(u.department_id), departmentId: String(u.department_id),
+          id: String(u.id).toLowerCase(), name: u.name, email: u.email, role: u.role, department_id: String(u.department_id), departmentId: String(u.department_id),
           daysAvailable: Number(u.days_available || 0), overtimeHours: Number(u.overtime_hours || 0),
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`, 
           birthdate: u.birthdate, truckNumber: u.truck_number
@@ -165,10 +165,10 @@ class Store {
 
   private mapRequestsFromDB(data: any[]): LeaveRequest[] {
       return data.map(r => ({
-          id: String(r.id), userId: String(r.user_id), type_id: String(r.type_id), typeId: String(r.type_id), label: r.label, 
+          id: String(r.id), userId: String(r.user_id).toLowerCase(), type_id: String(r.type_id), typeId: String(r.type_id), label: r.label, 
           startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
           status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
-          resolvedBy: r.resolved_by ? String(r.resolved_by) : undefined,
+          resolvedBy: r.resolved_by ? String(r.resolved_by).toLowerCase() : undefined,
           isConsumed: !!r.is_consumed, consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
       }));
   }
@@ -178,6 +178,9 @@ class Store {
   }
 
   private async sendEmailNotification(templateLabel: string, req: LeaveRequest) {
+    // CLÁUSULA DE GUARDA SENIOR: Silenciar cualquier comunicación si el tipo es Baja Médica
+    if (req.typeId === RequestType.SICKNESS) return;
+    
     if (!this.config.smtpSettings.enabled) return;
 
     const worker = this.users.find(u => u.id === req.userId);
@@ -268,13 +271,11 @@ class Store {
         hoursDelta = 4;
     } 
     else if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
-        // En este caso req.hours vendrá negativo (ej: -8)
         const h = Math.abs(req.hours || 0);
         hoursDelta = -h; 
         daysDelta = h / 8;
     }
     else if (this.isOvertimeRequest(req.typeId)) {
-        // Al guardarse ya con el signo correcto en el DB, solo sumamos el delta directamente
         hoursDelta = req.hours || 0;
     } 
     else {
@@ -288,7 +289,6 @@ class Store {
         }
     }
 
-    // 1. Actualizar saldo del usuario
     if (daysDelta !== 0 || hoursDelta !== 0) {
         const newDays = user.daysAvailable + (daysDelta * multiplier);
         const newHours = user.overtimeHours + (hoursDelta * multiplier);
@@ -301,7 +301,6 @@ class Store {
         user.overtimeHours = newHours;
     }
 
-    // 2. Trazabilidad de registros consumidos
     if (req.overtimeUsage && req.overtimeUsage.length > 0) {
         for (const usage of req.overtimeUsage) {
             const sourceReq = this.requests.find(r => r.id === usage.requestId);
@@ -349,18 +348,18 @@ class Store {
       const finalResolvedBy = status === RequestStatus.APPROVED ? this.currentUser?.id : null;
 
       const { data: newReqData } = await supabase.from('requests').insert({
-          id, user_id: userId, type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
+          id, user_id: userId.toLowerCase(), type_id: data.typeId, label, start_date: data.startDate, end_date: data.endDate,
           hours: finalHours, reason: data.reason, status: status, created_at: new Date().toISOString(),
-          overtime_usage: data.overtimeUsage || [],
-          resolved_by: finalResolvedBy
+          overtime_usage: data.overtime_usage || [],
+          resolved_by: finalResolvedBy ? finalResolvedBy.toLowerCase() : null
       }).select().single();
 
       if (newReqData) {
           const req = {
-              id: String(newReqData.id), userId: String(newReqData.user_id), typeId: String(newReqData.type_id),
+              id: String(newReqData.id), userId: String(newReqData.user_id).toLowerCase(), typeId: String(newReqData.type_id),
               startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours,
               status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at,
-              resolvedBy: newReqData.resolved_by ? String(newReqData.resolved_by) : undefined, 
+              resolvedBy: newReqData.resolved_by ? String(newReqData.resolved_by).toLowerCase() : undefined, 
               overtimeUsage: newReqData.overtime_usage || []
           } as LeaveRequest;
 
@@ -378,6 +377,7 @@ class Store {
               templateName = 'Ausencia: Nueva Solicitud';
           }
           this.sendEmailNotification(templateName, req);
+          // Nota: El método sendEmailNotification ya filtra internamente si es RequestType.SICKNESS
           if (req.typeId === RequestType.SICKNESS) {
               this.sendEmailNotification('Ausencia: Baja Médica (Aviso)', req);
           }
@@ -404,7 +404,7 @@ class Store {
     }).eq('id', id).select().single();
     if (updatedReqData) {
         const req = {
-            id: String(updatedReqData.id), userId: String(updatedReqData.user_id), typeId: String(updatedReqData.type_id),
+            id: String(updatedReqData.id), userId: String(updatedReqData.user_id).toLowerCase(), typeId: String(updatedReqData.type_id),
             startDate: updatedReqData.start_date, endDate: updatedReqData.end_date, hours: updatedReqData.hours,
             status: updatedReqData.status, overtimeUsage: updatedReqData.overtime_usage || []
         } as LeaveRequest;
@@ -433,7 +433,7 @@ class Store {
       else if (oldReq.status === RequestStatus.REJECTED && status === RequestStatus.APPROVED) {
           await this.applyRequestToBalanceDB(oldReq, false);
       }
-      await supabase.from('requests').update({ status, admin_comment: comment || '', resolved_by: finalAdminId }).eq('id', id);
+      await supabase.from('requests').update({ status, admin_comment: comment || '', resolved_by: finalAdminId.toLowerCase() }).eq('id', id);
       await this.refresh();
       const refreshedReq = this.requests.find(r => r.id === id);
       if (refreshedReq) {
@@ -479,11 +479,12 @@ class Store {
   }
 
   getPendingApprovalsForUser(userId: string) {
-    const user = this.users.find(u => u.id === userId);
+    const targetId = userId.toLowerCase();
+    const user = this.users.find(u => u.id === targetId);
     if (!user) return [];
     if (user.role === Role.ADMIN) return this.requests.filter(r => r.status === RequestStatus.PENDING);
     if (user.role === Role.SUPERVISOR) {
-        const myDeptIds = this.departments.filter(d => (d.supervisorIds || []).includes(userId)).map(d => d.id);
+        const myDeptIds = this.departments.filter(d => (d.supervisorIds || []).includes(targetId)).map(d => d.id);
         return this.requests.filter(r => {
             if (r.status !== RequestStatus.PENDING) return false;
             const reqUser = this.users.find(u => u.id === r.userId);
@@ -494,7 +495,7 @@ class Store {
   }
 
   getNotificationsForUser(userId: string) {
-    return this.notifications.filter(n => n.userId === userId);
+    return this.notifications.filter(n => n.userId === userId.toLowerCase());
   }
 
   async markNotificationAsRead(id: string) {
@@ -503,7 +504,7 @@ class Store {
   }
 
   async markAllNotificationsAsRead(userId: string) {
-    await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+    await supabase.from('notifications').update({ read: true }).eq('user_id', userId.toLowerCase());
     await this.refresh();
   }
 
@@ -513,9 +514,10 @@ class Store {
   }
 
   getNextShift(userId: string) {
+    const targetId = userId.toLowerCase();
     const today = new Date().toISOString().split('T')[0];
     const assignments = this.config.shiftAssignments
-        .filter(a => a.userId === userId && a.date >= today)
+        .filter(a => a.userId === targetId && a.date >= today)
         .sort((a,b) => a.date.localeCompare(b.date));
     if (assignments.length > 0) {
         const a = assignments[0];
@@ -526,7 +528,8 @@ class Store {
   }
 
   getShiftForUserDate(userId: string, date: string) {
-    const a = this.config.shiftAssignments.find(a => String(a.userId) === String(userId) && a.date === date);
+    const targetId = userId.toLowerCase();
+    const a = this.config.shiftAssignments.find(a => a.userId === targetId && a.date === date);
     return a ? this.config.shiftTypes.find(s => s.id === a.shiftTypeId) : undefined;
   }
 
@@ -539,16 +542,16 @@ class Store {
         if (this.isOvertimeRequest(other.typeId)) return false;
         const otherUser = this.users.find(usr => usr.id === other.userId);
         if (!otherUser || otherUser.departmentId !== u.departmentId) return false;
-        const start = req.startDate.split('T')[0];
-        const end = (req.endDate || req.startDate).split('T')[0];
-        const oStart = other.startDate.split('T')[0];
-        const oEnd = (other.endDate || other.startDate).split('T')[0];
+        const start = req.startDate.substring(0, 10);
+        const end = (req.endDate || req.startDate).substring(0, 10);
+        const oStart = other.startDate.substring(0, 10);
+        const oEnd = (other.endDate || other.startDate).substring(0, 10);
         return (start <= oEnd && end >= oStart);
     });
   }
 
   getAvailableOvertimeRecords(userId: string) {
-    return this.requests.filter(r => r.userId === userId && r.typeId === RequestType.OVERTIME_EARN && r.status === RequestStatus.APPROVED && (r.hours || 0) > (r.consumedHours || 0));
+    return this.requests.filter(r => r.userId === userId.toLowerCase() && r.typeId === RequestType.OVERTIME_EARN && r.status === RequestStatus.APPROVED && (r.hours || 0) > (r.consumedHours || 0));
   }
 
   async createUser(data: any, pass: string) {
@@ -582,45 +585,46 @@ class Store {
         truck_number: data.truck_number
     };
     if (data.password && data.password.trim() !== '') updateData.password = data.password;
-    const { error } = await supabase.from('users').update(updateData).eq('id', id);
+    const { error } = await supabase.from('users').update(updateData).eq('id', id.toLowerCase());
     if (error) throw error;
     await this.refresh();
   }
 
   async updateUserRole(id: string, role: Role) {
-    await supabase.from('users').update({ role }).eq('id', id);
+    await supabase.from('users').update({ role }).eq('id', id.toLowerCase());
     await this.refresh();
   }
 
   async updateUserProfile(id: string, data: any) {
     const updateData: any = { name: data.name, email: data.email, avatar: data.avatar };
     if (data.password && data.password.trim() !== '') updateData.password = data.password;
-    const { error } = await supabase.from('users').update(updateData).eq('id', id);
+    const { error } = await supabase.from('users').update(updateData).eq('id', id.toLowerCase());
     if (error) throw error;
     await this.refresh();
   }
 
   async deleteUser(id: string) {
+    const targetId = id.toLowerCase();
     try {
         await Promise.all([
-            supabase.from('requests').delete().eq('user_id', id),
-            supabase.from('notifications').delete().eq('user_id', id),
-            supabase.from('shift_assignments').delete().eq('user_id', id),
-            supabase.from('ppe_requests').delete().eq('user_id', id)
+            supabase.from('requests').delete().eq('user_id', targetId),
+            supabase.from('notifications').delete().eq('user_id', targetId),
+            supabase.from('shift_assignments').delete().eq('user_id', targetId),
+            supabase.from('ppe_requests').delete().eq('user_id', targetId)
         ]);
-        const { error } = await supabase.from('users').delete().eq('id', id);
+        const { error } = await supabase.from('users').delete().eq('id', targetId);
         if (error) throw error;
         await this.refresh();
     } catch (error) { throw error; }
   }
 
   async createDepartment(name: string, supervisorIds: string[]) {
-    await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds });
+    await supabase.from('departments').insert({ id: crypto.randomUUID(), name, supervisor_ids: supervisorIds.map(id => id.toLowerCase()) });
     await this.refresh();
   }
 
   async updateDepartment(id: string, name: string, supervisorIds: string[]) {
-    await supabase.from('departments').update({ name, supervisor_ids: supervisorIds }).eq('id', id);
+    await supabase.from('departments').update({ name, supervisor_ids: supervisorIds.map(id => id.toLowerCase()) }).eq('id', id);
     await this.refresh();
   }
 
@@ -660,32 +664,90 @@ class Store {
   }
 
   async assignShift(userId: string, date: string, shiftTypeId: string) {
-    const normalizedDate = date.split('T')[0];
-    const targetUserId = String(userId);
-    const existingIdx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
-    const originalValue = existingIdx > -1 ? { ...this.config.shiftAssignments[existingIdx] } : null;
-    if (!shiftTypeId) { if (existingIdx > -1) this.config.shiftAssignments.splice(existingIdx, 1); }
-    else {
-        if (existingIdx > -1) this.config.shiftAssignments[existingIdx].shiftTypeId = String(shiftTypeId);
-        else this.config.shiftAssignments.push({ id: 'temp-' + Date.now(), userId: targetUserId, date: normalizedDate, shiftTypeId: String(shiftTypeId) });
+    const normalizedDate = String(date).substring(0, 10);
+    const targetUserId = String(userId).toLowerCase();
+    
+    const updated = this.config.shiftAssignments.filter(a => 
+        !(a.userId === targetUserId && a.date === normalizedDate)
+    );
+    
+    if (shiftTypeId) {
+        updated.push({
+            id: 'temp-' + Date.now(),
+            userId: targetUserId,
+            date: normalizedDate,
+            shiftTypeId: String(shiftTypeId)
+        });
     }
+    
+    this.config.shiftAssignments = updated;
     this.notify();
+
     try {
-        if (!shiftTypeId) await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
-        else {
-            await supabase.from('shift_assignments').delete().match({ user_id: targetUserId, date: normalizedDate });
-            await supabase.from('shift_assignments').insert({ id: crypto.randomUUID(), user_id: targetUserId, date: normalizedDate, shift_type_id: String(shiftTypeId) });
+        await supabase.from('shift_assignments').delete().eq('user_id', targetUserId).eq('date', normalizedDate);
+        if (shiftTypeId) {
+            await supabase.from('shift_assignments').insert({ 
+                id: crypto.randomUUID(), 
+                user_id: targetUserId, 
+                date: normalizedDate, 
+                shift_type_id: String(shiftTypeId) 
+            });
         }
     } catch (error) {
-        if (originalValue) {
-            const idx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
-            if (idx > -1) this.config.shiftAssignments[idx] = originalValue;
-            else this.config.shiftAssignments.push(originalValue);
-        } else {
-            const idx = this.config.shiftAssignments.findIndex(a => String(a.userId) === targetUserId && a.date === normalizedDate);
-            if (idx > -1) this.config.shiftAssignments.splice(idx, 1);
+        console.error("Error crítico persistiendo turno:", error);
+        throw error;
+    }
+  }
+
+  async assignShiftsBatch(assignments: { userId: string, date: string, shiftTypeId: string }[]) {
+    if (assignments.length === 0) return;
+
+    try {
+        // 1. Limpieza masiva en DB
+        for (const a of assignments) {
+            await supabase.from('shift_assignments')
+                .delete()
+                .eq('user_id', a.userId.toLowerCase())
+                .eq('date', a.date.substring(0, 10));
         }
+
+        // 2. Preparar inserción
+        const toInsert = assignments
+            .filter(a => a.shiftTypeId)
+            .map(a => ({
+                id: crypto.randomUUID(),
+                user_id: a.userId.toLowerCase(),
+                date: a.date.substring(0, 10),
+                shift_type_id: String(a.shiftTypeId)
+            }));
+
+        if (toInsert.length > 0) {
+            const { error } = await supabase.from('shift_assignments').insert(toInsert);
+            if (error) throw error;
+        }
+
+        // 3. ACTUALIZACIÓN OPTIMISTA: Actualizamos el estado local ANTES del refresh para evitar parpadeos o fallos de visualización
+        const savedIds = assignments.map(a => a.userId.toLowerCase());
+        const savedDates = assignments.map(a => a.date.substring(0, 10));
+        
+        this.config.shiftAssignments = [
+            ...this.config.shiftAssignments.filter(a => 
+                !(savedIds.includes(a.userId) && savedDates.includes(a.date))
+            ),
+            ...toInsert.map(i => ({
+                id: i.id,
+                userId: i.user_id,
+                date: i.date,
+                shiftTypeId: i.shift_type_id
+            }))
+        ];
         this.notify();
+
+        // 4. Refresco final para asegurar IDs reales de base de datos
+        await this.refresh();
+        
+    } catch (error) {
+        console.error("Error en guardado masivo:", error);
         throw error;
     }
   }
@@ -729,12 +791,12 @@ class Store {
   }
 
   async createPPERequest(userId: string, typeId: string, size: string) {
-    await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId, type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() });
+    await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: userId.toLowerCase(), type_id: typeId, size, status: 'PENDIENTE', created_at: new Date().toISOString() });
     await this.refresh();
   }
 
   async markPPEAsRequested(id: string) {
-    await supabase.from('notifications').insert({ id: crypto.randomUUID(), user_id: String(this.currentUser?.id), message: `Se ha marcado el EPI ${id} como solicitado.`, read: false, date: new Date().toISOString() });
+    await supabase.from('notifications').insert({ id: crypto.randomUUID(), user_id: String(this.currentUser?.id).toLowerCase(), message: `Se ha marcado el EPI ${id} como solicitado.`, read: false, date: new Date().toISOString() });
     await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id);
     await this.refresh();
   }
@@ -761,7 +823,7 @@ class Store {
   }
 
   async createNewsPost(title: string, content: string, authorId: string) {
-    await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId, created_at: new Date().toISOString() });
+    await supabase.from('news').insert({ id: crypto.randomUUID(), title, content, author_id: authorId.toLowerCase(), created_at: new Date().toISOString() });
     await this.refresh();
   }
 
@@ -771,7 +833,7 @@ class Store {
   }
 
   async sendMassNotification(userIds: string[], message: string) {
-    const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid, message, read: false, date: new Date().toISOString(), type: 'admin' }));
+    const notifs = userIds.map(uid => ({ id: crypto.randomUUID(), user_id: uid.toLowerCase(), message, read: false, date: new Date().toISOString(), type: 'admin' }));
     await supabase.from('notifications').insert(notifs);
     await this.refresh();
   }
