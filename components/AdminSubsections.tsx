@@ -3,7 +3,7 @@ import { store } from '../services/store';
 import { 
     BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
 import { supabase } from '../services/supabase';
 
@@ -45,7 +45,7 @@ export const AdminStats = () => {
     );
 };
 
-// Gestión de Departamentos (SUPERVISORES)
+// Gestión de Departamentos
 export const DepartmentManager = () => {
     const [editingDept, setEditingDept] = useState<Department | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -75,61 +75,33 @@ export const DepartmentManager = () => {
         <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center">
                 <h3 className="font-bold text-slate-800 uppercase text-xs tracking-widest">Departamentos y Responsables</h3>
-                <button 
-                    onClick={() => setEditingDept({ id: 'new', name: '', supervisorIds: [] })}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
-                >
-                    <Plus size={16}/> Nuevo Departamento
-                </button>
+                <button onClick={() => setEditingDept({ id: 'new', name: '', supervisorIds: [] })} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm"><Plus size={16}/> Nuevo Departamento</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {store.departments.map(d => (
                     <div key={d.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center group">
-                        <div>
-                            <h4 className="font-bold text-slate-700">{d.name}</h4>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">
-                                {d.supervisorIds?.length || 0} Responsables
-                            </p>
-                        </div>
-                        <div className="flex gap-1">
-                            <button onClick={() => setEditingDept(d)} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><Edit2 size={16}/></button>
-                            <button onClick={() => store.deleteDepartment(d.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-                        </div>
+                        <div><h4 className="font-bold text-slate-700">{d.name}</h4><p className="text-[10px] text-slate-400 font-bold uppercase">{d.supervisorIds?.length || 0} Responsables</p></div>
+                        <div className="flex gap-1"><button onClick={() => setEditingDept(d)} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><Edit2 size={16}/></button><button onClick={() => store.deleteDepartment(d.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></div>
                     </div>
                 ))}
             </div>
-
             {editingDept && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[130] p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-8 animate-scale-in">
                         <h3 className="text-xl font-bold text-slate-800 mb-6">{editingDept.id === 'new' ? 'Nuevo' : 'Editar'} Departamento</h3>
                         <div className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Nombre</label>
-                                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingDept.name} onChange={e => setEditingDept({...editingDept, name: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Responsables / Supervisores</label>
+                            <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Nombre</label><input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingDept.name} onChange={e => setEditingDept({...editingDept, name: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Responsables / Supervisores</label>
                                 <div className="max-h-60 overflow-y-auto border border-slate-100 rounded-xl p-2 space-y-1 bg-slate-50">
                                     {store.users.sort((a,b) => a.name.localeCompare(b.name)).map(u => (
                                         <label key={u.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
-                                            <input 
-                                                type="checkbox" 
-                                                className="w-4 h-4 text-blue-600 rounded" 
-                                                checked={editingDept.supervisorIds.includes(u.id)}
-                                                onChange={() => toggleSupervisor(u.id)}
-                                            />
+                                            <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" checked={editingDept.supervisorIds.includes(u.id)} onChange={() => toggleSupervisor(u.id)}/>
                                             <span className="text-sm font-medium text-slate-700">{u.name}</span>
                                         </label>
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex gap-3 pt-2">
-                                <button onClick={() => setEditingDept(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancelar</button>
-                                <button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex justify-center items-center gap-2">
-                                    {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar
-                                </button>
-                            </div>
+                            <div className="flex gap-3 pt-2"><button onClick={() => setEditingDept(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancelar</button><button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar</button></div>
                         </div>
                     </div>
                 </div>
@@ -138,7 +110,7 @@ export const DepartmentManager = () => {
     );
 };
 
-// Configuración RRHH (Tipos de Ausencia, Festivos, etc.)
+// Configuración RRHH
 export const HRConfigManager = () => {
     const [editingType, setEditingType] = useState<LeaveTypeConfig | null>(null);
     const [newShift, setNewShift] = useState({ name: '', color: '#3b82f6', start: '08:00', end: '16:30' });
@@ -146,621 +118,219 @@ export const HRConfigManager = () => {
 
     const handleSaveType = async () => {
         if (!editingType) return;
-        if (editingType.id.startsWith('temp_')) {
-            await store.createLeaveType(editingType.label, editingType.subtractsDays, editingType.fixedRanges);
-        } else {
-            await store.updateLeaveType(editingType.id, editingType.label, editingType.subtractsDays, editingType.fixedRanges);
-        }
+        if (editingType.id.startsWith('temp_')) await store.createLeaveType(editingType.label, editingType.subtractsDays, editingType.fixedRanges);
+        else await store.updateLeaveType(editingType.id, editingType.label, editingType.subtractsDays, editingType.fixedRanges);
         setEditingType(null);
     };
 
-    const addRange = () => {
-        if (!editingType) return;
-        const newRanges = [...(editingType.fixedRanges || []), { startDate: '', endDate: '', label: 'Nuevo Periodo' }];
-        setEditingType({ ...editingType, fixedRanges: newRanges });
-    };
-
-    const removeRange = (idx: number) => {
-        if (!editingType) return;
-        const newRanges = (editingType.fixedRanges || []).filter((_, i) => i !== idx);
-        setEditingType({ ...editingType, fixedRanges: newRanges });
-    };
+    const addRange = () => { if (!editingType) return; setEditingType({ ...editingType, fixedRanges: [...(editingType.fixedRanges || []), { startDate: '', endDate: '', label: 'Nuevo Periodo' }] }); };
+    const removeRange = (idx: number) => { if (!editingType) return; setEditingType({ ...editingType, fixedRanges: (editingType.fixedRanges || []).filter((_, i) => i !== idx) }); };
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-fade-in">
-            {/* TIPOS DE AUSENCIA */}
             <div className="space-y-4">
-                <div className="flex justify-between items-center px-2">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Tipos de Ausencia</h3>
-                    <button onClick={() => setEditingType({ id: 'temp_' + Date.now(), label: '', subtractsDays: true, fixedRanges: [] })} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Plus size={18}/></button>
-                </div>
-                <div className="space-y-2">
-                    {store.config.leaveTypes.map(t => (
-                        <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm group">
-                            <div>
-                                <p className="font-bold text-sm text-slate-700">{t.label}</p>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{t.subtractsDays ? 'Resta días' : 'No resta días'}</p>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => setEditingType(t)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button>
-                                <button onClick={() => store.deleteLeaveType(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
+                <div className="flex justify-between items-center px-2"><h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Tipos de Ausencia</h3><button onClick={() => setEditingType({ id: 'temp_' + Date.now(), label: '', subtractsDays: true, fixedRanges: [] })} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Plus size={18}/></button></div>
+                <div className="space-y-2">{store.config.leaveTypes.map(t => (<div key={t.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm group"><div><p className="font-bold text-sm text-slate-700">{t.label}</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{t.subtractsDays ? 'Resta días' : 'No resta días'}</p></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingType(t)} className="p-1.5 text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button><button onClick={() => store.deleteLeaveType(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button></div></div>))}</div>
                 {editingType && (
                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4 animate-fade-in">
                         <div className="flex justify-between items-center"><h4 className="font-bold text-slate-800 text-sm">Editar Tipo</h4><button onClick={() => setEditingType(null)}><X size={16}/></button></div>
-                        <input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre (Ej: Vacaciones 2026)" value={editingType.label} onChange={e => setEditingType({...editingType, label: e.target.value})} />
-                        <label className="flex items-center gap-2 cursor-pointer p-2 bg-white rounded-xl border border-slate-100">
-                            <input type="checkbox" checked={editingType.subtractsDays} onChange={e => setEditingType({...editingType, subtractsDays: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
-                            <span className="text-xs font-bold text-slate-600">Resta días del saldo anual</span>
-                        </label>
-                        
+                        <input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre" value={editingType.label} onChange={e => setEditingType({...editingType, label: e.target.value})} />
+                        <label className="flex items-center gap-2 cursor-pointer p-2 bg-white rounded-xl border border-slate-100"><input type="checkbox" checked={editingType.subtractsDays} onChange={e => setEditingType({...editingType, subtractsDays: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs font-bold text-slate-600">Resta saldo anual</span></label>
                         <div className="pt-2 border-t border-slate-200">
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="text-[10px] font-black text-slate-400 uppercase">Rangos Fijos / Turnos</span>
-                                <button onClick={addRange} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Plus size={14}/></button>
-                            </div>
-                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                {(editingType.fixedRanges || []).map((range, idx) => (
-                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-[10px] space-y-2">
-                                        <input className="w-full p-1.5 border-b outline-none font-bold" placeholder="Etiqueta (Ej: Junio)" value={range.label} onChange={e => {
-                                            const newR = [...(editingType.fixedRanges || [])];
-                                            newR[idx].label = e.target.value;
-                                            setEditingType({...editingType, fixedRanges: newR});
-                                        }} />
-                                        <div className="flex gap-2">
-                                            <input type="date" className="flex-1" value={range.startDate} onChange={e => {
-                                                const newR = [...(editingType.fixedRanges || [])];
-                                                newR[idx].startDate = e.target.value;
-                                                setEditingType({...editingType, fixedRanges: newR});
-                                            }} />
-                                            <input type="date" className="flex-1" value={range.endDate} onChange={e => {
-                                                const newR = [...(editingType.fixedRanges || [])];
-                                                newR[idx].endDate = e.target.value;
-                                                setEditingType({...editingType, fixedRanges: newR});
-                                            }} />
-                                            <button onClick={() => removeRange(idx)} className="text-red-400"><Trash2 size={12}/></button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <div className="flex justify-between items-center mb-3"><span className="text-[10px] font-black text-slate-400 uppercase">Rangos Turnos</span><button onClick={addRange} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Plus size={14}/></button></div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">{(editingType.fixedRanges || []).map((range, idx) => (<div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-[10px] space-y-2"><input className="w-full p-1.5 border-b outline-none font-bold" placeholder="Etiqueta" value={range.label} onChange={e => { const newR = [...(editingType.fixedRanges || [])]; newR[idx].label = e.target.value; setEditingType({...editingType, fixedRanges: newR}); }} /><div className="flex gap-2"><input type="date" className="flex-1" value={range.startDate} onChange={e => { const newR = [...(editingType.fixedRanges || [])]; newR[idx].startDate = e.target.value; setEditingType({...editingType, fixedRanges: newR}); }} /><input type="date" className="flex-1" value={range.endDate} onChange={e => { const newR = [...(editingType.fixedRanges || [])]; newR[idx].endDate = e.target.value; setEditingType({...editingType, fixedRanges: newR}); }} /><button onClick={() => removeRange(idx)} className="text-red-400"><Trash2 size={12}/></button></div></div>))}</div>
                         </div>
-                        <button onClick={handleSaveType} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg">Guardar Tipo de Ausencia</button>
+                        <button onClick={handleSaveType} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">Guardar</button>
                     </div>
                 )}
             </div>
-
-            {/* TIPOS DE TURNO */}
             <div className="space-y-4">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">Turnos de Trabajo</h3>
-                <div className="space-y-2">
-                    {store.config.shiftTypes.map(s => (
-                        <div key={s.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
-                            <div className="flex items-center gap-3">
-                                <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: s.color}}></div>
-                                <div>
-                                    <span className="font-bold text-sm text-slate-700">{s.name}</span>
-                                    <p className="text-[9px] text-slate-400 font-mono">{s.segments[0].start} - {s.segments[0].end}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => store.deleteShiftType(s.id)} className="p-1.5 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
-                        </div>
-                    ))}
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 mt-6">
-                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2">Crear Turno</h4>
-                    <input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre Turno..." value={newShift.name} onChange={e=>setNewShift({...newShift, name: e.target.value})} />
-                    <div className="flex gap-4">
-                        <div className="flex-1"><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Inicio</label><input type="time" className="w-full p-2 border rounded-lg text-xs" value={newShift.start} onChange={e=>setNewShift({...newShift, start: e.target.value})}/></div>
-                        <div className="flex-1"><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Fin</label><input type="time" className="w-full p-2 border rounded-lg text-xs" value={newShift.end} onChange={e=>setNewShift({...newShift, end: e.target.value})}/></div>
-                        <div><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Color</label><input type="color" className="h-8 w-12 border-none rounded-lg p-0 cursor-pointer" value={newShift.color} onChange={e=>setNewShift({...newShift, color: e.target.value})}/></div>
-                    </div>
-                    <button onClick={async () => { await store.createShiftType(newShift.name, newShift.color, newShift.start, newShift.end); setNewShift({name: '', color:'#3b82f6', start:'08:00', end:'16:30'}); }} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">Guardar Turno</button>
-                </div>
+                <div className="space-y-2">{store.config.shiftTypes.map(s => (<div key={s.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm"><div className="flex items-center gap-3"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: s.color}}></div><div><span className="font-bold text-sm text-slate-700">{s.name}</span><p className="text-[9px] text-slate-400 font-mono">{s.segments[0].start} - {s.segments[0].end}</p></div></div><button onClick={() => store.deleteShiftType(s.id)} className="p-1.5 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button></div>))}</div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 mt-6"><h4 className="font-bold text-slate-800 text-sm border-b pb-2">Crear Turno</h4><input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre..." value={newShift.name} onChange={e=>setNewShift({...newShift, name: e.target.value})} /><div className="flex gap-4"><div className="flex-1"><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Inicio</label><input type="time" className="w-full p-2 border rounded-lg text-xs" value={newShift.start} onChange={e=>setNewShift({...newShift, start: e.target.value})}/></div><div className="flex-1"><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Fin</label><input type="time" className="w-full p-2 border rounded-lg text-xs" value={newShift.end} onChange={e=>setNewShift({...newShift, end: e.target.value})}/></div><div><label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Color</label><input type="color" className="h-8 w-12 border-none rounded-lg p-0 cursor-pointer" value={newShift.color} onChange={e=>setNewShift({...newShift, color: e.target.value})}/></div></div><button onClick={async () => { await store.createShiftType(newShift.name, newShift.color, newShift.start, newShift.end); setNewShift({name: '', color:'#3b82f6', start:'08:00', end:'16:30'}); }} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">Guardar</button></div>
             </div>
-
-            {/* FESTIVOS */}
             <div className="space-y-4">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">Festivos Nacionales</h3>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                    {store.config.holidays.sort((a,b) => a.date.localeCompare(b.date)).map(h => (
-                        <div key={h.id} className="bg-red-50/50 p-4 rounded-xl border border-red-100 flex justify-between items-center group">
-                            <div><p className="text-[10px] font-black text-red-600 uppercase">{new Date(h.date).toLocaleDateString()}</p><p className="font-bold text-xs">{h.name}</p></div>
-                            <button onClick={() => store.deleteHoliday(h.id)} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
-                        </div>
-                    ))}
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 mt-6">
-                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2">Añadir Festivo</h4>
-                    <input type="date" className="w-full p-2.5 border rounded-xl text-sm" value={newHoliday.date} onChange={e=>setNewHoliday({...newHoliday, date: e.target.value})} />
-                    <input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre Festividad..." value={newHoliday.name} onChange={e=>setNewHoliday({...newHoliday, name: e.target.value})} />
-                    <button onClick={async () => { if(newHoliday.date && newHoliday.name) { await store.createHoliday(newHoliday.date, newHoliday.name); setNewHoliday({date:'', name:''}); } }} className="w-full py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-500/30">Añadir Festivo</button>
-                </div>
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">{store.config.holidays.sort((a,b) => a.date.localeCompare(b.date)).map(h => (<div key={h.id} className="bg-red-50/50 p-4 rounded-xl border border-red-100 flex justify-between items-center group"><div><p className="text-[10px] font-black text-red-600 uppercase">{new Date(h.date).toLocaleDateString()}</p><p className="font-bold text-xs">{h.name}</p></div><button onClick={() => store.deleteHoliday(h.id)} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button></div>))}</div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 mt-6"><h4 className="font-bold text-slate-800 text-sm border-b pb-2">Añadir Festivo</h4><input type="date" className="w-full p-2.5 border rounded-xl text-sm" value={newHoliday.date} onChange={e=>setNewHoliday({...newHoliday, date: e.target.value})} /><input className="w-full p-2.5 border rounded-xl text-sm" placeholder="Nombre..." value={newHoliday.name} onChange={e=>setNewHoliday({...newHoliday, name: e.target.value})} /><button onClick={async () => { if(newHoliday.date && newHoliday.name) { await store.createHoliday(newHoliday.date, newHoliday.name); setNewHoliday({date:'', name:''}); } }} className="w-full py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-lg">Añadir</button></div>
             </div>
         </div>
     );
 };
 
-// Gestión de Catálogo de EPIs y Stock
-export const EPIManager = () => {
-    const [view, setView] = useState<'catalog' | 'stock'>('catalog');
-    const [editingPPE, setEditingPPE] = useState<PPEType | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-    const [, setRefresh] = useState(0);
-
-    // Suscripción al store para refrescar la vista cuando cambie el stock en la base de datos
-    useEffect(() => {
-        const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1));
-        return unsubscribe;
-    }, []);
-
-    const handleSave = async () => {
-        if (!editingPPE) return;
-        setIsSaving(true);
-        if (editingPPE.id === 'new') {
-            await store.createPPEType(editingPPE.name, editingPPE.sizes);
-        } else {
-            await store.updatePPEType(editingPPE.id, editingPPE.name, editingPPE.sizes);
-        }
-        setEditingPPE(null);
-        setIsSaving(false);
-    };
-
-    const handleUpdateStock = async (typeId: string, size: string, newQty: number) => {
-        const type = store.config.ppeTypes.find(t => t.id === typeId);
-        if (type) {
-            const updatedStock = { ...(type.stock || {}) };
-            updatedStock[size] = Math.max(0, newQty);
-            await store.updatePPEStock(typeId, updatedStock);
-        }
-    };
-
-    return (
-        <div className="space-y-6 animate-fade-in pb-12">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl shrink-0">
-                    <button onClick={() => setView('catalog')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'catalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Catálogo</button>
-                    <button onClick={() => setView('stock')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'stock' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Control de Stock</button>
-                </div>
-                
-                {view === 'catalog' && (
-                    <button onClick={() => setEditingPPE({ id: 'new', name: '', sizes: ['S', 'M', 'L', 'XL'], stock: {} })} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20"><Plus size={16}/> Nuevo Material</button>
-                )}
-            </div>
-
-            {view === 'catalog' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {store.config.ppeTypes.map(p => (
-                        <div key={p.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500 opacity-20"></div>
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="bg-orange-50 p-2 rounded-xl text-orange-600"><HardHat size={20}/></div>
-                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingPPE(p)} className="p-2 text-slate-400 hover:text-blue-500 bg-slate-50 rounded-lg"><Edit2 size={16}/></button>
-                                    <button onClick={() => store.deletePPEType(p.id)} className="p-2 text-slate-400 hover:text-red-500 bg-slate-50 rounded-lg"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                            <h4 className="font-bold text-slate-800 mb-4">{p.name}</h4>
-                            <div className="flex flex-wrap gap-1.5">
-                                {p.sizes.map(s => (
-                                    <span key={s} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-black rounded border border-slate-100">{s}</span>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
-                            <tr>
-                                <th className="px-6 py-4">Tipo de Material</th>
-                                <th className="px-6 py-4">Tallas y Existencias Disponibles</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {store.config.ppeTypes.map(p => (
-                                <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-slate-700">{p.name}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                                            {p.sizes.map(size => {
-                                                const currentStock = p.stock?.[size] || 0;
-                                                return (
-                                                    <div key={size} className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm flex flex-col items-center">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase mb-2">Talla {size}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <button 
-                                                                onClick={() => handleUpdateStock(p.id, size, currentStock - 1)}
-                                                                className="p-1 text-slate-400 hover:text-red-500 bg-slate-50 rounded transition-colors"
-                                                            >
-                                                                <Minus size={14}/>
-                                                            </button>
-                                                            <span className={`w-8 text-center font-black text-lg ${currentStock <= 0 ? 'text-red-600' : currentStock < 5 ? 'text-orange-600' : 'text-green-600'}`}>
-                                                                {currentStock}
-                                                            </span>
-                                                            <button 
-                                                                onClick={() => handleUpdateStock(p.id, size, currentStock + 1)}
-                                                                className="p-1 text-slate-400 hover:text-blue-500 bg-slate-50 rounded transition-colors"
-                                                            >
-                                                                <Plus size={14}/>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            {editingPPE && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[130] p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-8 animate-scale-in">
-                        <h3 className="text-xl font-bold text-slate-800 mb-6">{editingPPE.id === 'new' ? 'Nuevo' : 'Editar'} Material EPI</h3>
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Nombre del Artículo</label>
-                                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingPPE.name} onChange={e => setEditingPPE({...editingPPE, name: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Tallas / Medidas (Separadas por comas)</label>
-                                <input 
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" 
-                                    value={editingPPE.sizes.join(', ')} 
-                                    onChange={e => setEditingPPE({...editingPPE, sizes: e.target.value.split(',').map(s => s.trim())})} 
-                                    placeholder="Ej: S, M, L, XL o 38, 40, 42..."
-                                />
-                                <p className="text-[9px] text-slate-400 mt-2 italic px-1">Al añadir tallas nuevas, aparecerán con stock 0 en la sección de control.</p>
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button onClick={() => setEditingPPE(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancelar</button>
-                                <button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex justify-center items-center gap-2">
-                                    {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// Gestión de Comunicaciones (Muro de anuncios, etc.)
+// Gestión de Comunicaciones y Configuración de Email
 export const CommunicationsManager = () => {
+    const [activeSection, setActiveSection] = useState<'news' | 'email'>('news');
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    
+    // SMTP y Plantillas
+    const [smtp, setSmtp] = useState(store.config.smtpSettings);
+    const [templates, setTemplates] = useState<EmailTemplate[]>(store.config.emailTemplates);
 
     const handleCreatePost = async () => {
         if (!title.trim() || !content.trim()) return;
         setIsSaving(true);
         await store.createNewsPost(title, content, store.currentUser?.id || 'admin');
-        setTitle('');
-        setContent('');
+        setTitle(''); setContent(''); setIsSaving(false);
+    };
+
+    const handleSaveSmtp = async () => {
+        setIsSaving(true);
+        await store.saveSmtpSettings(smtp);
         setIsSaving(false);
+        alert('Configuración SMTP guardada.');
+    };
+
+    const handleSaveTemplates = async () => {
+        setIsSaving(true);
+        await store.saveEmailTemplates(templates);
+        setIsSaving(false);
+        alert('Plantillas de email actualizadas.');
+    };
+
+    const updateTemplate = (id: string, field: string, value: any) => {
+        setTemplates(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+    };
+
+    const updateRecipients = (id: string, role: string, checked: boolean) => {
+        setTemplates(prev => prev.map(t => {
+            if (t.id === id) {
+                return { ...t, recipients: { ...t.recipients, [role]: checked } };
+            }
+            return t;
+        }));
     };
 
     return (
-        <div className="space-y-8 animate-fade-in">
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Megaphone size={20} className="text-blue-500"/> Crear Comunicado en el Muro</h4>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Título del Anuncio</label>
-                        <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Nueva política de vestuario..." />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Contenido del Mensaje</label>
-                        <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32" value={content} onChange={e => setContent(e.target.value)} placeholder="Escribe aquí el mensaje para todos los empleados..." />
-                    </div>
-                    <button onClick={handleCreatePost} disabled={isSaving} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2 transition-all">
-                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                        Publicar Anuncio
-                    </button>
-                </div>
+        <div className="space-y-8 animate-fade-in pb-12">
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+                <button onClick={() => setActiveSection('news')} className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeSection === 'news' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Anuncios</button>
+                <button onClick={() => setActiveSection('email')} className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeSection === 'email' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Configuración Email</button>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><History size={20} className="text-slate-400"/> Historial de Anuncios</h4>
-                <div className="space-y-4">
-                    {store.config.news.length === 0 ? (
-                        <p className="text-center text-slate-400 italic py-4">No hay anuncios publicados.</p>
-                    ) : store.config.news.map(post => (
-                        <div key={post.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-2xl border border-slate-100 group">
-                            <div className="flex-1">
-                                <h5 className="font-bold text-slate-800">{post.title}</h5>
-                                <p className="text-xs text-slate-500 line-clamp-2 mt-1">{post.content}</p>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase mt-2 block">{new Date(post.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <button onClick={() => store.deleteNewsPost(post.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                                <Trash2 size={16}/>
-                            </button>
+            {activeSection === 'news' ? (
+                <>
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Megaphone size={20} className="text-blue-500"/> Nuevo Comunicado</h4>
+                        <div className="space-y-4">
+                            <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={title} onChange={e => setTitle(e.target.value)} placeholder="Título..." />
+                            <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32" value={content} onChange={e => setContent(e.target.value)} placeholder="Mensaje..." />
+                            <button onClick={handleCreatePost} disabled={isSaving} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>} Publicar</button>
                         </div>
-                    ))}
+                    </div>
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><History size={20} className="text-slate-400"/> Historial</h4>
+                        <div className="space-y-4">{store.config.news.map(post => (<div key={post.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-2xl border border-slate-100 group"><div className="flex-1"><h5 className="font-bold text-slate-800">{post.title}</h5><p className="text-xs text-slate-500 mt-1">{post.content}</p></div><button onClick={() => store.deleteNewsPost(post.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></div>))}</div>
+                    </div>
+                </>
+            ) : (
+                <div className="space-y-8">
+                    {/* SMTP */}
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-6">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2"><Server size={20} className="text-blue-500"/> Configuración SMTP</h4>
+                            <label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-2 rounded-xl">
+                                <input type="checkbox" checked={smtp.enabled} onChange={e => setSmtp({...smtp, enabled: e.target.checked})} className="w-4 h-4 text-blue-600" />
+                                <span className="text-xs font-bold uppercase text-slate-600">Servicio Activo</span>
+                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Host</label><input className="w-full p-2 bg-slate-50 border rounded-lg text-xs" value={smtp.host} onChange={e=>setSmtp({...smtp, host: e.target.value})}/></div>
+                            <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Puerto</label><input className="w-full p-2 bg-slate-50 border rounded-lg text-xs" value={smtp.port} onChange={e=>setSmtp({...smtp, port: parseInt(e.target.value)})}/></div>
+                            <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Usuario</label><input className="w-full p-2 bg-slate-50 border rounded-lg text-xs" value={smtp.user} onChange={e=>setSmtp({...smtp, user: e.target.value})}/></div>
+                            <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Contraseña</label><input type="password" className="w-full p-2 bg-slate-50 border rounded-lg text-xs" value={smtp.password} onChange={e=>setSmtp({...smtp, password: e.target.value})}/></div>
+                        </div>
+                        <button onClick={handleSaveSmtp} className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg flex items-center gap-2"><Save size={14}/> Guardar Servidor</button>
+                    </div>
+
+                    {/* PLANTILLAS */}
+                    <div className="space-y-6">
+                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Layout size={18} className="text-indigo-500"/> Automatización de Plantillas</h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {templates.map(t => (
+                                <div key={t.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                                    <div className="flex justify-between items-center bg-indigo-50/50 p-3 rounded-2xl">
+                                        <span className="text-xs font-black text-indigo-700 uppercase">{t.label}</span>
+                                        <div className="flex gap-3">
+                                            {['worker', 'supervisor', 'admin'].map(role => (
+                                                <label key={role} className="flex items-center gap-1.5 cursor-pointer">
+                                                    <input type="checkbox" checked={(t.recipients as any)[role]} onChange={e => updateRecipients(t.id, role, e.target.checked)} className="w-3.5 h-3.5 rounded" />
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{role === 'worker' ? 'Emp' : role === 'supervisor' ? 'Sup' : 'Adm'}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <input className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold" value={t.subject} onChange={e => updateTemplate(t.id, 'subject', e.target.value)} placeholder="Asunto..." />
+                                    <textarea className="w-full p-3 bg-slate-50 border rounded-xl text-xs h-32 leading-relaxed" value={t.body} onChange={e => updateTemplate(t.id, 'body', e.target.value)} placeholder="Cuerpo..." />
+                                    <div className="text-[8px] text-slate-400 font-bold uppercase p-2 border border-dashed rounded-lg bg-slate-50">Variables: {'{empleado}, {tipo}, {fechas}, {motivo}, {comentario_admin}, {supervisor}, {saldo_horas}'}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={handleSaveTemplates} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-indigo-600/30 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"><Save size={20}/> Actualizar Todas las Plantillas</button>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
 
-// Consultas de Ausencias y Horas Extra
-export const AbsenceQueryManager = () => {
-    const [start, setStart] = useState('');
-    const [end, setEnd] = useState('');
-    const [queryMode, setQueryMode] = useState<'absences' | 'overtime'>('absences');
-    const [results, setResults] = useState<any[]>([]);
-    const [hasSearched, setHasSearched] = useState(false);
-
-    const handleQuery = () => {
-        if (!start || !end) {
-            alert("Por favor, selecciona un rango de fechas completo.");
-            return;
-        }
-        
-        const filtered = store.requests.filter(req => {
-            // Solo aprobadas
-            if (req.status !== RequestStatus.APPROVED) return false;
-            
-            // EXCLUIR REGULARIZACIONES
-            if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
-            
-            const isOvertime = store.isOvertimeRequest(req.typeId);
-            const isDayOffExchange = req.typeId === RequestType.OVERTIME_SPEND_DAYS;
-            
-            if (queryMode === 'absences') {
-                // Queremos: Bajas médicas, Vacaciones, Asuntos Propios, Ausencias justificables y Canjes por días
-                if (isOvertime && !isDayOffExchange) return false;
-            } else {
-                // Queremos solo registros de horas extra (incluidos festivos trabajados, abonos, etc)
-                if (!isOvertime) return false;
-                // SOLO POSITIVAS para saber cuántas extras han registrado (devengado)
-                if ((req.hours || 0) <= 0) return false;
-            }
-            
-            const rStart = req.startDate.split('T')[0];
-            const rEnd = (req.endDate || req.startDate).split('T')[0];
-            
-            // Lógica de solapamiento de fechas
-            return rStart <= end && rEnd >= start;
-        }).map(req => {
-            const u = store.users.find(usr => usr.id === req.userId);
-            return { ...req, user: u };
-        });
-
-        setResults(filtered);
-        setHasSearched(true);
+// EPIS
+export const EPIManager = () => {
+    const [view, setView] = useState<'catalog' | 'stock'>('catalog');
+    const [editingPPE, setEditingPPE] = useState<PPEType | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [, setRefresh] = useState(0);
+    useEffect(() => { const unsubscribe = store.subscribe(() => setRefresh(prev => prev + 1)); return unsubscribe; }, []);
+    const handleSave = async () => {
+        if (!editingPPE) return; setIsSaving(true);
+        if (editingPPE.id === 'new') await store.createPPEType(editingPPE.name, editingPPE.sizes);
+        else await store.updatePPEType(editingPPE.id, editingPPE.name, editingPPE.sizes);
+        setEditingPPE(null); setIsSaving(false);
     };
-
-    const handlePrint = () => {
-        window.print();
+    const handleUpdateStock = async (typeId: string, size: string, newQty: number) => {
+        const type = store.config.ppeTypes.find(t => t.id === typeId);
+        if (type) { const updatedStock = { ...(type.stock || {}) }; updatedStock[size] = Math.max(0, newQty); await store.updatePPEStock(typeId, updatedStock); }
     };
-
-    // Agrupación para Horas Extra (Árbol)
-    const groupedOvertime = useMemo(() => {
-        if (queryMode !== 'overtime') return [];
-        const groups: Record<string, { user: any, items: any[], total: number }> = {};
-        
-        results.forEach(req => {
-            const userId = req.userId;
-            if (!groups[userId]) {
-                groups[userId] = { user: req.user, items: [], total: 0 };
-            }
-            groups[userId].items.push(req);
-            groups[userId].total += (req.hours || 0);
-        });
-
-        return Object.values(groups).sort((a, b) => a.user?.name.localeCompare(b.user?.name));
-    }, [results, queryMode]);
-
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-6 print:hidden">
-                <div className="flex gap-2 p-1 bg-white border border-slate-200 rounded-xl self-start">
-                    <button 
-                        onClick={() => { setQueryMode('absences'); setResults([]); setHasSearched(false); }}
-                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'absences' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                        <Palmtree size={14}/> Ausencias
-                    </button>
-                    <button 
-                        onClick={() => { setQueryMode('overtime'); setResults([]); setHasSearched(false); }}
-                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'overtime' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                        <Timer size={14}/> Horas Extra
-                    </button>
-                </div>
-
-                <div className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Inicial</label>
-                        <input 
-                            type="date" 
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
-                            value={start} 
-                            onChange={e => setStart(e.target.value)} 
-                        />
-                    </div>
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fecha Final</label>
-                        <input 
-                            type="date" 
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100" 
-                            value={end} 
-                            onChange={e => setEnd(e.target.value)} 
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={handleQuery} 
-                            className={`px-8 py-3 ${queryMode === 'absences' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold rounded-xl text-sm shadow-lg transition-all flex items-center gap-2`}
-                        >
-                            <Search size={18}/> Consultar
-                        </button>
-                        {hasSearched && results.length > 0 && (
-                            <button 
-                                onClick={handlePrint} 
-                                className="px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
-                            >
-                                <Printer size={18}/> Imprimir
-                            </button>
-                        )}
-                    </div>
-                </div>
+        <div className="space-y-6 animate-fade-in pb-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl shrink-0"><button onClick={() => setView('catalog')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'catalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Catálogo</button><button onClick={() => setView('stock')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${view === 'stock' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Stock</button></div>
+                {view === 'catalog' && (<button onClick={() => setEditingPPE({ id: 'new', name: '', sizes: ['S', 'M', 'L', 'XL'], stock: {} })} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"><Plus size={16}/> Nuevo Material</button>)}
             </div>
-
-            {hasSearched && results.length > 0 ? (
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in-up">
-                    <div className={`p-6 border-b border-slate-50 ${queryMode === 'absences' ? 'bg-blue-50/30' : 'bg-indigo-50/30'} flex justify-between items-center print:bg-white`}>
-                        <h4 className="font-bold text-slate-800">
-                            {queryMode === 'absences' ? 'Informe de Ausencias y Bajas' : 'Informe Detallado de Horas Extra (Devengadas)'}
-                        </h4>
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            Rango: {new Date(start).toLocaleDateString()} al {new Date(end).toLocaleDateString()}
-                        </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
-                                <tr>
-                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Material / Acción' : 'Empleado / Departamento'}</th>
-                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Motivo' : 'Tipo de Registro'}</th>
-                                    <th className="px-6 py-4">Periodo / Fecha</th>
-                                    {queryMode === 'overtime' ? (
-                                        <th className="px-6 py-4 text-center">Horas</th>
-                                    ) : (
-                                        <th className="px-6 py-4 text-center">Días en Rango</th>
-                                    )}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {queryMode === 'absences' ? (
-                                    results.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => {
-                                        const rStart = req.startDate.split('T')[0];
-                                        const rEnd = (req.endDate || req.startDate).split('T')[0];
-                                        const overlapStartStr = rStart > start ? rStart : start;
-                                        const overlapEndStr = rEnd < end ? rEnd : end;
-                                        const d1 = new Date(overlapStartStr);
-                                        const d2 = new Date(overlapEndStr);
-                                        d1.setHours(0,0,0,0); d2.setHours(0,0,0,0);
-                                        const daysInRange = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                                        
-                                        return (
-                                            <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <img src={req.user?.avatar} className="w-8 h-8 rounded-full border border-slate-100 shadow-sm" />
-                                                        <div>
-                                                            <div className="font-bold text-slate-800">{req.user?.name || 'Desconocido'}</div>
-                                                            <div className="text-[10px] text-slate-400 font-black uppercase">
-                                                                {store.departments.find(d => d.id === req.user?.departmentId)?.name}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-lg font-bold text-[10px] uppercase border ${
-                                                        req.typeId === RequestType.SICKNESS 
-                                                            ? 'bg-red-50 text-red-600 border-red-100' 
-                                                            : req.typeId === RequestType.OVERTIME_SPEND_DAYS 
-                                                                ? 'bg-purple-50 text-purple-600 border-purple-100'
-                                                                : 'bg-blue-50 text-blue-600 border-blue-100'
-                                                    }`}>
-                                                        {store.getTypeLabel(req.typeId)}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-slate-600 font-medium">
-                                                    {new Date(req.startDate).toLocaleDateString()} {req.endDate && req.endDate !== req.startDate ? `- ${new Date(req.endDate).toLocaleDateString()}` : ''}
-                                                </td>
-                                                <td className="px-6 py-4 text-center font-black text-blue-700 bg-blue-50/30">
-                                                    {daysInRange}d
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                ) : (
-                                    groupedOvertime.map(group => (
-                                        <React.Fragment key={group.user?.id}>
-                                            <tr className="bg-indigo-900 text-white">
-                                                <td colSpan={3} className="px-6 py-2.5">
-                                                    <div className="flex items-center gap-3">
-                                                        <img src={group.user?.avatar} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
-                                                        <div>
-                                                            <span className="font-black uppercase tracking-tight text-sm">{group.user?.name}</span>
-                                                            <span className="ml-3 text-[9px] font-bold text-white/50 uppercase tracking-widest">
-                                                                {store.departments.find(d => d.id === group.user?.departmentId)?.name}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-2.5 text-center bg-indigo-950 font-black text-blue-400">
-                                                    {group.total.toFixed(1)}h
-                                                </td>
-                                            </tr>
-                                            {group.items.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(req => (
-                                                <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-6 py-3 pl-12">
-                                                        <div className="flex items-center gap-2">
-                                                            <ChevronRight size={14} className="text-slate-300" />
-                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                                                                req.typeId === RequestType.OVERTIME_EARN ? 'bg-green-50 text-green-600 border-green-100' :
-                                                                req.typeId === RequestType.WORKED_HOLIDAY ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                                                                'bg-red-50 text-red-600 border-red-100'
-                                                            }`}>
-                                                                {store.getTypeLabel(req.typeId)}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-3 italic text-slate-400 text-xs">
-                                                        {req.reason || 'Sin motivo especificado'}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-slate-600 font-medium">
-                                                        {new Date(req.startDate).toLocaleDateString()}
-                                                    </td>
-                                                    <td className={`px-6 py-3 text-center font-black ${req.hours > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                        {req.hours > 0 ? `+${req.hours}` : req.hours}h
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </React.Fragment>
-                                    ))
-                                )}
-                            </tbody>
-                            {queryMode === 'overtime' && (
-                                <tfoot className="bg-slate-50 font-black">
-                                    <tr>
-                                        <td colSpan={3} className="px-6 py-4 text-right text-slate-500 uppercase text-[10px]">Suma Total Global en Rango:</td>
-                                        <td className="px-6 py-4 text-center text-indigo-700 text-lg">
-                                            {results.reduce((sum, r) => sum + (r.hours || 0), 0).toFixed(1)}h
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            )}
-                        </table>
-                    </div>
-                </div>
+            {view === 'catalog' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{store.config.ppeTypes.map(p => (<div key={p.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"><div className="absolute top-0 left-0 w-1 h-full bg-orange-500 opacity-20"></div><div className="flex justify-between items-start mb-4"><div className="bg-orange-50 p-2 rounded-xl text-orange-600"><HardHat size={20}/></div><div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingPPE(p)} className="p-2 text-slate-400 hover:text-blue-500 bg-slate-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => store.deletePPEType(p.id)} className="p-2 text-slate-400 hover:text-red-500 bg-slate-50 rounded-lg"><Trash2 size={16}/></button></div></div><h4 className="font-bold text-slate-800 mb-4">{p.name}</h4><div className="flex flex-wrap gap-1.5">{p.sizes.map(s => (<span key={s} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-black rounded border border-slate-100">{s}</span>))}</div></div>))}</div>
             ) : (
-                hasSearched && (
-                    <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-400 italic animate-fade-in">
-                        <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} />
-                        No se han encontrado {queryMode === 'absences' ? 'ausencias aprobadas' : 'registros de horas'} en el rango seleccionado.
-                    </div>
-                )
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase"><tr><th className="px-6 py-4">Material</th><th className="px-6 py-4">Tallas y Stock</th></tr></thead><tbody className="divide-y divide-slate-50">{store.config.ppeTypes.map(p => (<tr key={p.id} className="hover:bg-slate-50/50 transition-colors"><td className="px-6 py-4 font-bold text-slate-700">{p.name}</td><td className="px-6 py-4"><div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">{p.sizes.map(size => { const cur = p.stock?.[size] || 0; return (<div key={size} className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm flex flex-col items-center"><span className="text-[10px] font-black text-slate-400 uppercase mb-2">Talla {size}</span><div className="flex items-center gap-2"><button onClick={() => handleUpdateStock(p.id, size, cur - 1)} className="p-1 text-slate-400 hover:text-red-500 bg-slate-50 rounded"><Minus size={14}/></button><span className={`w-8 text-center font-black text-lg ${cur <= 0 ? 'text-red-600' : cur < 5 ? 'text-orange-600' : 'text-green-600'}`}>{cur}</span><button onClick={() => handleUpdateStock(p.id, size, cur + 1)} className="p-1 text-slate-400 hover:text-blue-500 bg-slate-50 rounded"><Plus size={14}/></button></div></div>); })}</div></td></tr>))}</tbody></table></div>
             )}
-            
-            {!hasSearched && (
-                <div className="bg-white p-20 text-center rounded-3xl border border-dashed text-slate-300 italic flex flex-col items-center gap-4">
-                    <Calendar size={64} className="opacity-10" />
-                    <p className="max-w-xs mx-auto">Selecciona un rango de fechas arriba para generar el informe de {queryMode === 'absences' ? 'personal ausente o de baja' : 'actividad de horas extra'}.</p>
-                </div>
+            {editingPPE && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[130] p-4 backdrop-blur-sm"><div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-8 animate-scale-in"><h3 className="text-xl font-bold text-slate-800 mb-6">{editingPPE.id === 'new' ? 'Nuevo' : 'Editar'} Material</h3><div className="space-y-6"><div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Nombre</label><input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingPPE.name} onChange={e => setEditingPPE({...editingPPE, name: e.target.value})} /></div><div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Tallas (Separadas por comas)</label><input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={editingPPE.sizes.join(', ')} onChange={e => setEditingPPE({...editingPPE, sizes: e.target.value.split(',').map(s => s.trim())})} placeholder="Ej: S, M, L, XL" /></div><div className="flex gap-3 pt-2"><button onClick={() => setEditingPPE(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancelar</button><button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar</button></div></div></div></div>
+            )}
+        </div>
+    );
+};
+
+// Consultas
+export const AbsenceQueryManager = () => {
+    const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [queryMode, setQueryMode] = useState<'absences' | 'overtime'>('absences');
+    const [results, setResults] = useState<any[]>([]); const [hasSearched, setHasSearched] = useState(false);
+    const handleQuery = () => {
+        if (!start || !end) { alert("Selecciona un rango."); return; }
+        const filtered = store.requests.filter(req => {
+            if (req.status !== RequestStatus.APPROVED) return false;
+            if (req.typeId === RequestType.ADJUSTMENT_DAYS || req.typeId === RequestType.ADJUSTMENT_OVERTIME) return false;
+            const isO = store.isOvertimeRequest(req.typeId); const isD = req.typeId === RequestType.OVERTIME_SPEND_DAYS;
+            if (queryMode === 'absences') { if (isO && !isD) return false; } else { if (!isO) return false; if ((req.hours || 0) <= 0) return false; }
+            const rs = req.startDate.split('T')[0]; const re = (req.endDate || req.startDate).split('T')[0];
+            return rs <= end && re >= start;
+        }).map(req => ({ ...req, user: store.users.find(usr => usr.id === req.userId) }));
+        setResults(filtered); setHasSearched(true);
+    };
+    return (
+        <div className="space-y-6 animate-fade-in"><div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-6 print:hidden"><div className="flex gap-2 p-1 bg-white border border-slate-200 rounded-xl self-start"><button onClick={() => { setQueryMode('absences'); setResults([]); setHasSearched(false); }} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'absences' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400'}`}><Palmtree size={14}/> Ausencias</button><button onClick={() => { setQueryMode('overtime'); setResults([]); setHasSearched(false); }} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${queryMode === 'overtime' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}><Timer size={14}/> Horas</button></div><div className="flex flex-wrap gap-4 items-end"><div className="flex-1 min-w-[200px]"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Inicio</label><input type="date" className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold" value={start} onChange={e => setStart(e.target.value)} /></div><div className="flex-1 min-w-[200px]"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Fin</label><input type="date" className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold" value={end} onChange={e => setEnd(e.target.value)} /></div><button onClick={handleQuery} className={`px-8 py-3 ${queryMode === 'absences' ? 'bg-blue-600' : 'bg-indigo-600'} text-white font-bold rounded-xl text-sm shadow-lg`}>Consultar</button></div></div>
+            {hasSearched && results.length > 0 && (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"><div className="p-6 border-b bg-slate-50"> <h4 className="font-bold">{queryMode === 'absences' ? 'Informe Ausencias' : 'Informe Horas'}</h4> </div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black uppercase"><tr><th>Empleado</th><th>Tipo</th><th>Periodo</th><th>Cantidad</th></tr></thead><tbody className="divide-y divide-slate-100">{results.map(req => (<tr key={req.id}><td>{req.user?.name}</td><td>{store.getTypeLabel(req.typeId)}</td><td>{req.startDate}</td><td>{req.hours || '-'}</td></tr>))}</tbody></table></div></div>
             )}
         </div>
     );
@@ -769,38 +339,8 @@ export const AbsenceQueryManager = () => {
 // Mantenimiento
 export const MaintenanceManager = () => {
     const [isRepairing, setIsRepairing] = useState(false);
-
-    const handleRepair = async () => {
-        if (confirm('¿Deseas sincronizar la trazabilidad de horas extra? Esto corregirá registros antiguos marcándolos como consumidos si están vinculados a solicitudes aprobadas.')) {
-            setIsRepairing(true);
-            await store.repairOvertimeIntegrity();
-            setIsRepairing(false);
-        }
-    };
-
+    const handleRepair = async () => { if (confirm('¿Sincronizar trazabilidad?')) { setIsRepairing(true); await store.repairOvertimeIntegrity(); setIsRepairing(false); } };
     return (
-        <div className="space-y-8 animate-fade-in">
-            <div className="bg-blue-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10"><Database size={120} /></div>
-                <h4 className="text-xl font-bold mb-4">Punto de Restauración y Backup</h4>
-                <div className="flex gap-4">
-                    <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Download size={18}/> Exportar JSON</button>
-                    <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Upload size={18}/> Importar Backup</button>
-                </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-500"/> Integridad de Datos</h4>
-                <p className="text-sm text-slate-500 mb-6">Si detectas que a algunos empleados les siguen apareciendo registros de horas extra que ya deberían estar consumidos, usa esta herramienta para sincronizar la base de datos.</p>
-                <button 
-                    onClick={handleRepair} 
-                    disabled={isRepairing}
-                    className="bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-100 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-                >
-                    {isRepairing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18}/>}
-                    Sincronizar Trazabilidad de Horas
-                </button>
-            </div>
-        </div>
+        <div className="space-y-8 animate-fade-in"><div className="bg-blue-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Database size={120} /></div><h4 className="text-xl font-bold mb-4">Mantenimiento</h4><div className="flex gap-4"><button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Download size={18}/> Exportar</button><button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2"><Upload size={18}/> Importar</button></div></div><div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm"><h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-500"/> Integridad</h4><button onClick={handleRepair} disabled={isRepairing} className="bg-orange-50 text-orange-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2">{isRepairing ? <Loader2 className="animate-spin" size={18} /> : <RefreshCcw size={18}/>} Sincronizar Horas</button></div></div>
     );
 };
