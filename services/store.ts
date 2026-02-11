@@ -57,61 +57,70 @@ class Store {
 
   async refresh() {
     try {
+        // ESTRATEGIA SENIOR: Carga independiente para evitar que el fallo de una tabla (ej. RLS o tabla inexistente) bloquee el resto de la App
+        const fetchTable = async (table: string, query: any = null) => {
+            try {
+                const q = query || supabase.from(table).select('*');
+                const { data, error } = await q;
+                if (error) { console.warn(`Error cargando tabla ${table}:`, error); return null; }
+                return data;
+            } catch (e) { console.error(`Fallo crítico en ${table}:`, e); return null; }
+        };
+
         const [
-            usersRes, deptsRes, reqsRes, leaveTypesRes, ppeTypesRes, 
-            ppeReqsRes, newsRes, holidaysRes, shiftTypesRes, shiftAssignmentsRes,
-            trucksRes, driversRes, driversPpeRes, settingsRes
+            usersData, deptsData, reqsData, leaveTypesData, ppeTypesData, 
+            ppeReqsData, newsData, holidaysData, shiftTypesData, shiftAssignmentsData,
+            trucksData, driversData, driversPpeData, settingsData
         ] = await Promise.all([
-            supabase.from('users').select('*'),
-            supabase.from('departments').select('*'),
-            supabase.from('requests').select('*'),
-            supabase.from('leave_types').select('*'),
-            supabase.from('ppe_types').select('*'),
-            supabase.from('ppe_requests').select('*'),
-            supabase.from('news').select('*').order('created_at', { ascending: false }),
-            supabase.from('holidays').select('*'),
-            supabase.from('shift_types').select('*'),
-            supabase.from('shift_assignments').select('*'),
-            supabase.from('trucks').select('*'),
-            supabase.from('drivers').select('*'),
-            supabase.from('drivers_ppe').select('*'),
-            supabase.from('settings').select('*')
+            fetchTable('users'),
+            fetchTable('departments'),
+            fetchTable('requests'),
+            fetchTable('leave_types'),
+            fetchTable('ppe_types'),
+            fetchTable('ppe_requests'),
+            fetchTable('news', supabase.from('news').select('*').order('created_at', { ascending: false })),
+            fetchTable('holidays'),
+            fetchTable('shift_types'),
+            fetchTable('shift_assignments'),
+            fetchTable('trucks'),
+            fetchTable('drivers'),
+            fetchTable('drivers_ppe'),
+            fetchTable('settings')
         ]);
 
-        if (usersRes.data) this.users = this.mapUsersFromDB(usersRes.data);
-        if (deptsRes.data) this.departments = deptsRes.data.map((d: any) => ({ 
+        if (usersData) this.users = this.mapUsersFromDB(usersData);
+        if (deptsData) this.departments = deptsData.map((d: any) => ({ 
             id: String(d.id), name: String(d.name || ''), supervisorIds: (d.supervisor_ids || []).map((id: any) => String(id).toLowerCase())
         }));
-        if (reqsRes.data) this.requests = this.mapRequestsFromDB(reqsRes.data);
-        if (newsRes.data) this.config.news = newsRes.data;
-        if (leaveTypesRes.data) this.config.leaveTypes = leaveTypesRes.data.map((t: any) => ({ 
+        if (reqsData) this.requests = this.mapRequestsFromDB(reqsData);
+        if (newsData) this.config.news = newsData;
+        if (leaveTypesData) this.config.leaveTypes = leaveTypesData.map((t: any) => ({ 
             id: String(t.id), label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] 
         }));
-        if (ppeTypesRes.data) this.config.ppeTypes = ppeTypesRes.data.map((p: any) => ({ 
+        if (ppeTypesData) this.config.ppeTypes = ppeTypesData.map((p: any) => ({ 
             id: String(p.id), name: p.name, sizes: p.sizes || [], stock: p.stock || {} 
         }));
-        if (ppeReqsRes.data) this.config.ppeRequests = ppeReqsRes.data.map((p: any) => ({ id: String(p.id), userId: String(p.user_id).toLowerCase(), type_id: String(p.type_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
-        if (holidaysRes.data) this.config.holidays = holidaysRes.data.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
-        if (shiftTypesRes.data) this.config.shiftTypes = shiftTypesRes.data.map((s: any) => ({ ...s, id: String(s.id) }));
+        if (ppeReqsData) this.config.ppeRequests = ppeReqsData.map((p: any) => ({ id: String(p.id), userId: String(p.user_id).toLowerCase(), type_id: String(p.type_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        if (holidaysData) this.config.holidays = holidaysData.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
+        if (shiftTypesData) this.config.shiftTypes = shiftTypesData.map((s: any) => ({ ...s, id: String(s.id) }));
         
-        if (shiftAssignmentsRes.data) this.config.shiftAssignments = shiftAssignmentsRes.data.map((a: any) => ({ 
+        if (shiftAssignmentsData) this.config.shiftAssignments = shiftAssignmentsData.map((a: any) => ({ 
             id: String(a.id), 
             userId: String(a.user_id).toLowerCase(), 
             date: a.date ? String(a.date).substring(0, 10) : a.date, 
             shiftTypeId: String(a.shift_type_id || '') 
         }));
 
-        if (trucksRes.data) this.config.trucks = trucksRes.data.map((t: any) => ({ id: String(t.id), name: t.name }));
-        if (driversRes.data) this.config.drivers = driversRes.data.map((d: any) => ({ id: String(d.id), name: d.name, truckId: String(d.truck_id) }));
-        if (driversPpeRes.data) this.config.driversPpe = driversPpeRes.data.map((p: any) => ({ 
+        if (trucksData) this.config.trucks = trucksData.map((t: any) => ({ id: String(t.id), name: t.name }));
+        if (driversData) this.config.drivers = driversData.map((d: any) => ({ id: String(d.id), name: d.name, truckId: String(d.truck_id) }));
+        if (driversPpeData) this.config.driversPpe = driversPpeData.map((p: any) => ({ 
             id: String(p.id), driverId: String(p.driver_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, requestedDate: p.requested_date, deliveryDate: p.delivery_date 
         }));
 
-        if (settingsRes.data) {
-            const smtpRow = settingsRes.data.find(r => r.key === 'smtp');
-            const templatesRow = settingsRes.data.find(r => r.key === 'email_templates');
-
-            if (smtpRow && smtpRow.value) {
+        if (settingsData) {
+            const smtpRow = settingsData.find((r:any) => r.key === 'smtp');
+            const templatesRow = settingsData.find((r:any) => r.key === 'email_templates');
+            if (smtpRow?.value) {
                 this.config.smtpSettings = {
                     host: smtpRow.value.host || 'smtp.gmail.com',
                     port: smtpRow.value.port || 587,
@@ -120,13 +129,9 @@ class Store {
                     enabled: !!smtpRow.value.enabled
                 };
             }
-
-            if (templatesRow && Array.isArray(templatesRow.value)) {
+            if (Array.isArray(templatesRow?.value)) {
                 this.config.emailTemplates = templatesRow.value.map((t: any) => ({
-                    id: String(t.id),
-                    label: t.label,
-                    subject: t.subject,
-                    body: t.body,
+                    id: String(t.id), label: t.label, subject: t.subject, body: t.body,
                     recipients: t.recipients || { admin: true, worker: true, supervisor: false }
                 }));
             }
@@ -135,7 +140,6 @@ class Store {
         if (this.currentUser) {
             const updatedSelf = this.users.find(u => u.id === this.currentUser!.id);
             if (updatedSelf) this.currentUser = updatedSelf;
-
             const { data: notifsData } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
             if (notifsData) this.notifications = notifsData.map((n: any) => ({ id: String(n.id), userId: String(n.user_id).toLowerCase(), message: n.message, read: n.read, date: n.date, type: n.type }));
         }
@@ -178,22 +182,14 @@ class Store {
   }
 
   private async sendEmailNotification(templateLabel: string, req: LeaveRequest) {
-    // REFUERZO SENIOR: Comprobar tipo ID y label para asegurar silencio total en Bajas Médicas
+    // ELIMINACIÓN TOTAL: No se procesan correos para Bajas Médicas
     const label = (req.label || this.getTypeLabel(req.typeId)).toLowerCase();
-    if (req.typeId === RequestType.SICKNESS || label.includes('baja') || label.includes('médica')) {
-        console.debug("Silenciando email para Baja Médica por política de privacidad.");
-        return;
-    }
+    if (req.typeId === RequestType.SICKNESS || label.includes('baja') || label.includes('médica')) return;
     
     if (!this.config.smtpSettings.enabled) return;
-
     const worker = this.users.find(u => u.id === req.userId);
     if (!worker) return;
-
-    const template = this.config.emailTemplates.find(t => 
-        t.label === templateLabel || t.label.toLowerCase().includes(templateLabel.toLowerCase())
-    );
-    
+    const template = this.config.emailTemplates.find(t => t.label === templateLabel || t.label.toLowerCase().includes(templateLabel.toLowerCase()));
     if (!template) return;
 
     const typeLabel = this.getTypeLabel(req.typeId);
@@ -217,10 +213,8 @@ class Store {
     const subject = replaceVars(template.subject);
     const body = replaceVars(template.body);
     const html = body.replace(/\n/g, '<br>');
-
     const recipients: string[] = [];
     if (template.recipients.worker && worker.email) recipients.push(worker.email);
-    
     if (template.recipients.supervisor || template.recipients.admin) {
         const dept = this.departments.find(d => d.id === worker.departmentId);
         if (template.recipients.supervisor && dept) {
@@ -238,14 +232,11 @@ class Store {
 
     const uniqueRecipients = Array.from(new Set(recipients)).join(', ');
     if (!uniqueRecipients) return;
-
     try {
         await supabase.functions.invoke('send-test-email', {
             body: { to: uniqueRecipients, config: this.config.smtpSettings, subject, message: body, html }
         });
-    } catch (error) {
-        console.error("Error enviando notificación por email:", error);
-    }
+    } catch (error) { console.error("Error enviando notificación por email:", error); }
   }
 
   async applyRequestToBalanceDB(req: LeaveRequest, undo: boolean = false) {
@@ -306,8 +297,12 @@ class Store {
       if (newReqData) {
           const req = { id: String(newReqData.id), userId: String(newReqData.user_id).toLowerCase(), typeId: String(newReqData.type_id), startDate: newReqData.start_date, endDate: newReqData.end_date, hours: newReqData.hours, status: newReqData.status, reason: newReqData.reason, createdAt: newReqData.created_at, resolvedBy: newReqData.resolved_by ? String(newReqData.resolved_by).toLowerCase() : undefined, overtimeUsage: newReqData.overtime_usage || [] } as LeaveRequest;
           if (!isOvertime || status === RequestStatus.APPROVED) await this.applyRequestToBalanceDB(req);
-          let templateName = isOvertime ? ((req.typeId === RequestType.OVERTIME_SPEND_DAYS || req.typeId === RequestType.OVERTIME_TO_DAYS) ? 'Horas: Canje por Días' : 'Horas: Nuevo Registro') : 'Ausencia: Nueva Solicitud';
-          this.sendEmailNotification(templateName, req);
+          
+          // ELIMINADO EL PROCESO DE EMAIL PARA BAJAS
+          if (req.typeId !== RequestType.SICKNESS) {
+              let templateName = isOvertime ? ((req.typeId === RequestType.OVERTIME_SPEND_DAYS || req.typeId === RequestType.OVERTIME_TO_DAYS) ? 'Horas: Canje por Días' : 'Horas: Nuevo Registro') : 'Ausencia: Nueva Solicitud';
+              this.sendEmailNotification(templateName, req);
+          }
       }
       await this.refresh();
   }
@@ -339,7 +334,9 @@ class Store {
       await supabase.from('requests').update({ status, admin_comment: comment || '', resolved_by: finalAdminId.toLowerCase() }).eq('id', id);
       await this.refresh();
       const refreshedReq = this.requests.find(r => r.id === id);
-      if (refreshedReq) {
+      
+      // ELIMINADO EL PROCESO DE EMAIL PARA BAJAS
+      if (refreshedReq && refreshedReq.typeId !== RequestType.SICKNESS) {
           let templateName = status === RequestStatus.APPROVED ? (isOvertime ? 'Horas: Aprobadas' : 'Ausencia: Aprobada') : (status === RequestStatus.REJECTED ? 'Ausencia: Rechazada' : '');
           if (templateName) this.sendEmailNotification(templateName, refreshedReq);
       }
@@ -489,29 +486,51 @@ class Store {
   async assignShiftsBatch(assignments: { userId: string, date: string, shiftTypeId: string }[]) {
     if (assignments.length === 0) return;
     try {
-        // ESTRATEGIA SENIOR: Borrado por combinación individual para asegurar atomicidad
-        for (const a of assignments) {
-            await supabase.from('shift_assignments')
+        // ESTRATEGIA SENIOR: Agrupar por usuario para asegurar coherencia y evitar solapamientos
+        const userGroups: Record<string, { date: string, shiftTypeId: string }[]> = {};
+        assignments.forEach(a => {
+            const uid = a.userId.toLowerCase();
+            if (!userGroups[uid]) userGroups[uid] = [];
+            userGroups[uid].push({ date: a.date.substring(0, 10), shiftTypeId: a.shiftTypeId });
+        });
+
+        for (const [userId, userChanges] of Object.entries(userGroups)) {
+            const datesToClean = userChanges.map(c => c.date);
+            
+            // 1. Limpieza total de los días del lote para ESTE usuario
+            const { error: delError } = await supabase.from('shift_assignments')
                 .delete()
-                .eq('user_id', a.userId.toLowerCase())
-                .eq('date', a.date.substring(0, 10));
-        }
+                .eq('user_id', userId)
+                .in('date', datesToClean);
+                
+            if (delError) throw delError;
 
-        const toInsert = assignments.filter(a => a.shiftTypeId && a.shiftTypeId !== '').map(a => ({
-            user_id: a.userId.toLowerCase(),
-            date: a.date.substring(0, 10),
-            shift_type_id: String(a.shiftTypeId)
-        }));
+            // 2. Inserción de los nuevos valores (si no son borradores)
+            const toInsert = userChanges
+                .filter(c => c.shiftTypeId && c.shiftTypeId !== '')
+                .map(c => ({
+                    user_id: userId,
+                    date: c.date,
+                    shift_type_id: String(c.shiftTypeId)
+                }));
 
-        if (toInsert.length > 0) {
-            const { error } = await supabase.from('shift_assignments').insert(toInsert);
-            if (error) throw error;
+            if (toInsert.length > 0) {
+                const { error: insError } = await supabase.from('shift_assignments').insert(toInsert);
+                if (insError) throw insError;
+            }
+
+            // OPTIMIZACIÓN LOCAL: Actualizamos el store inmediatamente para evitar que la UI "borre" visualmente antes del refresh
+            this.config.shiftAssignments = [
+                ...this.config.shiftAssignments.filter(a => a.userId !== userId || !datesToClean.includes(a.date)),
+                ...toInsert.map(i => ({ id: crypto.randomUUID(), userId: i.user_id, date: i.date, shiftTypeId: i.shift_type_id }))
+            ];
         }
         
+        // Sincronización final
         await this.refresh();
         this.notify();
     } catch (error) { 
-        console.error("Error fatal en guardado masivo de turnos:", error); 
+        console.error("Fallo crítico persistiendo lote de turnos:", error); 
         throw error; 
     }
   }
