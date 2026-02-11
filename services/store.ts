@@ -687,7 +687,6 @@ class Store {
         await supabase.from('shift_assignments').delete().eq('user_id', targetUserId).eq('date', normalizedDate);
         if (shiftTypeId) {
             await supabase.from('shift_assignments').insert({ 
-                id: crypto.randomUUID(), 
                 user_id: targetUserId, 
                 date: normalizedDate, 
                 shift_type_id: String(shiftTypeId) 
@@ -703,51 +702,52 @@ class Store {
     if (assignments.length === 0) return;
 
     try {
-        // 1. Limpieza masiva en DB
-        for (const a of assignments) {
-            await supabase.from('shift_assignments')
+        // 1. Borrado Atómico Unificado (Minimiza latencia y garantiza orden)
+        // Eliminamos primero los registros existentes para las combinaciones usuario/fecha dadas
+        await Promise.all(assignments.map(a => 
+            supabase.from('shift_assignments')
                 .delete()
                 .eq('user_id', a.userId.toLowerCase())
-                .eq('date', a.date.substring(0, 10));
-        }
+                .eq('date', a.date.substring(0, 10))
+        ));
 
-        // 2. Preparar inserción
+        // 2. Insertar solo los que tienen turno definido
         const toInsert = assignments
-            .filter(a => a.shiftTypeId)
+            .filter(a => a.shiftTypeId && a.shiftTypeId !== '')
             .map(a => ({
-                id: crypto.randomUUID(),
                 user_id: a.userId.toLowerCase(),
                 date: a.date.substring(0, 10),
                 shift_type_id: String(a.shiftTypeId)
             }));
 
+        let insertedData: any[] = [];
         if (toInsert.length > 0) {
-            const { error } = await supabase.from('shift_assignments').insert(toInsert);
-            if (error) throw error;
+            const { data, error: insError } = await supabase.from('shift_assignments').insert(toInsert).select();
+            if (insError) throw insError;
+            insertedData = data || [];
         }
 
-        // 3. ACTUALIZACIÓN OPTIMISTA: Actualizamos el estado local ANTES del refresh para evitar parpadeos o fallos de visualización
-        const savedIds = assignments.map(a => a.userId.toLowerCase());
-        const savedDates = assignments.map(a => a.date.substring(0, 10));
+        // 3. ACTUALIZACIÓN OPTIMISTA ROBUSTA (Estado Local)
+        // No llamamos a refresh(), en su lugar parcheamos la memoria local con los datos reales
+        const affectedKeys = new Set(assignments.map(a => `${a.userId.toLowerCase()}|${a.date.substring(0, 10)}`));
         
-        this.config.shiftAssignments = [
-            ...this.config.shiftAssignments.filter(a => 
-                !(savedIds.includes(a.userId) && savedDates.includes(a.date))
-            ),
-            ...toInsert.map(i => ({
-                id: i.id,
-                userId: i.user_id,
-                date: i.date,
-                shiftTypeId: i.shift_type_id
-            }))
-        ];
-        this.notify();
+        const remainingAssignments = this.config.shiftAssignments.filter(a => {
+            const key = `${a.userId.toLowerCase()}|${a.date.substring(0, 10)}`;
+            return !affectedKeys.has(key);
+        });
 
-        // 4. Refresco final para asegurar IDs reales de base de datos
-        await this.refresh();
+        const newAssignments = insertedData.map(d => ({
+            id: String(d.id),
+            userId: String(d.user_id).toLowerCase(),
+            date: String(d.date).substring(0, 10),
+            shiftTypeId: String(d.shift_type_id)
+        }));
+
+        this.config.shiftAssignments = [...remainingAssignments, ...newAssignments];
+        this.notify();
         
     } catch (error) {
-        console.error("Error en guardado masivo:", error);
+        console.error("Error fatal en guardado masivo de turnos:", error);
         throw error;
     }
   }
