@@ -133,7 +133,6 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                             <div className="flex items-center gap-4 mb-6">
                                 <img src={u.avatar} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover bg-slate-100" />
                                 <div className="flex-1 min-w-0">
-                                    {/* Fixed missing opening bracket for h4 tag which caused cascading name resolution errors */}
                                     <h4 className="font-bold text-slate-800 truncate">{u.name}</h4>
                                     <p className="text-[10px] text-slate-400 font-bold truncate uppercase tracking-tighter">{u.email}</p>
                                 </div>
@@ -370,8 +369,8 @@ const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
     }, [store.users, store.departments, deptId]);
 
     return (
-        <div className="break-after-page mb-10">
-            <h4 className="text-xl font-black uppercase text-slate-800 border-b-4 border-slate-900 mb-6 pb-2">{date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</h4>
+        <div className="print:break-after-page mb-8">
+            <h4 className="text-xl font-black uppercase text-slate-800 border-b-2 border-slate-900 mb-4 pb-1">{date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</h4>
             <div className="inline-block min-w-full">
                 <div className="grid" style={{ gridTemplateColumns: `150px repeat(${daysInM}, 25px)` }}>
                     <div className="bg-slate-100 border-b-2 border-r border-slate-200 p-1 text-[8px] font-black uppercase flex items-center">Empleado</div>
@@ -387,12 +386,12 @@ const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
 
                     {groupedUsers.map(deptGroup => (
                         <React.Fragment key={deptGroup.dept.id}>
-                            <div className="bg-slate-50/80 border-b border-r border-slate-200 p-1 h-6 flex items-center" style={{ gridColumn: '1 / -1' }}>
-                                <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{deptGroup.dept.name}</span>
+                            <div className="bg-slate-50 border-b border-r border-slate-200 p-1 h-5 flex items-center" style={{ gridColumn: '1 / -1' }}>
+                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">{deptGroup.dept.name}</span>
                             </div>
                             {deptGroup.users.map(user => (
                                 <React.Fragment key={user.id}>
-                                    <div className="border-b border-r border-slate-200 p-1 flex items-center h-7">
+                                    <div className="border-b border-r border-slate-200 p-1 flex items-center h-6">
                                         <span className="text-[8px] font-black text-slate-800 truncate uppercase">{user.name}</span>
                                     </div>
                                     {days.map(d => {
@@ -427,7 +426,7 @@ const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
                                         }
 
                                         return (
-                                            <div key={d.day} className="border-b border-r border-slate-100 flex items-center justify-center h-7" style={{ backgroundColor: bgColor }}>
+                                            <div key={d.day} className="border-b border-r border-slate-100 flex items-center justify-center h-6" style={{ backgroundColor: bgColor }}>
                                                 <span className={`text-[7px] font-black ${cellContent === 'B' || cellContent === 'DL' ? 'text-white' : 'text-green-700'}`}>
                                                     {cellContent}
                                                 </span>
@@ -440,11 +439,11 @@ const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
                     ))}
                 </div>
             </div>
-            <div className="mt-4 flex gap-4 text-[8px] font-bold text-slate-500 uppercase border-t border-slate-100 pt-2">
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#ef4444] rounded-sm"></div> Baja (B)</span>
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#dcfce7] border border-green-200 rounded-sm"></div> Vacaciones (VAC)</span>
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#3b82f6] rounded-sm"></div> Canje (DL)</span>
-                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#fee2e2] rounded-sm"></div> Festivo</span>
+            <div className="mt-3 flex gap-4 text-[7px] font-bold text-slate-400 uppercase print:flex hidden">
+                <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-[#ef4444] rounded-sm"></div> Baja (B)</span>
+                <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-[#dcfce7] border border-green-200 rounded-sm"></div> Vacaciones (VAC)</span>
+                <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-[#3b82f6] rounded-sm"></div> Canje (DL)</span>
+                <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-[#fee2e2] rounded-sm"></div> Festivo</span>
             </div>
         </div>
     );
@@ -677,7 +676,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
             </div>
 
             {showPrintModal && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm print-hidden">
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm print-hidden print:hidden">
                     <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-8">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Reporte de Ausencias</h3><button onClick={() => setShowPrintModal(false)}><X size={24}/></button></div>
                         <div className="space-y-6">
@@ -699,8 +698,13 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
                 </div>
             )}
 
-            <div className="hidden print:block bg-white min-h-screen p-8">
-                <div className="flex items-center gap-6 mb-12 border-b-4 border-slate-900 pb-6"><img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="GdA" className="w-24 h-24 object-contain" /><div><h1 className="text-4xl font-black uppercase tracking-tighter">Planificación de Ausencias</h1><p className="text-sm text-slate-400">Generado el {new Date().toLocaleDateString()} - Portal RRHH GdA</p></div></div>
+            <div className="hidden print:block bg-white p-4">
+                <div className="flex items-center justify-between mb-6 border-b-2 border-slate-900 pb-4">
+                    <div className="flex items-center gap-4">
+                        <img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="GdA" className="w-16 h-16 object-contain" />
+                        <div><h1 className="text-2xl font-black uppercase tracking-tighter">Planificación de Ausencias</h1><p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Portal RRHH GdA - {new Date().toLocaleDateString()}</p></div>
+                    </div>
+                </div>
                 {Array.from({ length: printMonths }).map((_, i) => { 
                     const startYear = currentCalDate.getFullYear();
                     const startMonth = printMonths === 12 ? 0 : currentCalDate.getMonth();
