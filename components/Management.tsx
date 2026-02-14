@@ -341,46 +341,109 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
 };
 
 interface PrintMonthProps { date: Date; requests: LeaveRequest[]; deptId: string; }
-const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests }) => {
+const PrintMonth: React.FC<PrintMonthProps> = ({ date, requests, deptId }) => {
     const year = date.getFullYear();
     const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startOffset = (firstDay.getDay() + 6) % 7;
-    const totalDays = lastDay.getDate();
+    const daysInM = new Date(year, month + 1, 0).getDate();
+    const days = Array.from({ length: daysInM }, (_, i) => {
+        const d = new Date(year, month, i + 1);
+        return {
+            dateStr: `${year}-${String(month + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`,
+            day: i + 1,
+            weekday: d.toLocaleDateString('es-ES', { weekday: 'short' }).charAt(0).toUpperCase(),
+            isWeekend: [0, 6].includes(d.getDay())
+        };
+    });
+
+    const groupedUsers = useMemo(() => {
+        let list = store.users;
+        if (deptId) list = list.filter(u => u.departmentId === deptId);
+        
+        const depts = store.departments.filter(d => list.some(u => u.departmentId === d.id))
+                        .sort((a,b) => a.name.localeCompare(b.name));
+        
+        return depts.map(d => ({
+            dept: d,
+            users: list.filter(u => u.departmentId === d.id).sort((a,b) => a.name.localeCompare(b.name))
+        }));
+    }, [store.users, store.departments, deptId]);
+
     return (
-        <div className="break-inside-avoid mb-10">
-            <h4 className="text-lg font-black uppercase text-slate-800 border-b-2 border-slate-900 mb-4 pb-1">{date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</h4>
-            <div className="grid grid-cols-7 border-t border-l border-slate-200">
-                {['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => (
-                    <div key={d} className="bg-slate-50 p-2 text-center text-[10px] font-black uppercase border-r border-b border-slate-200">{d}</div>
-                ))}
-                {Array.from({ length: startOffset }).map((_, i) => (
-                    <div key={`empty-${i}`} className="p-2 border-r border-b border-slate-200 min-h-[80px] bg-slate-50/30"></div>
-                ))}
-                {Array.from({ length: totalDays }).map((_, i) => {
-                    const day = i + 1;
-                    const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const dayReqs = requests.filter(r => dStr >= r.startDate.split('T')[0] && dStr <= (r.endDate || r.startDate).split('T')[0]);
-                    const holiday = store.config.holidays.find(h => h.date === dStr);
-                    return (
-                        <div key={day} className={`p-1.5 border-r border-b border-slate-200 min-h-[80px] flex flex-col gap-1 ${holiday ? 'bg-red-50' : ''}`}>
-                            <span className={`text-[10px] font-black ${holiday ? 'text-red-600' : 'text-slate-400'}`}>{day}</span>
-                            <div className="space-y-0.5">
-                                {dayReqs.map(r => {
-                                    const u = store.users.find(usr => usr.id === r.userId);
-                                    const isBaja = r.typeId === RequestType.SICKNESS;
-                                    const isDL = r.typeId === RequestType.OVERTIME_SPEND_DAYS;
-                                    return (
-                                        <div key={r.id} className={`text-[8px] px-1 py-0.5 rounded border truncate font-black leading-none ${isBaja ? 'bg-red-600 text-white border-red-700' : isDL ? 'bg-blue-600 text-white border-blue-700' : 'bg-green-100 text-green-800 border-green-200'}`}>
-                                            {isBaja ? 'B' : isDL ? 'DL' : 'VAC'}: {u?.name.split(' ')[0]}
-                                        </div>
-                                    );
-                                })}
+        <div className="break-after-page mb-10">
+            <h4 className="text-xl font-black uppercase text-slate-800 border-b-4 border-slate-900 mb-6 pb-2">{date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</h4>
+            <div className="inline-block min-w-full">
+                <div className="grid" style={{ gridTemplateColumns: `150px repeat(${daysInM}, 25px)` }}>
+                    <div className="bg-slate-100 border-b-2 border-r border-slate-200 p-1 text-[8px] font-black uppercase flex items-center">Empleado</div>
+                    {days.map(d => {
+                        const holiday = store.config.holidays.find(h => h.date === d.dateStr);
+                        return (
+                            <div key={d.day} className={`border-b-2 border-r border-slate-200 flex flex-col items-center justify-center p-0.5 ${holiday ? 'bg-red-50 text-red-600' : d.isWeekend ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-500'}`}>
+                                <span className="text-[8px] font-black leading-none">{d.day}</span>
+                                <span className="text-[6px] font-bold leading-none">{d.weekday}</span>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+
+                    {groupedUsers.map(deptGroup => (
+                        <React.Fragment key={deptGroup.dept.id}>
+                            <div className="bg-slate-50/80 border-b border-r border-slate-200 p-1 h-6 flex items-center" style={{ gridColumn: '1 / -1' }}>
+                                <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{deptGroup.dept.name}</span>
+                            </div>
+                            {deptGroup.users.map(user => (
+                                <React.Fragment key={user.id}>
+                                    <div className="border-b border-r border-slate-200 p-1 flex items-center h-7">
+                                        <span className="text-[8px] font-black text-slate-800 truncate uppercase">{user.name}</span>
+                                    </div>
+                                    {days.map(d => {
+                                        const absence = requests.find(r => {
+                                            const s = r.startDate.split('T')[0];
+                                            const e = (r.endDate || r.startDate).split('T')[0];
+                                            return r.userId === user.id && d.dateStr >= s && d.dateStr <= e;
+                                        });
+                                        const holiday = store.config.holidays.find(h => h.date === d.dateStr);
+                                        
+                                        let bgColor = 'transparent';
+                                        let cellContent = null;
+                                        if (holiday) {
+                                            bgColor = '#fee2e2';
+                                        } else if (absence) {
+                                            const typeId = String(absence.typeId);
+                                            const isBaja = typeId === RequestType.SICKNESS || typeId.includes('baja');
+                                            const isDL = typeId === RequestType.OVERTIME_SPEND_DAYS;
+
+                                            if (isBaja) {
+                                                bgColor = '#ef4444';
+                                                cellContent = 'B';
+                                            } else if (isDL) {
+                                                bgColor = '#3b82f6';
+                                                cellContent = 'DL';
+                                            } else {
+                                                bgColor = '#dcfce7';
+                                                cellContent = 'VAC';
+                                            }
+                                        } else if (d.isWeekend) {
+                                            bgColor = '#f8fafc';
+                                        }
+
+                                        return (
+                                            <div key={d.day} className="border-b border-r border-slate-100 flex items-center justify-center h-7" style={{ backgroundColor: bgColor }}>
+                                                <span className={`text-[7px] font-black ${cellContent === 'B' || cellContent === 'DL' ? 'text-white' : 'text-green-700'}`}>
+                                                    {cellContent}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </React.Fragment>
+                            ))}
+                        </React.Fragment>
+                    ))}
+                </div>
+            </div>
+            <div className="mt-4 flex gap-4 text-[8px] font-bold text-slate-500 uppercase border-t border-slate-100 pt-2">
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#ef4444] rounded-sm"></div> Baja (B)</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#dcfce7] border border-green-200 rounded-sm"></div> Vacaciones (VAC)</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#3b82f6] rounded-sm"></div> Canje (DL)</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#fee2e2] rounded-sm"></div> Festivo</span>
             </div>
         </div>
     );
@@ -426,7 +489,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
         return list.sort((a,b) => (a.startDate || '').localeCompare(b.startDate || ''));
     }, [store.requests, user, selectedDeptId, allowedDepts, currentCalDate.getFullYear()]);
 
-    const filteredUsersForGrid = useMemo(() => {
+    const usersByDept = useMemo(() => {
         let list = store.users;
         if (user.role === Role.SUPERVISOR) {
             const myDeptIds = allowedDepts.map(d => d.id);
@@ -435,8 +498,15 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
         if (selectedDeptId) {
             list = list.filter(u => u.departmentId === selectedDeptId);
         }
-        return list.sort((a, b) => a.name.localeCompare(b.name));
-    }, [store.users, user, selectedDeptId, allowedDepts]);
+        
+        const activeDepts = store.departments.filter(d => list.some(u => u.departmentId === d.id))
+                        .sort((a,b) => a.name.localeCompare(b.name));
+        
+        return activeDepts.map(d => ({
+            dept: d,
+            users: list.filter(u => u.departmentId === d.id).sort((a,b) => a.name.localeCompare(b.name))
+        }));
+    }, [store.users, store.departments, user, selectedDeptId, allowedDepts]);
 
     const monthsData = useMemo(() => {
         const year = currentCalDate.getFullYear();
@@ -530,55 +600,63 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
                                                     );
                                                 })}
 
-                                                {filteredUsersForGrid.map(userItem => (
-                                                    <React.Fragment key={userItem.id}>
-                                                        <div className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 px-4 flex items-center gap-3 h-10 shadow-sm">
-                                                            <img src={userItem.avatar} className="w-6 h-6 rounded-full border border-slate-100 object-cover" />
-                                                            <span className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tighter">{userItem.name}</span>
+                                                {usersByDept.map(deptGroup => (
+                                                    <React.Fragment key={deptGroup.dept.id}>
+                                                        {/* Fila Cabecera Dpto */}
+                                                        <div className="bg-slate-100/80 px-4 py-1.5 flex items-center border-b border-r border-slate-200" style={{ gridColumn: '1 / -1' }}>
+                                                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">{deptGroup.dept.name}</span>
                                                         </div>
-                                                        {m.days.map(d => {
-                                                            const absence = upcoming.find(r => {
-                                                                const s = r.startDate.split('T')[0];
-                                                                const e = (r.endDate || r.startDate).split('T')[0];
-                                                                return r.userId === userItem.id && d.dateStr >= s && d.dateStr <= e;
-                                                            });
-                                                            const holiday = store.config.holidays.find(h => h.date === d.dateStr);
-                                                            
-                                                            let bgColor = 'transparent';
-                                                            let cellContent = null;
-                                                            
-                                                            if (holiday) {
-                                                                bgColor = '#fee2e2';
-                                                            } else if (absence) {
-                                                                const typeId = String(absence.typeId);
-                                                                const isBaja = typeId === RequestType.SICKNESS || typeId.includes('baja');
-                                                                const isDL = typeId === RequestType.OVERTIME_SPEND_DAYS;
-
-                                                                if (isBaja) {
-                                                                    bgColor = '#ef4444';
-                                                                    cellContent = <span className="text-[8px] font-black text-white">B</span>;
-                                                                } else if (isDL) {
-                                                                    bgColor = '#3b82f6';
-                                                                    cellContent = <span className="text-[8px] font-black text-white">DL</span>;
-                                                                } else {
-                                                                    bgColor = '#dcfce7';
-                                                                    cellContent = <span className="text-[8px] font-black text-green-700">VAC</span>;
-                                                                }
-                                                            } else if (d.isWeekend) {
-                                                                bgColor = '#f8fafc';
-                                                            }
-
-                                                            return (
-                                                                <div 
-                                                                    key={d.dateStr} 
-                                                                    className={`border-b border-r border-slate-100 h-10 flex items-center justify-center transition-all ${absence ? 'cursor-pointer hover:opacity-80' : ''}`}
-                                                                    style={{ backgroundColor: bgColor }}
-                                                                    onClick={() => absence && onViewRequest(absence)}
-                                                                >
-                                                                    {cellContent}
+                                                        {deptGroup.users.map(userItem => (
+                                                            <React.Fragment key={userItem.id}>
+                                                                <div className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 px-4 flex items-center gap-3 h-10 shadow-sm">
+                                                                    <img src={userItem.avatar} className="w-6 h-6 rounded-full border border-slate-100 object-cover" />
+                                                                    <span className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tighter">{userItem.name}</span>
                                                                 </div>
-                                                            );
-                                                        })}
+                                                                {m.days.map(d => {
+                                                                    const absence = upcoming.find(r => {
+                                                                        const s = r.startDate.split('T')[0];
+                                                                        const e = (r.endDate || r.startDate).split('T')[0];
+                                                                        return r.userId === userItem.id && d.dateStr >= s && d.dateStr <= e;
+                                                                    });
+                                                                    const holiday = store.config.holidays.find(h => h.date === d.dateStr);
+                                                                    
+                                                                    let bgColor = 'transparent';
+                                                                    let cellContent = null;
+                                                                    
+                                                                    if (holiday) {
+                                                                        bgColor = '#fee2e2';
+                                                                    } else if (absence) {
+                                                                        const typeId = String(absence.typeId);
+                                                                        const isBaja = typeId === RequestType.SICKNESS || typeId.includes('baja');
+                                                                        const isDL = typeId === RequestType.OVERTIME_SPEND_DAYS;
+
+                                                                        if (isBaja) {
+                                                                            bgColor = '#ef4444';
+                                                                            cellContent = <span className="text-[8px] font-black text-white">B</span>;
+                                                                        } else if (isDL) {
+                                                                            bgColor = '#3b82f6';
+                                                                            cellContent = <span className="text-[8px] font-black text-white">DL</span>;
+                                                                        } else {
+                                                                            bgColor = '#dcfce7';
+                                                                            cellContent = <span className="text-[8px] font-black text-green-700">VAC</span>;
+                                                                        }
+                                                                    } else if (d.isWeekend) {
+                                                                        bgColor = '#f8fafc';
+                                                                    }
+
+                                                                    return (
+                                                                        <div 
+                                                                            key={d.dateStr} 
+                                                                            className={`border-b border-r border-slate-100 h-10 flex items-center justify-center transition-all ${absence ? 'cursor-pointer hover:opacity-80' : ''}`}
+                                                                            style={{ backgroundColor: bgColor }}
+                                                                            onClick={() => absence && onViewRequest(absence)}
+                                                                        >
+                                                                            {cellContent}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </React.Fragment>
+                                                        ))}
                                                     </React.Fragment>
                                                 ))}
                                             </div>
@@ -624,7 +702,6 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
                 <div className="flex items-center gap-6 mb-12 border-b-4 border-slate-900 pb-6"><img src="https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png" alt="GdA" className="w-24 h-24 object-contain" /><div><h1 className="text-4xl font-black uppercase tracking-tighter">Planificación de Ausencias</h1><p className="text-sm text-slate-400">Generado el {new Date().toLocaleDateString()} - Portal RRHH GdA</p></div></div>
                 {Array.from({ length: printMonths }).map((_, i) => { 
                     const startYear = currentCalDate.getFullYear();
-                    // Si es anual (12 meses), empezamos desde enero. Si no, desde el mes actual del calendario.
                     const startMonth = printMonths === 12 ? 0 : currentCalDate.getMonth();
                     const d = new Date(startYear, startMonth + i, 1); 
                     return <PrintMonth key={i} date={d} requests={upcoming} deptId={selectedDeptId} />; 
