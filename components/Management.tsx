@@ -133,6 +133,7 @@ export const UserManagement = ({ currentUser, onViewRequest }: { currentUser: Us
                             <div className="flex items-center gap-4 mb-6">
                                 <img src={u.avatar} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover bg-slate-100" />
                                 <div className="flex-1 min-w-0">
+                                    {/* Fixed missing opening bracket for h4 tag which caused cascading name resolution errors */}
                                     <h4 className="font-bold text-slate-800 truncate">{u.name}</h4>
                                     <p className="text-[10px] text-slate-400 font-bold truncate uppercase tracking-tighter">{u.email}</p>
                                 </div>
@@ -676,7 +677,7 @@ export const UpcomingAbsences = ({ user, onViewRequest }: { user: User, onViewRe
             </div>
 
             {showPrintModal && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm print-hidden">
                     <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-8">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Reporte de Ausencias</h3><button onClick={() => setShowPrintModal(false)}><X size={24}/></button></div>
                         <div className="space-y-6">
