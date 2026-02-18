@@ -106,7 +106,7 @@ class Store {
         this.config.news = nw;
         this.config.leaveTypes = lt.map((t: any) => ({ id: String(t.id), label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] }));
         this.config.ppeTypes = pt.map((p: any) => ({ id: String(p.id), name: p.name, sizes: p.sizes || [], stock: p.stock || {} }));
-        this.config.ppeRequests = pr.map((p: any) => ({ id: String(p.id), userId: String(p.user_id), typeId: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
+        this.config.ppeRequests = pr.map((p: any) => ({ id: String(p.id), userId: String(p.user_id), type_id: String(p.type_id), size: p.size, status: p.status, createdAt: p.created_at, deliveryDate: p.delivery_date }));
         this.config.holidays = hl.map((h: any) => ({ id: String(h.id), date: h.date, name: h.name }));
         this.config.shiftTypes = st.map((s: any) => ({ ...s, id: String(s.id) }));
         this.config.shiftAssignments = sa.map((a: any) => ({ id: String(a.id), userId: String(a.user_id), date: a.date, shiftTypeId: String(a.shift_type_id || '') }));
@@ -166,16 +166,76 @@ class Store {
   }
 
   async createRequest(d: any, uid: string, s: RequestStatus) {
-      await supabase.from('requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: d.typeId, label: d.label || this.getTypeLabel(d.typeId), start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, status: s, created_at: new Date().toISOString() });
+      await supabase.from('requests').insert({ 
+        id: crypto.randomUUID(), 
+        user_id: uid, 
+        type_id: d.typeId, 
+        label: d.label || this.getTypeLabel(d.typeId), 
+        start_date: d.startDate, 
+        end_date: d.endDate, 
+        hours: d.hours, 
+        reason: d.reason, 
+        status: s, 
+        created_at: new Date().toISOString(),
+        overtime_usage: d.overtimeUsage || [] 
+      });
       await this.refresh();
   }
 
   async updateRequest(id: string, d: any) {
-    await supabase.from('requests').update({ type_id: d.typeId, start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason }).eq('id', id);
+    await supabase.from('requests').update({ 
+        type_id: d.typeId, 
+        start_date: d.startDate, 
+        end_date: d.endDate, 
+        hours: d.hours, 
+        reason: d.reason,
+        overtime_usage: d.overtimeUsage || [] 
+    }).eq('id', id);
     await this.refresh();
   }
 
   async updateRequestStatus(id: string, s: RequestStatus, aid: string, c?: string) {
+      const req = this.requests.find(r => r.id === id);
+      if (req && s === RequestStatus.APPROVED) {
+          if (req.overtimeUsage && req.overtimeUsage.length > 0) {
+              for (const usage of req.overtimeUsage) {
+                  const source = this.requests.find(r => r.id === usage.requestId);
+                  if (source) {
+                      const newConsumed = (source.consumedHours || 0) + usage.hoursUsed;
+                      await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', usage.requestId);
+                  }
+              }
+          }
+
+          const targetUser = this.users.find(u => u.id === req.userId);
+          if (targetUser) {
+              const isOvertime = this.isOvertimeRequest(req.typeId);
+              if (isOvertime) {
+                  const newBalance = targetUser.overtimeHours + (req.hours || 0);
+                  await supabase.from('users').update({ overtime_hours: newBalance }).eq('id', req.userId);
+              } else {
+                  const isSickness = req.typeId === RequestType.SICKNESS;
+                  const isUnjustified = req.typeId === RequestType.UNJUSTIFIED;
+                  const currentType = this.config.leaveTypes.find(t => t.id === req.typeId);
+                  const subtracts = currentType ? currentType.subtractsDays : true;
+
+                  if (subtracts && !isSickness && !isUnjustified) {
+                      const start = new Date(req.startDate);
+                      const end = new Date(req.endDate || req.startDate);
+                      const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const newBalance = targetUser.daysAvailable - diffDays;
+                      await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
+                  }
+                  
+                  if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
+                      const daysAdded = Math.abs(req.hours || 0) / 8;
+                      const newBalance = targetUser.daysAvailable + daysAdded;
+                      await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
+                  }
+              }
+          }
+      }
+
       await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
       await this.refresh();
   }
@@ -254,7 +314,40 @@ class Store {
     await this.refresh(); 
   }
   async deleteDriverPPE(id: string) { await supabase.from('drivers_ppe').delete().eq('id', id); await this.refresh(); }
-  async repairOvertimeIntegrity() { await this.refresh(); }
+  
+  async repairOvertimeIntegrity() { 
+      // 1. Sincronización de horas consumidas en registros de origen
+      for (const req of this.requests.filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage && r.overtimeUsage.length > 0)) {
+          for (const usage of req.overtimeUsage) {
+              const source = this.requests.find(r => r.id === usage.requestId);
+              if (source) {
+                  const allUsages = this.requests
+                    .filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage)
+                    .flatMap(r => r.overtimeUsage!)
+                    .filter(u => u.requestId === source.id);
+                  const totalConsumed = allUsages.reduce((sum, u) => sum + u.hoursUsed, 0);
+                  await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
+              }
+          }
+      }
+
+      // 2. RECALCULAR SALDO TOTAL REAL DE CADA USUARIO
+      // Esto sumará todos los ingresos (+) y restará todos los consumos (-) aprobados
+      for (const user of this.users) {
+          const userOvertimeReqs = this.requests.filter(r => 
+              r.userId === user.id && 
+              r.status === RequestStatus.APPROVED && 
+              this.isOvertimeRequest(r.typeId)
+          );
+          
+          const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
+          
+          // Actualizamos en la base de datos para que el usuario vea su saldo real al loguear
+          await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id);
+      }
+
+      await this.refresh(); 
+  }
 }
 
 export const store = new Store();
