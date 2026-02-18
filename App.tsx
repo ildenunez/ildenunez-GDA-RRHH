@@ -135,6 +135,7 @@ const Login = ({ onLogin }: { onLogin: (u: User) => void }) => {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [isBusy, setIsBusy] = useState(false); // Reflejo del store.isBusy
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<'absence' | 'overtime'>('absence');
@@ -162,6 +163,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsubscribe = store.subscribe(() => {
+        setIsBusy(store.isBusy);
         if (store.currentUser) {
             setUser({ ...store.currentUser });
         }
@@ -225,7 +227,20 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-screen h-[100dvh] bg-slate-50 overflow-hidden">
+    <div className="flex h-screen h-[100dvh] bg-slate-50 overflow-hidden relative">
+      {/* Indicador de Carga Global */}
+      {isBusy && (
+        <div className="absolute top-0 left-0 right-0 h-1 z-[200] bg-blue-100 overflow-hidden">
+          <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite_linear]" style={{ width: '30%' }}></div>
+        </div>
+      )}
+      <style>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(333%); }
+        }
+      `}</style>
+
       <aside className={`fixed top-0 bottom-0 h-[100dvh] left-0 z-40 w-52 xl:w-48 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col shadow-2xl print:hidden`}>
         <div className="p-4 xl:p-3 flex flex-col items-center border-b border-slate-800 shrink-0">
             <div className="w-14 h-14 xl:w-12 xl:h-12 bg-white rounded-xl p-2 mb-2 flex items-center justify-center"><img src={LOGO_URL} className="w-full h-full object-contain" /></div>

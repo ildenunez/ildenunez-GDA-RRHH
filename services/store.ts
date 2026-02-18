@@ -24,6 +24,7 @@ class Store {
 
   currentUser: User | null = null;
   initialized = false;
+  isBusy = false; // Nuevo indicador de carga global
   private listeners: (() => void)[] = [];
 
   subscribe(fn: () => void) {
@@ -33,6 +34,11 @@ class Store {
 
   private notify() {
     this.listeners.forEach(fn => fn());
+  }
+
+  private setBusy(val: boolean) {
+    this.isBusy = val;
+    this.notify();
   }
 
   private mapUser(u: any): User {
@@ -141,6 +147,7 @@ class Store {
 
   async assignShiftsBatch(changes: { userId: string, date: string, shiftTypeId: string }[]) {
     if (changes.length === 0) return;
+    this.setBusy(true);
     try {
         const groups: Record<string, typeof changes> = {};
         changes.forEach(c => {
@@ -163,87 +170,126 @@ class Store {
         }
         await this.refresh();
     } catch (e) { console.error("Batch Save Error:", e); throw e; }
+    finally { this.setBusy(false); }
   }
 
   async createRequest(d: any, uid: string, s: RequestStatus) {
-      await supabase.from('requests').insert({ 
-        id: crypto.randomUUID(), 
-        user_id: uid, 
-        type_id: d.typeId, 
-        label: d.label || this.getTypeLabel(d.typeId), 
-        start_date: d.startDate, 
-        end_date: d.endDate, 
-        hours: d.hours, 
-        reason: d.reason, 
-        status: s, 
-        created_at: new Date().toISOString(),
-        overtime_usage: d.overtimeUsage || [] 
-      });
-      await this.refresh();
+      this.setBusy(true);
+      try {
+        await supabase.from('requests').insert({ 
+          id: crypto.randomUUID(), 
+          user_id: uid, 
+          type_id: d.typeId, 
+          label: d.label || this.getTypeLabel(d.typeId), 
+          start_date: d.startDate, 
+          end_date: d.endDate, 
+          hours: d.hours, 
+          reason: d.reason, 
+          status: s, 
+          created_at: new Date().toISOString(),
+          overtime_usage: d.overtimeUsage || [] 
+        });
+        await this.refresh();
+      } finally { this.setBusy(false); }
   }
 
   async updateRequest(id: string, d: any) {
-    await supabase.from('requests').update({ 
-        type_id: d.typeId, 
-        start_date: d.startDate, 
-        end_date: d.endDate, 
-        hours: d.hours, 
-        reason: d.reason,
-        overtime_usage: d.overtimeUsage || [] 
-    }).eq('id', id);
-    await this.refresh();
+    this.setBusy(true);
+    try {
+      await supabase.from('requests').update({ 
+          type_id: d.typeId, 
+          start_date: d.startDate, 
+          end_date: d.endDate, 
+          hours: d.hours, 
+          reason: d.reason,
+          overtime_usage: d.overtimeUsage || [] 
+      }).eq('id', id);
+      await this.refresh();
+    } finally { this.setBusy(false); }
   }
 
   async updateRequestStatus(id: string, s: RequestStatus, aid: string, c?: string) {
-      const req = this.requests.find(r => r.id === id);
-      if (req && s === RequestStatus.APPROVED) {
-          if (req.overtimeUsage && req.overtimeUsage.length > 0) {
-              for (const usage of req.overtimeUsage) {
-                  const source = this.requests.find(r => r.id === usage.requestId);
-                  if (source) {
-                      const newConsumed = (source.consumedHours || 0) + usage.hoursUsed;
-                      await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', usage.requestId);
-                  }
-              }
-          }
+      this.setBusy(true);
+      try {
+        const req = this.requests.find(r => r.id === id);
+        if (req && s === RequestStatus.APPROVED) {
+            const usage = req.overtimeUsage || [];
+            if (usage.length > 0) {
+                for (const u of usage) {
+                    const source = this.requests.find(r => r.id === u.requestId);
+                    if (source) {
+                        const newConsumed = (source.consumedHours || 0) + u.hoursUsed;
+                        await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
+                    }
+                }
+            }
 
-          const targetUser = this.users.find(u => u.id === req.userId);
-          if (targetUser) {
-              const isOvertime = this.isOvertimeRequest(req.typeId);
-              if (isOvertime) {
-                  const newBalance = targetUser.overtimeHours + (req.hours || 0);
-                  await supabase.from('users').update({ overtime_hours: newBalance }).eq('id', req.userId);
-              } else {
-                  const isSickness = req.typeId === RequestType.SICKNESS;
-                  const isUnjustified = req.typeId === RequestType.UNJUSTIFIED;
-                  const currentType = this.config.leaveTypes.find(t => t.id === req.typeId);
-                  const subtracts = currentType ? currentType.subtractsDays : true;
+            const targetUser = this.users.find(u => u.id === req.userId);
+            if (targetUser) {
+                const isOvertime = this.isOvertimeRequest(req.typeId);
+                if (isOvertime) {
+                    const newBalance = targetUser.overtimeHours + (req.hours || 0);
+                    await supabase.from('users').update({ overtime_hours: newBalance }).eq('id', req.userId);
+                } else {
+                    const isSickness = req.typeId === RequestType.SICKNESS;
+                    const isUnjustified = req.typeId === RequestType.UNJUSTIFIED;
+                    const currentType = this.config.leaveTypes.find(t => t.id === req.typeId);
+                    const subtracts = currentType ? currentType.subtractsDays : true;
 
-                  if (subtracts && !isSickness && !isUnjustified) {
-                      const start = new Date(req.startDate);
-                      const end = new Date(req.endDate || req.startDate);
-                      const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const newBalance = targetUser.daysAvailable - diffDays;
-                      await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
-                  }
-                  
-                  if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
-                      const daysAdded = Math.abs(req.hours || 0) / 8;
-                      const newBalance = targetUser.daysAvailable + daysAdded;
-                      await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
-                  }
-              }
-          }
-      }
+                    if (subtracts && !isSickness && !isUnjustified) {
+                        const start = new Date(req.startDate);
+                        const end = new Date(req.endDate || req.startDate);
+                        const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                        const newBalance = targetUser.daysAvailable - diffDays;
+                        await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
+                    }
+                    
+                    if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
+                        const daysAdded = Math.abs(req.hours || 0) / 8;
+                        const newBalance = targetUser.daysAvailable + daysAdded;
+                        await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
+                    }
+                }
+            }
+        }
 
-      await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
-      await this.refresh();
+        await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
+        await this.refresh();
+      } finally { this.setBusy(false); }
   }
 
-  async deleteRequest(id: string) { await supabase.from('requests').delete().eq('id', id); await this.refresh(); }
-  async markNotificationAsRead(id: string) { await supabase.from('notifications').update({ read: true }).eq('id', id); await this.refresh(); }
-  async markAllNotificationsAsRead(uid: string) { await supabase.from('notifications').update({ read: true }).eq('user_id', uid); await this.refresh(); }
-  async deleteNotification(id: string) { await supabase.from('notifications').delete().eq('id', id); await this.refresh(); }
+  async deleteRequest(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('requests').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async markNotificationAsRead(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+  
+  async markAllNotificationsAsRead(uid: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('user_id', uid); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteNotification(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('notifications').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
   getMyRequests() { return this.requests.filter(r => r.userId === this.currentUser?.id).sort((a,b) => b.startDate.localeCompare(a.startDate)); }
   getNotificationsForUser(uid: string) { return this.notifications.filter(n => n.userId === uid); }
   getShiftForUserDate(uid: string, d: string) { return this.config.shiftTypes.find(s => s.id === this.config.shiftAssignments.find(a => a.userId === uid && a.date === d)?.shiftTypeId); }
@@ -264,100 +310,333 @@ class Store {
     return this.requests.filter(x => x.id !== r.id && x.status !== RequestStatus.REJECTED && !this.isOvertimeRequest(x.typeId) && this.users.find(y => y.id === x.userId)?.departmentId === u.departmentId && r.startDate.split('T')[0] <= (x.endDate || x.startDate).split('T')[0] && (r.endDate || r.startDate).split('T')[0] >= x.startDate.split('T')[0]);
   }
   getAvailableOvertimeRecords(uid: string) { return this.requests.filter(r => r.userId === uid && r.status === RequestStatus.APPROVED && (r.typeId === RequestType.OVERTIME_EARN || r.typeId === RequestType.WORKED_HOLIDAY) && (r.hours || 0) > (r.consumedHours || 0)); }
+  
   async login(email: string, pass: string) {
-    const { data } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
-    if (data) {
-        this.currentUser = this.mapUser(data);
-        localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
-        await this.refresh();
-        return this.currentUser;
-    }
-    return null;
+    this.setBusy(true);
+    try {
+      const { data } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      if (data) {
+          this.currentUser = this.mapUser(data);
+          localStorage.setItem('gda_session', JSON.stringify(this.currentUser));
+          await this.refresh();
+          return this.currentUser;
+      }
+      return null;
+    } finally { this.setBusy(false); }
   }
+
   logout() { this.currentUser = null; localStorage.removeItem('gda_session'); this.notify(); }
-  async createUser(d: any, p: string) { await supabase.from('users').insert({ id: crypto.randomUUID(), ...d, department_id: d.departmentId, password: p }); await this.refresh(); }
-  async updateUserAdmin(id: string, d: any) { const { departmentId, ...rest } = d; await supabase.from('users').update({ ...rest, department_id: departmentId }).eq('id', id); await this.refresh(); }
-  async updateUserProfile(id: string, d: any) { await supabase.from('users').update(d).eq('id', id); await this.refresh(); }
-  async deleteUser(id: string) { await supabase.from('users').delete().eq('id', id); await this.refresh(); }
-  async createDepartment(n: string, sids: string[]) { await supabase.from('departments').insert({ id: crypto.randomUUID(), name: n, supervisor_ids: sids }); await this.refresh(); }
-  async updateDepartment(id: string, n: string, sids: string[]) { await supabase.from('departments').update({ name: n, supervisor_ids: sids }).eq('id', id); await this.refresh(); }
-  async deleteDepartment(id: string) { await supabase.from('departments').delete().eq('id', id); await this.refresh(); }
-  async createLeaveType(l: string, s: boolean, f: any) { await supabase.from('leave_types').insert({ id: crypto.randomUUID(), label: l, subtracts_days: s, fixed_range: f }); await this.refresh(); }
-  async updateLeaveType(id: string, l: string, s: boolean, f: any) { await supabase.from('leave_types').update({ label: l, subtracts_days: s, fixed_range: f }).eq('id', id); await this.refresh(); }
-  async deleteLeaveType(id: string) { await supabase.from('leave_types').delete().eq('id', id); await this.refresh(); }
-  async createShiftType(n: string, c: string, st: string, e: string) { await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name: n, color: c, segments: [{ start: st, end: e }] }); await this.refresh(); }
-  async deleteShiftType(id: string) { await supabase.from('shift_types').delete().eq('id', id); await this.refresh(); }
-  async createHoliday(d: string, n: string) { await supabase.from('holidays').insert({ id: crypto.randomUUID(), date: d, name: n }); await this.refresh(); }
-  async deleteHoliday(id: string) { await supabase.from('holidays').delete().eq('id', id); await this.refresh(); }
-  async createPPEType(n: string, s: string[]) { await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name: n, sizes: s, stock: {} }); await this.refresh(); }
-  async updatePPEType(id: string, n: string, s: string[]) { await supabase.from('ppe_types').update({ name: n, sizes: s }).eq('id', id); await this.refresh(); }
-  async updatePPEStock(id: string, s: any) { await supabase.from('ppe_types').update({ stock: s }).eq('id', id); await this.refresh(); }
-  async deletePPEType(id: string) { await supabase.from('ppe_types').delete().eq('id', id); await this.refresh(); }
-  async createPPERequest(uid: string, tid: string, sz: string) { await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); await this.refresh(); }
-  async markPPEAsRequested(id: string) { await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id); await this.refresh(); }
-  async deliverPPERequest(id: string, q: number = 1) { await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id); await this.refresh(); }
-  async deletePPERequest(id: string) { await supabase.from('ppe_requests').delete().eq('id', id); await this.refresh(); }
-  async createNewsPost(t: string, c: string, aid: string) { await supabase.from('news').insert({ id: crypto.randomUUID(), title: t, content: c, author_id: aid, created_at: new Date().toISOString() }); await this.refresh(); }
-  async deleteNewsPost(id: string) { await supabase.from('news').delete().eq('id', id); await this.refresh(); }
-  async saveSmtpSettings(s: any) { await supabase.from('settings').update({ value: s }).eq('key', 'smtp'); await this.refresh(); }
-  async saveEmailTemplates(t: EmailTemplate[]) { await supabase.from('settings').update({ value: t }).eq('key', 'email_templates'); await this.refresh(); }
-  async createTruck(n: string) { await supabase.from('trucks').insert({ id: crypto.randomUUID(), name: n }); await this.refresh(); }
-  async deleteTruck(id: string) { await supabase.from('trucks').delete().eq('id', id); await this.refresh(); }
-  async createDriver(n: string, tid: string) { await supabase.from('drivers').insert({ id: crypto.randomUUID(), name: n, truck_id: tid }); await this.refresh(); }
-  async deleteDriver(id: string) { await supabase.from('drivers').delete().eq('id', id); await this.refresh(); }
-  async createDriverPPE(did: string, tid: string, sz: string) { await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: did, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); await this.refresh(); }
-  async updateDriverPPEStatus(id: string, s: string, _q?: number) { 
-    const updateData: any = { status: s };
-    if (s === 'ENTREGADO') updateData.delivery_date = new Date().toISOString();
-    if (s === 'SOLICITADO') updateData.requested_date = new Date().toISOString();
-    await supabase.from('drivers_ppe').update(updateData).eq('id', id); 
-    await this.refresh(); 
+  
+  async createUser(d: any, p: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('users').insert({ id: crypto.randomUUID(), ...d, department_id: d.departmentId, password: p }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
   }
-  async deleteDriverPPE(id: string) { await supabase.from('drivers_ppe').delete().eq('id', id); await this.refresh(); }
+
+  async updateUserAdmin(id: string, d: any) { 
+    this.setBusy(true);
+    try {
+      const { departmentId, ...rest } = d; 
+      await supabase.from('users').update({ ...rest, department_id: departmentId }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updateUserProfile(id: string, d: any) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('users').update(d).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteUser(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('users').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createDepartment(n: string, sids: string[]) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('departments').insert({ id: crypto.randomUUID(), name: n, supervisor_ids: sids }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updateDepartment(id: string, n: string, sids: string[]) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('departments').update({ name: n, supervisor_ids: sids }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteDepartment(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('departments').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createLeaveType(l: string, s: boolean, f: any) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('leave_types').insert({ id: crypto.randomUUID(), label: l, subtracts_days: s, fixed_range: f }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updateLeaveType(id: string, l: string, s: boolean, f: any) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('leave_types').update({ label: l, subtracts_days: s, fixed_range: f }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteLeaveType(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('leave_types').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createShiftType(n: string, c: string, st: string, e: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('shift_types').insert({ id: crypto.randomUUID(), name: n, color: c, segments: [{ start: st, end: e }] }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteShiftType(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('shift_types').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createHoliday(d: string, n: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('holidays').insert({ id: crypto.randomUUID(), date: d, name: n }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteHoliday(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('holidays').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createPPEType(n: string, s: string[]) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_types').insert({ id: crypto.randomUUID(), name: n, sizes: s, stock: {} }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updatePPEType(id: string, n: string, s: string[]) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_types').update({ name: n, sizes: s }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updatePPEStock(id: string, s: any) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_types').update({ stock: s }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deletePPEType(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_types').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createPPERequest(uid: string, tid: string, sz: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async markPPEAsRequested(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deliverPPERequest(id: string, q: number = 1) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deletePPERequest(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('ppe_requests').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createNewsPost(t: string, c: string, aid: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('news').insert({ id: crypto.randomUUID(), title: t, content: c, author_id: aid, created_at: new Date().toISOString() }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteNewsPost(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('news').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async saveSmtpSettings(s: any) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('settings').update({ value: s }).eq('key', 'smtp'); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async saveEmailTemplates(t: EmailTemplate[]) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('settings').update({ value: t }).eq('key', 'email_templates'); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createTruck(n: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('trucks').insert({ id: crypto.randomUUID(), name: n }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteTruck(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('trucks').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createDriver(n: string, tid: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('drivers').insert({ id: crypto.randomUUID(), name: n, truck_id: tid }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteDriver(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('drivers').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async createDriverPPE(did: string, tid: string, sz: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: did, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async updateDriverPPEStatus(id: string, s: string, _q?: number) { 
+    this.setBusy(true);
+    try {
+      const updateData: any = { status: s };
+      if (s === 'ENTREGADO') updateData.delivery_date = new Date().toISOString();
+      if (s === 'SOLICITADO') updateData.requested_date = new Date().toISOString();
+      await supabase.from('drivers_ppe').update(updateData).eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
+
+  async deleteDriverPPE(id: string) { 
+    this.setBusy(true);
+    try {
+      await supabase.from('drivers_ppe').delete().eq('id', id); 
+      await this.refresh(); 
+    } finally { this.setBusy(false); }
+  }
   
   async repairOvertimeIntegrity() { 
-      // 1. Sincronización de horas consumidas en registros de origen
-      const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED);
-      
-      for (const req of approvedWithUsage) {
-          // CORRECCIÓN AUTOMÁTICA DE SIGNO PARA LEGACY DATA
-          // Si es un tipo de consumo y tiene horas positivas, las pasamos a negativo
-          const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
-          if (isConsumptionType && req.hours && req.hours > 0) {
-              const correctedHours = -req.hours;
-              await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id);
-              req.hours = correctedHours; 
-          }
+      this.setBusy(true);
+      try {
+        const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED);
+        
+        for (const req of approvedWithUsage) {
+            const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
+            if (isConsumptionType && req.hours && req.hours > 0) {
+                const correctedHours = -req.hours;
+                await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id);
+                req.hours = correctedHours; 
+            }
 
-          const usageList = req.overtimeUsage || [];
-          if (usageList.length > 0) {
-              for (const usage of usageList) {
-                  const source = this.requests.find(r => r.id === usage.requestId);
-                  if (source) {
-                      const allUsages = this.requests
-                        .filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage)
-                        .flatMap(r => r.overtimeUsage || [])
-                        .filter(u => u.requestId === source.id);
-                      const totalConsumed = allUsages.reduce((sum, u) => sum + u.hoursUsed, 0);
-                      await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
-                  }
-              }
-          }
-      }
+            const usageList = req.overtimeUsage || [];
+            if (usageList.length > 0) {
+                for (const u of usageList) {
+                    const source = this.requests.find(r => r.id === u.requestId);
+                    if (source) {
+                        const allUsages = this.requests
+                          .filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage)
+                          .flatMap(r => r.overtimeUsage || [])
+                          .filter(usage => usage.requestId === source.id);
+                        const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0);
+                        await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
+                    }
+                }
+            }
+        }
 
-      // 2. RECALCULAR SALDO TOTAL REAL DE CADA USUARIO
-      for (const user of this.users) {
-          const userOvertimeReqs = this.requests.filter(r => 
-              r.userId === user.id && 
-              r.status === RequestStatus.APPROVED && 
-              this.isOvertimeRequest(r.typeId)
-          );
-          
-          const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
-          await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id);
-      }
+        for (const user of this.users) {
+            const userOvertimeReqs = this.requests.filter(r => 
+                r.userId === user.id && 
+                r.status === RequestStatus.APPROVED && 
+                this.isOvertimeRequest(r.typeId)
+            );
+            
+            const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
+            await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id);
+        }
 
-      await this.refresh(); 
+        await this.refresh(); 
+      } finally { this.setBusy(false); }
   }
 }
 

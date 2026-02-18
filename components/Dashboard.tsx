@@ -82,6 +82,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       return <span className="font-medium text-slate-800">{label}</span>;
   };
 
+  // Lógica de Libro de Mayor para las vistas de detalle
+  const auditTrail = useMemo(() => {
+      if (detailView === 'none') return [];
+      const isOvertime = detailView === 'hours';
+      
+      // Filtrar solicitudes relevantes aprobadas
+      const relevant = requests
+        .filter(r => r.status === RequestStatus.APPROVED && (isOvertime ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId)))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)); // Orden cronológico para calcular acumulado
+
+      let runningBalance = 0;
+      return relevant.map(req => {
+          let impact = 0;
+          if (isOvertime) {
+              impact = req.hours || 0;
+          } else {
+              if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
+                  impact = req.hours || 0;
+              } else {
+                  const start = new Date(req.startDate);
+                  const end = new Date(req.endDate || req.startDate);
+                  impact = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+              }
+          }
+          runningBalance += impact;
+          return { ...req, impact, runningBalance };
+      }).reverse(); // Mostramos lo más reciente primero en la tabla
+  }, [detailView, requests, refresh]);
+
   const stats = [
     { id: 'days', label: 'Vacaciones', value: (currentUser.daysAvailable ?? 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true, visible: !isRepartidor },
     { id: 'hours', label: 'Horas Extra', value: `${(currentUser.overtimeHours ?? 0).toFixed(1)}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true, visible: !isRepartidor },
@@ -92,24 +121,103 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
 
   if (detailView !== 'none') {
     const isOvertimeView = detailView === 'hours';
-    const title = isOvertimeView ? 'Horas Extra' : 'Ausencias';
-    const filteredRequests = requests.filter(r => isOvertimeView ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId));
+    const title = isOvertimeView ? 'Libro de Mayor: Horas Extra' : 'Libro de Mayor: Ausencias';
+    const pendingReqs = requests.filter(r => r.status === RequestStatus.PENDING && (isOvertimeView ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId)));
+    
     return (
         <div className="space-y-6 animate-fade-in xl:space-y-4">
             <div className="flex items-center gap-4">
                 <button onClick={() => setDetailView('none')} className="p-2 hover:bg-slate-200 rounded-full text-slate-500"><ArrowLeft /></button>
                 <h2 className="text-xl font-bold text-slate-800">{title}</h2>
             </div>
+            
             <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <p className="text-sm text-slate-500 uppercase font-semibold">Saldo Actual</p>
-                    <p className="text-3xl font-bold text-slate-800">{isOvertimeView ? `${(currentUser.overtimeHours ?? 0).toFixed(1)}h` : (currentUser.daysAvailable ?? 0).toFixed(1)}</p>
+                    <p className="text-sm text-slate-500 uppercase font-semibold">Saldo Actual Consolidado</p>
+                    <p className={`text-3xl font-black ${isOvertimeView ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {isOvertimeView ? `${(currentUser.overtimeHours ?? 0).toFixed(1)}h` : (currentUser.daysAvailable ?? 0).toFixed(1)}
+                    </p>
                 </div>
-                <button onClick={() => onNewRequest(isOvertimeView ? 'overtime' : 'absence')} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg font-bold transition-all flex items-center gap-2"><PlusCircle size={18} /> Nuevo</button>
+                <button 
+                  disabled={store.isBusy}
+                  onClick={() => onNewRequest(isOvertimeView ? 'overtime' : 'absence')} 
+                  className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                    <PlusCircle size={18} /> Nueva Solicitud
+                </button>
             </div>
+
+            {/* Pendientes de Aprobación */}
+            {pendingReqs.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4">
+                    <h3 className="text-sm font-bold text-yellow-800 mb-3 flex items-center gap-2"><Clock size={16}/> Solicitudes en Revisión (No afectan al saldo aún)</h3>
+                    <div className="space-y-2">
+                        {pendingReqs.map(req => (
+                            <div key={req.id} className="bg-white/80 p-3 rounded-xl border border-yellow-200 flex justify-between items-center text-sm">
+                                <div>
+                                    <span className="font-bold">{store.getTypeLabel(req.typeId)}</span>
+                                    <span className="ml-2 text-slate-500">{new Date(req.startDate).toLocaleDateString()}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="font-mono font-bold text-yellow-600">{isOvertimeView ? `${req.hours}h` : 'Pendiente'}</span>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => onEditRequest(req)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14}/></button>
+                                        <button onClick={() => handleDelete(req.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 xl:p-4 border-b border-slate-100"><h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18} className="text-slate-400"/> Historial</h3></div>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-6 py-4 font-semibold">Tipo</th><th className="px-6 py-4 font-semibold">Fecha(s)</th>{isOvertimeView && <th className="px-6 py-4 font-semibold">Horas</th>}<th className="px-6 py-4 font-semibold">Estado</th><th className="px-6 py-4 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredRequests.map(req => (<tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors"><td className="px-6 py-4">{getRequestLabel(req)}</td><td className="px-6 py-4 text-slate-600">{(req.typeId as string).includes('ajuste') ? 'Manual' : `${new Date(req.startDate).toLocaleDateString()}`}</td>{isOvertimeView && <td className={`px-6 py-4 font-bold ${(req.hours||0) < 0 ? 'text-red-600' : 'text-green-600'}`}>{(req.hours||0) > 0 ? '+' : ''}{req.hours}h</td>}<td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${req.status === RequestStatus.APPROVED ? 'bg-green-100 text-green-700' : req.status === RequestStatus.REJECTED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status}</span></td><td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>{req.status === RequestStatus.PENDING && (<div className="flex justify-end gap-2"><button onClick={() => onEditRequest(req)} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(req.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg"><Trash2 size={16}/></button></div>)}</td></tr>))}</tbody></table></div>
+                <div className="p-6 xl:p-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18} className="text-slate-400"/> Historial de Movimientos (Audit Trail)</h3>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded border tracking-widest">Orden Cronológico Inverso</div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                            <tr>
+                                <th className="px-6 py-4">Fecha</th>
+                                <th className="px-6 py-4">Concepto / Motivo</th>
+                                <th className="px-6 py-4 text-center">Movimiento</th>
+                                <th className="px-6 py-4 text-center">Saldo Resultante</th>
+                                <th className="px-6 py-4 text-right print:hidden">Info</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {auditTrail.length === 0 ? (
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados en el sistema.</td></tr>
+                            ) : auditTrail.map((move: any) => (
+                                <tr key={move.id} onClick={() => onViewRequest(move)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
+                                    <td className="px-6 py-4 text-slate-500 font-medium">{new Date(move.startDate).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="font-bold text-slate-800">{store.getTypeLabel(move.typeId)}</div>
+                                        <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{move.reason || '-'}</div>
+                                    </td>
+                                    <td className={`px-6 py-4 text-center font-black ${move.impact < 0 ? 'text-red-600 bg-red-50/30' : 'text-green-600 bg-green-50/30'}`}>
+                                        {move.impact > 0 ? '+' : ''}{move.impact}{isOvertimeView ? 'h' : 'd'}
+                                    </td>
+                                    <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
+                                        {move.runningBalance.toFixed(1)}{isOvertimeView ? 'h' : 'd'}
+                                    </td>
+                                    <td className="px-6 py-4 text-right print:hidden">
+                                        <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors ml-auto"/>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
+                <Info size={20} className="text-blue-500 shrink-0"/>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                    Este reporte muestra la trazabilidad completa de sus saldos. Los movimientos se registran automáticamente en el momento que un administrador aprueba su solicitud. 
+                    Si detecta alguna discrepancia, contacte con el departamento de RRHH.
+                </p>
             </div>
         </div>
     );
@@ -121,9 +229,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
          <div><h2 className="text-2xl xl:text-xl font-bold text-slate-800">Hola, {currentUser.name}</h2><p className="text-slate-500 xl:text-sm">Panel de control personal.</p></div>
          <div className="flex gap-2.5 w-full md:w-auto">
             {!isRepartidor && (
-              <><button onClick={() => onNewRequest('absence')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl shadow-lg font-medium text-sm"><PlusCircle size={18}/> Ausencia</button><button onClick={() => onNewRequest('overtime')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 px-5 py-3 rounded-xl font-medium text-sm"><Timer size={18}/> Horas</button></>
+              <><button disabled={store.isBusy} onClick={() => onNewRequest('absence')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl shadow-lg font-medium text-sm disabled:opacity-50"><PlusCircle size={18}/> Ausencia</button><button disabled={store.isBusy} onClick={() => onNewRequest('overtime')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 px-5 py-3 rounded-xl font-medium text-sm disabled:opacity-50"><Timer size={18}/> Horas</button></>
             )}
-            <button onClick={() => setShowPPEModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-5 py-3 rounded-xl font-medium text-sm"><HardHat size={18}/> EPI</button>
+            <button disabled={store.isBusy} onClick={() => setShowPPEModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 px-5 py-3 rounded-xl font-medium text-sm disabled:opacity-50"><HardHat size={18}/> EPI</button>
          </div>
       </div>
       
