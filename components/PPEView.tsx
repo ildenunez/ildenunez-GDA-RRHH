@@ -31,7 +31,7 @@ const PPEQuantityReportModal: React.FC<{ onClose: () => void, ppeRequests: PPERe
         const groups: Record<string, Record<string, number>> = {};
         
         filtered.forEach(p => {
-            const typeName = getPpeTypeName(p.typeId);
+            const typeName = getPpeTypeName(p.type_id);
             if (!groups[typeName]) groups[typeName] = {};
             if (!groups[typeName][p.size]) groups[typeName][p.size] = 0;
             groups[typeName][p.size]++;
@@ -295,7 +295,7 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                                <td className="px-6 py-4 pl-12">
                                                    <div className="flex items-center gap-2">
                                                        <ChevronRight size={14} className="text-slate-300" />
-                                                       <span className="font-medium text-slate-700">{getTypeName(req.typeId)}</span>
+                                                       <span className="font-medium text-slate-700">{getTypeName(req.type_id)}</span>
                                                    </div>
                                                </td>
                                                <td className="px-6 py-4">
@@ -336,7 +336,7 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                                             {req.status !== 'ENTREGADO' && (
                                                                 <button 
                                                                     onClick={() => handleDeliver(req.id)}
-                                                                    className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                                                                    className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-800 transition-colors"
                                                                 >
                                                                     Entregar
                                                                 </button>

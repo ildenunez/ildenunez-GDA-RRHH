@@ -1,6 +1,7 @@
 import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import { store } from './services/store';
-import { User, Role, LeaveRequest, Notification } from './types';
+import { User, Role, LeaveRequest } from './types';
+import type { Notification } from './types';
 import Dashboard from './components/Dashboard';
 import { Approvals, UserManagement, UpcomingAbsences, AdminSettings } from './components/Management';
 import CalendarView from './components/CalendarView';

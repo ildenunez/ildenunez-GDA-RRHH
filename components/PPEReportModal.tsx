@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PPERequest } from '../types';
 import { store } from '../services/store';
@@ -16,8 +15,8 @@ const PPEReportModal: React.FC<PPEReportModalProps> = ({ requests, onClose, filt
   // Group by Type
   const groupedRequests: Record<string, PPERequest[]> = {};
   requests.forEach(req => {
-      if (!groupedRequests[req.typeId]) groupedRequests[req.typeId] = [];
-      groupedRequests[req.typeId].push(req);
+      if (!groupedRequests[req.type_id]) groupedRequests[req.type_id] = [];
+      groupedRequests[req.type_id].push(req);
   });
 
   const getTypeName = (id: string) => store.config.ppeTypes.find(t => t.id === id)?.name || id;
