@@ -24,7 +24,7 @@ class Store {
 
   currentUser: User | null = null;
   initialized = false;
-  isBusy = false; // Nuevo indicador de carga global
+  isBusy = false;
   private listeners: (() => void)[] = [];
 
   subscribe(fn: () => void) {
@@ -107,7 +107,8 @@ class Store {
             startDate: r.start_date, endDate: r.end_date, hours: r.hours, reason: r.reason, 
             status: r.status, createdAt: r.created_at, adminComment: r.admin_comment,
             resolvedBy: r.resolved_by ? String(r.resolved_by) : undefined,
-            consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || []
+            consumedHours: Number(r.consumed_hours || 0), overtimeUsage: r.overtime_usage || [],
+            documentUrl: r.document_url
         }));
         this.config.news = nw;
         this.config.leaveTypes = lt.map((t: any) => ({ id: String(t.id), label: t.label, subtractsDays: !!t.subtracts_days, fixedRanges: t.fixed_range || [] }));
@@ -131,10 +132,49 @@ class Store {
             const updatedSelf = this.users.find(u => u.id === this.currentUser!.id);
             if (updatedSelf) this.currentUser = updatedSelf;
             const { data: n } = await supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false });
-            if (n) this.notifications = n.map((x: any) => ({ id: String(x.id), userId: String(x.user_id), message: x.message, read: x.read, date: x.date, type: x.type }));
+            if (n) {
+                const mappedNotifs = n.map((x: any) => ({ id: String(x.id), userId: String(x.user_id), message: x.message, read: x.read, date: x.date, type: x.type }));
+                // Disparar notificaciones push de navegador si hay nuevas sin leer y la pestaña no es el foco principal
+                if (this.notifications.length > 0) {
+                    const newUnread = mappedNotifs.filter(notif => !notif.read && !this.notifications.some(old => old.id === notif.id));
+                    newUnread.forEach(notif => this.sendBrowserNotification(notif));
+                }
+                this.notifications = mappedNotifs;
+            }
         }
         this.notify();
     } catch (error) { console.error("Store Refresh Error:", error); }
+  }
+
+  private sendBrowserNotification(notif: Notification) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      new Notification("GdA RRHH - Nuevo Mensaje", {
+          body: notif.message,
+          icon: "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png"
+      });
+  }
+
+  async uploadJustificante(file: File): Promise<string | null> {
+      this.setBusy(true);
+      try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random()}.${fileExt}`;
+          const filePath = `${this.currentUser?.id}/${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+              .from('justificantes')
+              .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data } = supabase.storage.from('justificantes').getPublicUrl(filePath);
+          return data.publicUrl;
+      } catch (e) {
+          console.error("Upload Error:", e);
+          return null;
+      } finally {
+          this.setBusy(false);
+      }
   }
 
   async init() {
@@ -187,7 +227,8 @@ class Store {
           reason: d.reason, 
           status: s, 
           created_at: new Date().toISOString(),
-          overtime_usage: d.overtimeUsage || [] 
+          overtime_usage: d.overtimeUsage || [],
+          document_url: d.documentUrl || null
         });
         await this.refresh();
       } finally { this.setBusy(false); }
@@ -202,7 +243,8 @@ class Store {
           end_date: d.endDate, 
           hours: d.hours, 
           reason: d.reason,
-          overtime_usage: d.overtimeUsage || [] 
+          overtime_usage: d.overtimeUsage || [],
+          document_url: d.documentUrl || null
       }).eq('id', id);
       await this.refresh();
     } finally { this.setBusy(false); }

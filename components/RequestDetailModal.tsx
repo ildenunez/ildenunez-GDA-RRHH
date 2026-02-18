@@ -1,7 +1,7 @@
 import React from 'react';
 import { LeaveRequest, RequestStatus } from '../types';
 import { store } from '../services/store';
-import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck } from 'lucide-react';
+import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, ExternalLink } from 'lucide-react';
 
 interface RequestDetailModalProps {
   request: LeaveRequest;
@@ -127,6 +127,52 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                     </div>
                 )}
             </div>
+
+            {/* Documento Justificante */}
+            {request.documentUrl && (
+                <div className="mb-8 bg-slate-900 text-white p-6 rounded-3xl overflow-hidden relative group print:hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={80}/></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-blue-600 rounded-xl">
+                                <CheckCircle size={20}/>
+                            </div>
+                            <h3 className="font-black uppercase tracking-widest text-xs">Documento Justificante Adjunto</h3>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center gap-4">
+                            {request.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                                <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-white/20 bg-black/20">
+                                    <img src={request.documentUrl} alt="Vista previa" className="w-full h-full object-cover" />
+                                </div>
+                            ) : (
+                                <div className="w-24 h-24 rounded-xl flex items-center justify-center bg-white/10 border-2 border-white/20">
+                                    <FileText size={32} className="text-blue-400"/>
+                                </div>
+                            )}
+                            <div className="flex-1 text-center sm:text-left">
+                                <p className="text-slate-400 text-[10px] font-bold uppercase mb-2">Archivo digital validado</p>
+                                <div className="flex gap-2 justify-center sm:justify-start">
+                                    <a 
+                                        href={request.documentUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 bg-white text-slate-900 px-4 py-2 rounded-xl font-black uppercase text-[10px] hover:bg-slate-100 transition-all"
+                                    >
+                                        <Eye size={14}/> Ver Original
+                                    </a>
+                                    <a 
+                                        href={request.documentUrl} 
+                                        download 
+                                        className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-xl font-black uppercase text-[10px] hover:bg-white/20 transition-all"
+                                    >
+                                        <Download size={14}/> Descargar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Validación y Observaciones Admin */}
             {(request.status !== RequestStatus.PENDING) && (

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, LeaveRequest, OvertimeUsage, RequestStatus, Role, RequestType } from '../types';
 import { store } from '../services/store';
-import { X, Clock, Loader2, User as UserIcon, CalendarDays, Gift, Archive, FileWarning } from 'lucide-react';
+import { X, Clock, Loader2, User as UserIcon, CalendarDays, Gift, Archive, FileWarning, Upload, FileText, CheckCircle2 } from 'lucide-react';
 
 interface RequestFormModalProps {
   onClose: () => void;
@@ -24,6 +24,11 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const [availableOvertime, setAvailableOvertime] = useState<LeaveRequest[]>([]);
   const [usageMap, setUsageMap] = useState<Record<string, number>>({});
   const [selectedRangeIndex, setSelectedRangeIndex] = useState<string>('');
+  
+  // Justificantes
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveTargetUser = targetUser || user;
   const isManagerMode = (user.role === Role.ADMIN || user.role === Role.SUPERVISOR);
@@ -130,6 +135,14 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+
+    let documentUrl = editingRequest?.documentUrl || null;
+    if (selectedFile) {
+        setIsUploading(true);
+        documentUrl = await store.uploadJustificante(selectedFile) || null;
+        setIsUploading(false);
+    }
+
     let finalOvertimeUsage: OvertimeUsage[] | undefined = undefined;
     if (activeTab === 'overtime' && ![RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(typeId as RequestType)) {
         finalOvertimeUsage = Object.entries(usageMap)
@@ -137,13 +150,24 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
             .map(([id, hoursUsed]) => ({ requestId: id, hoursUsed: hoursUsed as number }));
     }
 
-    // FORZAR SIGNO NEGATIVO PARA TIPOS DE CONSUMO
     const isConsumption = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(typeId as RequestType);
     const finalHoursValue = isConsumption ? -Math.abs(hours) : hours;
 
-    const reqData = { typeId, startDate, endDate, hours: finalHoursValue, reason, overtimeUsage: finalOvertimeUsage, isJustified: false, reportedToAdmin: false };
+    const reqData = { 
+        typeId, 
+        startDate, 
+        endDate, 
+        hours: finalHoursValue, 
+        reason, 
+        overtimeUsage: finalOvertimeUsage, 
+        isJustified: false, 
+        reportedToAdmin: false,
+        documentUrl: documentUrl 
+    };
+
     if (editingRequest) await store.updateRequest(editingRequest.id, reqData);
     else await store.createRequest(reqData, effectiveTargetUser.id, isManagerMode && typeId === RequestType.UNJUSTIFIED ? RequestStatus.APPROVED : (isManagerMode && isAdminCreatingForOther ? adminStatus : RequestStatus.PENDING));
+    
     setIsSubmitting(false);
     onClose();
   };
@@ -151,6 +175,7 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
   const isConsumptionType = activeTab === 'overtime' && ![RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(typeId as RequestType);
   const isWorkedHoliday = typeId === RequestType.WORKED_HOLIDAY;
   const isUnjustified = typeId === RequestType.UNJUSTIFIED;
+  const isSickness = typeId === RequestType.SICKNESS;
   const currentLeaveType = absenceTypes.find(t => t.id === typeId);
   const hasFixedRanges = activeTab === 'absence' && currentLeaveType?.fixedRanges && currentLeaveType.fixedRanges.length > 0;
 
@@ -245,13 +270,47 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
              )}
            </div>
 
-           {isUnjustified && (
-               <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center gap-4">
-                   <div className="bg-white p-2 rounded-full shadow-sm text-orange-600"><FileWarning size={24} /></div>
-                   <div>
-                       <p className="text-xs text-orange-700 uppercase font-bold">Control de Justificantes</p>
-                       <p className="text-sm font-medium text-slate-800">Este registro se crea como <strong>Ausencia Justificable</strong>. Aparecerá en el panel de control de mandos.</p>
+           {(isSickness || isUnjustified) && (
+               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                   <div className="flex items-center gap-3 mb-2">
+                       <Upload size={18} className="text-blue-500"/>
+                       <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Subir Justificante / Parte de Baja</h4>
                    </div>
+                   
+                   <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-4 transition-all cursor-pointer flex flex-col items-center justify-center gap-2
+                        ${selectedFile ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 hover:border-blue-400 hover:bg-blue-50/30'}
+                      `}
+                   >
+                       <input 
+                          type="file" 
+                          ref={fileInputRef}
+                          className="hidden"
+                          accept="image/*,.pdf"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                       />
+                       {selectedFile ? (
+                           <div className="flex flex-col items-center gap-2 text-blue-700">
+                               <CheckCircle2 size={32}/>
+                               <span className="text-xs font-bold truncate max-w-[200px]">{selectedFile.name}</span>
+                               <button onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }} className="text-[10px] text-red-500 underline uppercase font-black">Quitar archivo</button>
+                           </div>
+                       ) : (
+                           <>
+                               <div className="p-3 bg-slate-100 rounded-full text-slate-400 group-hover:text-blue-500">
+                                   <FileText size={24}/>
+                               </div>
+                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Click para subir foto o PDF</p>
+                           </>
+                       )}
+                   </div>
+                   {isUnjustified && (
+                       <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-start gap-3">
+                           <FileWarning size={16} className="text-orange-500 shrink-0 mt-0.5" />
+                           <p className="text-[9px] font-medium text-orange-800 leading-tight">Este registro se crea como <strong>Ausencia Justificable</strong>. Es obligatorio adjuntar el documento soporte para su validación.</p>
+                       </div>
+                   )}
                </div>
            )}
 
@@ -286,8 +345,9 @@ const RequestFormModal: React.FC<RequestFormModalProps> = ({ onClose, user, targ
                </div>
            )}
 
-           <button type="submit" disabled={(isConsumptionType && hours === 0) || isSubmitting} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-md flex justify-center gap-2 disabled:opacity-50">
-             {isSubmitting && <Loader2 className="animate-spin"/>} {editingRequest ? 'Guardar Cambios' : 'Crear Registro'}
+           <button type="submit" disabled={(isConsumptionType && hours === 0) || isSubmitting || isUploading} className="w-full py-4 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-700 shadow-xl shadow-blue-500/30 flex justify-center items-center gap-2 disabled:opacity-50">
+             {(isSubmitting || isUploading) ? <Loader2 className="animate-spin"/> : null} 
+             {editingRequest ? 'Guardar Cambios' : 'Registrar Solicitud'}
            </button>
         </form>
       </div>

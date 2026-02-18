@@ -2,5 +2,7 @@
   "name": "GdA RRHH",
   "version": "1.0.0-BACKUP-130126",
   "description": "Punto de restauración backup_130126: Implementada lógica de Festivo Trabajado (+1 día y +4 horas extra) con desglose visual en el panel de aprobaciones.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

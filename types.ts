@@ -47,15 +47,12 @@ export interface User {
   overtimeHours: number;
   avatar?: string;
   birthdate?: string; 
-  // Add truckNumber property to fix type errors in Dashboard and Management
   truckNumber?: string;
 }
 
-// --- NUEVAS INTERFACES REPARTIDORES ---
-
 export interface Truck {
   id: string;
-  name: string; // Ej: Camión 1, Matrícula, etc.
+  name: string;
 }
 
 export interface Driver {
@@ -74,8 +71,6 @@ export interface DriverPPE {
   requestedDate?: string;
   deliveryDate?: string;
 }
-
-// ---------------------------------------
 
 export interface Department {
   id: string;
@@ -107,6 +102,7 @@ export interface LeaveRequest {
   overtimeUsage?: OvertimeUsage[];
   isJustified?: boolean; 
   reportedToAdmin?: boolean;
+  documentUrl?: string; // Nueva propiedad para justificantes
 }
 
 export interface Notification {
@@ -174,7 +170,7 @@ export interface PPEType {
 export interface PPERequest {
   id: string;
   userId: string;
-  typeId: string;
+  type_id: string;
   size: string;
   status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
   createdAt: string;
@@ -198,7 +194,6 @@ export interface AppConfig {
     password?: string;
     enabled: boolean;
   };
-  // Campos nuevos en la config
   trucks: Truck[];
   drivers: Driver[];
   driversPpe: DriverPPE[];

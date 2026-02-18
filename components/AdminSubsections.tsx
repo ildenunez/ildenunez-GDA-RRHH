@@ -1,44 +1,172 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight, Eye, TrendingUp, BarChart3
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
 import { supabase } from '../services/supabase';
 
 // Estadísticas Inteligentes
 export const AdminStats = () => {
-    const COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981'];
-    const deptDistribution = store.departments.map(d => ({
-        name: d.name,
-        value: store.users.filter(u => u.departmentId === d.id).length
-    })).filter(d => d.value > 0);
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+    // 1. Distribución de Plantilla por Departamento
+    const deptDistribution = useMemo(() => {
+        return store.departments.map(d => ({
+            name: d.name,
+            value: store.users.filter(u => u.departmentId === d.id).length
+        })).filter(d => d.value > 0);
+    }, [store.users, store.departments]);
+
+    // 2. Horas Extra Acumuladas (Saldo Actual) por Departamento
+    const overtimeByDept = useMemo(() => {
+        return store.departments.map(d => ({
+            name: d.name,
+            horas: Math.round(store.users.filter(u => u.departmentId === d.id).reduce((sum, u) => sum + (u.overtimeHours || 0), 0))
+        })).filter(d => d.horas > 0).sort((a,b) => b.horas - a.horas);
+    }, [store.users, store.departments]);
+
+    // 3. Tipos de Ausencia más frecuentes (Solicitudes Aprobadas)
+    const leaveTypePopularity = useMemo(() => {
+        const stats = store.config.leaveTypes.map(lt => ({
+            name: lt.label,
+            total: store.requests.filter(r => r.typeId === lt.id && r.status === RequestStatus.APPROVED).length
+        })).filter(d => d.total > 0).sort((a,b) => b.total - a.total);
+        return stats.slice(0, 5); // Top 5
+    }, [store.requests, store.config.leaveTypes]);
+
+    // 4. Volumen de Solicitudes por Mes (Últimos 6 meses)
+    const monthlyTrend = useMemo(() => {
+        const months = [];
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const monthLabel = d.toLocaleString('es-ES', { month: 'short' });
+            const monthYear = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            
+            const count = store.requests.filter(r => r.createdAt.startsWith(monthYear)).length;
+            months.push({ name: monthLabel, solicitudes: count });
+        }
+        return months;
+    }, [store.requests]);
+
+    // Métricas de Cabecera
+    const totalUsers = store.users.length;
+    const pendingPPE = store.config.ppeRequests.filter(r => r.status !== 'ENTREGADO').length;
+    const avgVacationBalance = totalUsers > 0 ? (store.users.reduce((sum, u) => sum + u.daysAvailable, 0) / totalUsers).toFixed(1) : 0;
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Users size={20} className="text-blue-500"/> Distribución Plantilla</h4>
-                <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={deptDistribution} innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>
-                                {deptDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
+        <div className="space-y-8 animate-fade-in">
+            {/* KPIs Rápidos */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Días Vac. (Media)</p>
+                    <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-slate-800">{avgVacationBalance}</span>
+                        <span className="text-xs font-bold text-slate-400 mb-1">días/emp.</span>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">EPIs Pendientes</p>
+                    <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-orange-600">{pendingPPE}</span>
+                        <span className="text-xs font-bold text-slate-400 mb-1">artículos</span>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitudes Mes</p>
+                    <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-blue-600">{monthlyTrend[5].solicitudes}</span>
+                        <TrendingUp size={16} className="text-green-500 mb-1"/>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tasa Aprobación</p>
+                    <div className="flex items-end gap-2">
+                        <span className="text-2xl font-black text-green-600">
+                            {store.requests.length > 0 ? Math.round((store.requests.filter(r => r.status === RequestStatus.APPROVED).length / store.requests.length) * 100) : 0}%
+                        </span>
+                    </div>
                 </div>
             </div>
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Activity size={20} className="text-red-500"/> Ausentismo Crítico</h4>
-                <div className="space-y-4">
-                    {store.departments.slice(0,4).map(d => (
-                        <div key={d.id}>
-                            <div className="flex justify-between text-xs font-bold uppercase mb-1"><span>{d.name}</span><span className="text-slate-400">85% Operatividad</span></div>
-                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-blue-500 h-full" style={{width: '85%'}}></div></div>
-                        </div>
-                    ))}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Distribución Plantilla */}
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Users size={20} className="text-blue-500"/> Distribución de Plantilla</h4>
+                    <div className="h-[280px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie 
+                                    data={deptDistribution} 
+                                    innerRadius={70} 
+                                    outerRadius={100} 
+                                    paddingAngle={5} 
+                                    dataKey="value" 
+                                    label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}
+                                >
+                                    {deptDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip />
+                                <Legend verticalAlign="bottom" height={36}/>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Horas Extra por Dpto */}
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Timer size={20} className="text-indigo-500"/> Saldo Horas Extra por Dpto.</h4>
+                    <div className="h-[280px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={overtimeByDept} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                <Tooltip cursor={{fill: '#f8fafc'}} />
+                                <Bar dataKey="horas" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Popularidad Tipos de Ausencia */}
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><BarChart3 size={20} className="text-green-500"/> Uso de Tipos de Ausencia</h4>
+                    <div className="h-[280px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={leaveTypePopularity}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} style={{ fontSize: '9px', fontWeight: 'bold' }} />
+                                <YAxis axisLine={false} tickLine={false} style={{ fontSize: '10px' }} />
+                                <Tooltip />
+                                <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Tendencia Mensual */}
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Activity size={20} className="text-blue-500"/> Actividad de Solicitudes (6 meses)</h4>
+                    <div className="h-[280px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={monthlyTrend}>
+                                <defs>
+                                    <linearGradient id="colorSol" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} style={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                <YAxis axisLine={false} tickLine={false} style={{ fontSize: '10px' }} />
+                                <Tooltip />
+                                <Area type="monotone" dataKey="solicitudes" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSol)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
         </div>
@@ -434,11 +562,19 @@ export const EPIManager = () => {
     );
 };
 
-// Gestión de Comunicaciones (Muro de anuncios, etc.)
+// Gestión de Comunicaciones (Muro de anuncios, Plantillas Email, etc.)
 export const CommunicationsManager = () => {
+    const [activeCommTab, setActiveCommTab] = useState<'news' | 'email'>('news');
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Email State
+    const [smtp, setSmtp] = useState(store.config.smtpSettings);
+    const [templates, setTemplates] = useState(store.config.emailTemplates);
+    const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
+    const [testEmail, setTestEmail] = useState('');
+    const [isTestingSmtp, setIsTestingSmtp] = useState(false);
 
     const handleCreatePost = async () => {
         if (!title.trim() || !content.trim()) return;
@@ -449,45 +585,199 @@ export const CommunicationsManager = () => {
         setIsSaving(false);
     };
 
+    const handleSaveSmtp = async () => {
+        setIsSaving(true);
+        await store.saveSmtpSettings(smtp);
+        setIsSaving(false);
+        alert("Configuración SMTP guardada.");
+    };
+
+    const handleSaveTemplate = async () => {
+        if (!editingTemplate) return;
+        const newTemplates = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
+        setTemplates(newTemplates);
+        await store.saveEmailTemplates(newTemplates);
+        setEditingTemplate(null);
+    };
+
+    const runSmtpTest = async () => {
+        if (!testEmail) return alert("Introduce un email de prueba.");
+        setIsTestingSmtp(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('send-test-email', {
+                body: { to: testEmail, config: smtp }
+            });
+            if (error || !data.success) throw new Error(error?.message || data?.error);
+            alert("¡Correo de prueba enviado con éxito!");
+        } catch (e: any) {
+            alert("Error al enviar prueba: " + e.message);
+        } finally {
+            setIsTestingSmtp(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Megaphone size={20} className="text-blue-500"/> Crear Comunicado en el Muro</h4>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Título del Anuncio</label>
-                        <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Nueva política de vestuario..." />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Contenido del Mensaje</label>
-                        <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32" value={content} onChange={e => setContent(e.target.value)} placeholder="Escribe aquí el mensaje para todos los empleados..." />
-                    </div>
-                    <button onClick={handleCreatePost} disabled={isSaving} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2 transition-all">
-                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                        Publicar Anuncio
-                    </button>
-                </div>
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl self-start w-fit">
+                <button onClick={() => setActiveCommTab('news')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeCommTab === 'news' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Megaphone size={14}/> Muro de Anuncios</button>
+                <button onClick={() => setActiveCommTab('email')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeCommTab === 'email' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Mail size={14}/> Plantillas Email & SMTP</button>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><History size={20} className="text-slate-400"/> Historial de Anuncios</h4>
-                <div className="space-y-4">
-                    {store.config.news.length === 0 ? (
-                        <p className="text-center text-slate-400 italic py-4">No hay anuncios publicados.</p>
-                    ) : store.config.news.map(post => (
-                        <div key={post.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-2xl border border-slate-100 group">
-                            <div className="flex-1">
-                                <h5 className="font-bold text-slate-800">{post.title}</h5>
-                                <p className="text-xs text-slate-500 line-clamp-2 mt-1">{post.content}</p>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase mt-2 block">{new Date(post.createdAt).toLocaleDateString()}</span>
+            {activeCommTab === 'news' ? (
+                <>
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Megaphone size={20} className="text-blue-500"/> Crear Comunicado en el Muro</h4>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Título del Anuncio</label>
+                                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Nueva política de vestuario..." />
                             </div>
-                            <button onClick={() => store.deleteNewsPost(post.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                                <Trash2 size={16}/>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Contenido del Mensaje</label>
+                                <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32" value={content} onChange={e => setContent(e.target.value)} placeholder="Escribe aquí el mensaje para todos los empleados..." />
+                            </div>
+                            <button onClick={handleCreatePost} disabled={isSaving} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2 transition-all">
+                                {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                                Publicar Anuncio
                             </button>
                         </div>
-                    ))}
+                    </div>
+
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><History size={20} className="text-slate-400"/> Historial de Anuncios</h4>
+                        <div className="space-y-4">
+                            {store.config.news.length === 0 ? (
+                                <p className="text-center text-slate-400 italic py-4">No hay anuncios publicados.</p>
+                            ) : store.config.news.map(post => (
+                                <div key={post.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-2xl border border-slate-100 group">
+                                    <div className="flex-1">
+                                        <h5 className="font-bold text-slate-800">{post.title}</h5>
+                                        <p className="text-xs text-slate-500 line-clamp-2 mt-1">{post.content}</p>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase mt-2 block">{new Date(post.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <button onClick={() => store.deleteNewsPost(post.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                                        <Trash2 size={16}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up">
+                    {/* SMTP SETTINGS */}
+                    <div className="space-y-6">
+                        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Server size={20} className="text-blue-500"/> Configuración SMTP</h4>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Servidor SMTP</label>
+                                        <input className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" value={smtp.host} onChange={e=>setSmtp({...smtp, host: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Puerto</label>
+                                        <input type="number" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" value={smtp.port} onChange={e=>setSmtp({...smtp, port: parseInt(e.target.value)})} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Usuario / Email</label>
+                                    <input className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" value={smtp.user} onChange={e=>setSmtp({...smtp, user: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Contraseña</label>
+                                    <input type="password" placeholder="••••••••" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" value={smtp.password} onChange={e=>setSmtp({...smtp, password: e.target.value})} />
+                                </div>
+                                <label className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl cursor-pointer">
+                                    <input type="checkbox" checked={smtp.enabled} onChange={e=>setSmtp({...smtp, enabled: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
+                                    <span className="text-xs font-black text-blue-700 uppercase">Habilitar envíos automáticos</span>
+                                </label>
+                                <button onClick={handleSaveSmtp} disabled={isSaving} className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase flex justify-center items-center gap-2">
+                                    {isSaving ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Guardar Servidor
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl">
+                            <h4 className="font-bold flex items-center gap-2 mb-4"><ShieldCheck size={20} className="text-blue-400"/> Diagnóstico SMTP</h4>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-6 tracking-widest">Enviar prueba de conexión</p>
+                            <div className="flex gap-2">
+                                <input className="flex-1 p-3 bg-white/10 border border-white/20 rounded-xl text-xs outline-none focus:bg-white/20" placeholder="Email de destino..." value={testEmail} onChange={e=>setTestEmail(e.target.value)} />
+                                <button onClick={runSmtpTest} disabled={isTestingSmtp} className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition-all">
+                                    {isTestingSmtp ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>} Probar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* EMAIL TEMPLATES */}
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm h-fit">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><Layout size={20} className="text-blue-500"/> Plantillas de Sistema</h4>
+                        <div className="space-y-3">
+                            {templates.map(t => (
+                                <div key={t.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex justify-between items-center group">
+                                    <div>
+                                        <p className="font-bold text-sm text-slate-800">{t.label}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase">{t.subject}</p>
+                                    </div>
+                                    <button onClick={() => setEditingTemplate(t)} className="p-2 bg-white border rounded-xl text-slate-400 hover:text-blue-600 shadow-sm transition-all"><Edit2 size={16}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* TEMPLATE EDITOR MODAL */}
+            {editingTemplate && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl animate-scale-in flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Editor de Plantilla</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingTemplate.label}</p>
+                            </div>
+                            <button onClick={() => setEditingTemplate(null)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 space-y-6 overflow-y-auto">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Asunto del Correo</label>
+                                <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-slate-700 outline-none focus:bg-white" value={editingTemplate.subject} onChange={e=>setEditingTemplate({...editingTemplate, subject: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Cuerpo del Mensaje (Soporta HTML)</label>
+                                <textarea className="w-full p-4 bg-slate-50 border rounded-xl h-64 font-mono text-xs outline-none focus:bg-white" value={editingTemplate.body} onChange={e=>setEditingTemplate({...editingTemplate, body: e.target.value})} />
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {['{nombre}', '{tipo}', '{estado}', '{fechas}', '{comentario}'].map(tag => (
+                                        <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-mono rounded border">{tag}</span>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1 tracking-widest">Enviar automáticamente a:</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer ${editingTemplate.recipients.worker ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-100 bg-white text-slate-400'}`}>
+                                        <input type="checkbox" className="hidden" checked={editingTemplate.recipients.worker} onChange={e=>setEditingTemplate({...editingTemplate, recipients: {...editingTemplate.recipients, worker: e.target.checked}})} />
+                                        <span className="text-[10px] uppercase">Empleado</span>
+                                    </label>
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer ${editingTemplate.recipients.supervisor ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-100 bg-white text-slate-400'}`}>
+                                        <input type="checkbox" className="hidden" checked={editingTemplate.recipients.supervisor} onChange={e=>setEditingTemplate({...editingTemplate, recipients: {...editingTemplate.recipients, supervisor: e.target.checked}})} />
+                                        <span className="text-[10px] uppercase">Supervisor</span>
+                                    </label>
+                                    <label className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all cursor-pointer ${editingTemplate.recipients.admin ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold' : 'border-slate-100 bg-white text-slate-400'}`}>
+                                        <input type="checkbox" className="hidden" checked={editingTemplate.recipients.admin} onChange={e=>setEditingTemplate({...editingTemplate, recipients: {...editingTemplate.recipients, admin: e.target.checked}})} />
+                                        <span className="text-[10px] uppercase">Admin</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-50 border-t flex gap-3">
+                            <button onClick={() => setEditingTemplate(null)} className="flex-1 py-4 text-slate-500 font-black uppercase text-xs">Cerrar</button>
+                            <button onClick={handleSaveTemplate} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-500/20 flex justify-center items-center gap-2"><Save size={16}/> Guardar Plantilla</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

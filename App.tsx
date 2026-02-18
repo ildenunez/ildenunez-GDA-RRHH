@@ -153,6 +153,10 @@ export default function App() {
           await store.init();
           if (store.currentUser) {
               setUser({ ...store.currentUser });
+              // Solicitar permisos de notificación push si están disponibles
+              if ("Notification" in window && Notification.permission === "default") {
+                  await Notification.requestPermission();
+              }
           }
         } catch(e) { console.error("App Init Error:", e); }
         finally { setInitializing(false); }
