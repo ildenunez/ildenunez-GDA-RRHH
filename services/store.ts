@@ -317,22 +317,35 @@ class Store {
   
   async repairOvertimeIntegrity() { 
       // 1. Sincronización de horas consumidas en registros de origen
-      for (const req of this.requests.filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage && r.overtimeUsage.length > 0)) {
-          for (const usage of req.overtimeUsage) {
-              const source = this.requests.find(r => r.id === usage.requestId);
-              if (source) {
-                  const allUsages = this.requests
-                    .filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage)
-                    .flatMap(r => r.overtimeUsage!)
-                    .filter(u => u.requestId === source.id);
-                  const totalConsumed = allUsages.reduce((sum, u) => sum + u.hoursUsed, 0);
-                  await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
+      const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED);
+      
+      for (const req of approvedWithUsage) {
+          // CORRECCIÓN AUTOMÁTICA DE SIGNO PARA LEGACY DATA
+          // Si es un tipo de consumo y tiene horas positivas, las pasamos a negativo
+          const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
+          if (isConsumptionType && req.hours && req.hours > 0) {
+              const correctedHours = -req.hours;
+              await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id);
+              req.hours = correctedHours; 
+          }
+
+          const usageList = req.overtimeUsage || [];
+          if (usageList.length > 0) {
+              for (const usage of usageList) {
+                  const source = this.requests.find(r => r.id === usage.requestId);
+                  if (source) {
+                      const allUsages = this.requests
+                        .filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage)
+                        .flatMap(r => r.overtimeUsage || [])
+                        .filter(u => u.requestId === source.id);
+                      const totalConsumed = allUsages.reduce((sum, u) => sum + u.hoursUsed, 0);
+                      await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
+                  }
               }
           }
       }
 
       // 2. RECALCULAR SALDO TOTAL REAL DE CADA USUARIO
-      // Esto sumará todos los ingresos (+) y restará todos los consumos (-) aprobados
       for (const user of this.users) {
           const userOvertimeReqs = this.requests.filter(r => 
               r.userId === user.id && 
@@ -341,8 +354,6 @@ class Store {
           );
           
           const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
-          
-          // Actualizamos en la base de datos para que el usuario vea su saldo real al loguear
           await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id);
       }
 

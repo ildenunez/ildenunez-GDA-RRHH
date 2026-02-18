@@ -27,7 +27,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
 
   // Calcular si hay horas que provienen del saldo histórico (no vinculadas a un ID de solicitud)
   const totalTracedHours = usageDetails.reduce((sum, u) => sum + u.hoursUsed, 0);
-  const untracedHours = Math.max(0, (request.hours || 0) - totalTracedHours);
+  const untracedHours = Math.max(0, Math.abs(request.hours || 0) - totalTracedHours);
 
   const handlePrint = () => {
       window.print();
@@ -114,8 +114,8 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                     )}
                     {request.hours !== undefined && (
                         <div>
-                            <span className="flex items-center gap-2 text-sm text-slate-500 mb-1"><Clock size={14}/> Total Horas</span>
-                            <span className="font-mono font-bold text-slate-900">{request.hours}h</span>
+                            <span className="flex items-center gap-2 text-sm text-slate-500 mb-1"><Clock size={14}/> {request.hours < 0 ? 'Horas Consumidas' : 'Total Horas'}</span>
+                            <span className={`font-mono font-bold ${request.hours < 0 ? 'text-red-600' : 'text-slate-900'}`}>{request.hours}h</span>
                         </div>
                     )}
                 </div>
@@ -173,7 +173,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                                  <tr key={i}>
                                      <td className="p-2">{u.sourceDate ? new Date(u.sourceDate).toLocaleDateString() : 'N/A'}</td>
                                      <td className="p-2 text-slate-500 italic">{u.sourceReason || '-'}</td>
-                                     <td className="p-2 text-right font-mono font-bold">{u.hoursUsed}h</td>
+                                     <td className="p-2 text-right font-mono font-bold text-red-600">-{u.hoursUsed}h</td>
                                  </tr>
                              ))}
                              {/* Fila para completar las horas que vienen del saldo histórico */}
@@ -181,14 +181,14 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                                  <tr className="bg-blue-50/30">
                                      <td className="p-2 text-blue-600 font-medium italic">Histórico</td>
                                      <td className="p-2 text-slate-500 italic text-xs">Saldo acumulado anterior o ajustes de administración</td>
-                                     <td className="p-2 text-right font-mono font-bold text-blue-700">{untracedHours}h</td>
+                                     <td className="p-2 text-right font-mono font-bold text-red-700">-{untracedHours.toFixed(1)}h</td>
                                  </tr>
                              )}
                          </tbody>
                          <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
                              <tr>
-                                 <td colSpan={2} className="p-2 text-right text-slate-600 uppercase text-[10px]">Suma Total del Desglose:</td>
-                                 <td className="p-2 text-right font-mono text-slate-900">{(totalTracedHours + untracedHours)}h</td>
+                                 <td colSpan={2} className="p-2 text-right text-slate-600 uppercase text-[10px]">Total Consumido en esta Solicitud:</td>
+                                 <td className="p-2 text-right font-mono text-red-700">{request.hours}h</td>
                              </tr>
                          </tfoot>
                      </table>
