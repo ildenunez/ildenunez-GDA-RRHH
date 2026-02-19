@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, RequestStatus, Role, ShiftType, RequestType } from '../types';
 import { store } from '../services/store';
 import { 
@@ -18,7 +18,8 @@ import {
   User as UserIcon,
   Star,
   Check,
-  Edit
+  Edit,
+  Users
 } from 'lucide-react';
 
 interface ShiftSchedulerProps {
@@ -31,6 +32,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   const [selectedDept, setSelectedDept] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
   const [draftChanges, setDraftChanges] = useState<Record<string, string>>({});
   const [tick, setTick] = useState(0);
@@ -40,9 +42,15 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     return unsubscribe;
   }, []);
 
+  // Manejo de Drag and Drop global
+  useEffect(() => {
+    const handleMouseUp = () => setIsDragging(false);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
   const monthsData = useMemo(() => {
     const year = currentDate.getFullYear();
-    // Generamos los 12 meses del año (0 a 11)
     return Array.from({ length: 12 }).map((_, mIdx) => {
       const first = new Date(year, mIdx, 1);
       const daysInM = new Date(year, mIdx + 1, 0).getDate();
@@ -59,6 +67,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
       return { 
         monthName: first.toLocaleString('es-ES', { month: 'long', year: 'numeric' }), 
         monthKey: `${year}-${String(mIdx + 1).padStart(2, '0')}`, 
+        monthShort: first.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase(),
         days 
       };
     });
@@ -93,7 +102,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     return found?.shiftTypeId || '';
   };
 
-  const handleCellClick = (userId: string, dateStr: string) => {
+  const applyAction = (userId: string, dateStr: string) => {
     if (!selectedShiftId || isSaving) return;
     if (getAbsence(userId, dateStr)) return;
 
@@ -110,6 +119,20 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     } else {
         setDraftChanges(prev => ({ ...prev, [key]: targetShiftId }));
     }
+  };
+
+  const handleCellInteraction = (userId: string, dateStr: string, isInitialClick: boolean = false) => {
+    if (isInitialClick) {
+        setIsDragging(true);
+        applyAction(userId, dateStr);
+    } else if (isDragging) {
+        applyAction(userId, dateStr);
+    }
+  };
+
+  const scrollToMonth = (monthKey: string) => {
+    const el = document.getElementById(`month-${monthKey}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleSave = async () => {
@@ -136,15 +159,12 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   const getAbsenceStyle = (typeId: string) => {
       const label = store.getTypeLabel(typeId).toLowerCase();
       const id = String(typeId).toLowerCase();
-      
       const isBaja = label.includes('baja') || label.includes('medica') || id.includes('baja') || id.includes('medica') || id === RequestType.SICKNESS;
       const isAsuntos = label.includes('asunto') || label.includes('person') || id.includes('asunto') || id.includes('person') || id === RequestType.PERSONAL;
       const isExtra = label.includes('canje') || label.includes('extra') || id.includes('canje') || id.includes('extra') || id === RequestType.OVERTIME_SPEND_DAYS;
-
       if (isBaja) return { bg: 'bg-red-100', text: 'text-red-700', label: 'BAJA', icon: Thermometer };
       if (isAsuntos) return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'AP', icon: UserIcon };
       if (isExtra) return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'DL', icon: ShieldCheck };
-      
       return { bg: 'bg-green-100', text: 'text-green-700', label: 'VAC', icon: Palmtree };
   };
 
@@ -153,17 +173,33 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   return (
     <div className="flex flex-col h-full min-h-[750px] bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
       
+      {/* QUICK NAV SIDEBAR */}
+      <div className="hidden lg:flex fixed right-8 top-1/2 -translate-y-1/2 flex-col gap-1.5 z-[60] bg-white/80 backdrop-blur-md p-1.5 rounded-full border border-slate-200 shadow-xl">
+        {monthsData.map(m => (
+            <button 
+                key={m.monthKey}
+                onClick={() => scrollToMonth(m.monthKey)}
+                title={m.monthName}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black hover:bg-blue-600 hover:text-white transition-all text-slate-400"
+            >
+                {m.monthShort}
+            </button>
+        ))}
+      </div>
+
       {/* TOOLBAR */}
       <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 z-40">
         <div className="flex items-center gap-4">
           <div className="flex bg-white rounded-xl border border-slate-200 p-1 shadow-sm">
-            {/* Ahora navegamos por años completos para ver la planificación anual */}
             <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear() - 1, 0, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronLeft size={20}/></button>
             <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear() + 1, 0, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronRight size={20}/></button>
           </div>
           <div>
               <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-none">Gestor de Planificación Anual</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Año {currentDate.getFullYear()}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1.5">
+                  <CalendarIcon size={10}/> Año {currentDate.getFullYear()} 
+                  <span className="text-blue-500">• Modo Pintar Activo</span>
+              </p>
           </div>
         </div>
 
@@ -180,7 +216,6 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                 disabled={isRefreshing}
                 onClick={async () => { setIsRefreshing(true); await store.refresh(); setIsRefreshing(false); }} 
                 className="p-2 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all shadow-sm"
-                title="Sincronizar manual"
             >
                 {isRefreshing ? <Loader2 size={18} className="animate-spin"/> : <RefreshCcw size={18}/>}
             </button>
@@ -211,7 +246,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-12 bg-slate-100/40 relative">
+      <div className="flex-1 overflow-y-auto p-4 space-y-12 bg-slate-100/40 relative select-none">
         {isSaving && (
             <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-md flex items-center justify-center">
                 <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center border border-blue-100 animate-scale-in">
@@ -222,7 +257,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         )}
 
         {monthsData.map(m => (
-            <div key={m.monthKey} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div key={m.monthKey} id={`month-${m.monthKey}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-6">
                 <div className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center">
                     <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
                         <CalendarIcon size={14} className="text-blue-400"/> {m.monthName}
@@ -259,7 +294,8 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                         return (
                                             <div 
                                                 key={d.dateStr} 
-                                                onClick={() => handleCellClick(user.id, d.dateStr)} 
+                                                onMouseDown={() => handleCellInteraction(user.id, d.dateStr, true)}
+                                                onMouseEnter={() => handleCellInteraction(user.id, d.dateStr)}
                                                 className={`border-b border-r border-slate-100 h-9 flex items-center justify-center relative transition-all text-[9px] font-black
                                                     ${absence ? `${style?.bg} ${style?.text} cursor-not-allowed` : 'cursor-pointer hover:bg-black/5'}
                                                     ${isDraft ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}
@@ -283,6 +319,21 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                     })}
                                 </React.Fragment>
                             ))}
+
+                            {/* FILA DE MÍNIMOS DE SERVICIO (DISPONIBILIDAD) */}
+                            <div className="sticky left-0 z-30 bg-blue-50 border-b border-r border-blue-100 px-4 h-9 flex items-center shadow-sm">
+                                <Users size={12} className="text-blue-600 mr-2"/>
+                                <span className="text-[9px] font-black text-blue-700 uppercase tracking-tighter">Disponibilidad</span>
+                            </div>
+                            {m.days.map(d => {
+                                const availableCount = filteredUsers.filter(u => !getAbsence(u.id, d.dateStr)).length;
+                                const isLowService = availableCount < 2;
+                                return (
+                                    <div key={`service-${d.dateStr}`} className={`border-b border-r border-blue-100 h-9 flex items-center justify-center text-[10px] font-black ${isLowService ? 'bg-red-50 text-red-600 animate-pulse' : 'bg-blue-50/30 text-blue-600'}`}>
+                                        {availableCount}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -297,6 +348,9 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
             </div>
             <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
                 <div className="w-2.5 h-2.5 bg-red-100 border border-red-200 rounded-sm flex items-center justify-center"><Star size={8} className="text-red-600"/></div> Festivos
+            </div>
+            <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="w-2.5 h-2.5 bg-blue-100 border border-blue-200 rounded-sm"></div> Disp. Equipo
             </div>
         </div>
 

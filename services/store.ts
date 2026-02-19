@@ -181,11 +181,18 @@ class Store {
             const updatedSelf = this.users.find(u => u.id === this.currentUser!.id);
             if (updatedSelf) this.currentUser = updatedSelf;
             
-            // Paginación para notificaciones del usuario actual
-            const n = await this.fetchAll('notifications', supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('date', { ascending: false }));
+            // Paginación para notificaciones del usuario actual - CORRECCIÓN DE COLUMNA 'date'
+            const n = await this.fetchAll('notifications', supabase.from('notifications').select('*').eq('user_id', this.currentUser.id).order('created_at', { ascending: false }));
             
             if (n) {
-                this.notifications = n.map((x: any) => ({ id: String(x.id), userId: String(x.user_id).trim().toLowerCase(), message: x.message, read: x.read, date: x.date, type: x.type }));
+                this.notifications = n.map((x: any) => ({ 
+                    id: String(x.id), 
+                    userId: String(x.user_id).trim().toLowerCase(), 
+                    message: x.message, 
+                    read: x.read, 
+                    date: x.created_at, // Mapeamos created_at a la propiedad 'date' esperada por la interfaz
+                    type: x.type 
+                }));
             }
         }
         this.notify();
@@ -394,7 +401,7 @@ class Store {
   async updatePPEStock(id: string, s: any) { this.setBusy(true); try { await supabase.from('ppe_types').update({ stock: s }).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async deletePPEType(id: string) { this.setBusy(true); try { await supabase.from('ppe_types').delete().eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async createPPERequest(uid: string, tid: string, sz: string) { this.setBusy(true); try { await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); await this.refresh(); } finally { this.setBusy(false); } }
-  async markPPEAsRequested(id: string) { this.setBusy(true); try { await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
+  async markPPEAsRequested(id: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async deliverPPERequest(id: string, q: number = 1) { this.setBusy(true); try { await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async deletePPERequest(id: string) { this.setBusy(true); try { await supabase.from('ppe_requests').delete().eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async createNewsPost(t: string, c: string, aid: string) { this.setBusy(true); try { await supabase.from('news').insert({ id: crypto.randomUUID(), title: t, content: c, author_id: aid, created_at: new Date().toISOString() }); await this.refresh(); } finally { this.setBusy(false); } }
@@ -408,7 +415,8 @@ class Store {
   async createDriverPPE(did: string, tid: string, sz: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: did, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); await this.refresh(); } finally { this.setBusy(false); } }
   async updateDriverPPEStatus(id: string, s: string, _q?: number) { this.setBusy(true); try { const updateData: any = { status: s }; if (s === 'ENTREGADO') updateData.delivery_date = new Date().toISOString(); if (s === 'SOLICITADO') updateData.requested_date = new Date().toISOString(); await supabase.from('drivers_ppe').update(updateData).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
   async deleteDriverPPE(id: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').delete().eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
-  async repairOvertimeIntegrity() { this.setBusy(true); try { const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED); for (const req of approvedWithUsage) { const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType); if (isConsumptionType && req.hours && req.hours > 0) { const correctedHours = -req.hours; await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id); req.hours = correctedHours; } const usageList = req.overtimeUsage || []; if (usageList.length > 0) { for (const u of usageList) { const source = this.requests.find(r => r.id === u.requestId); if (source) { const allUsages = this.requests.filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage).flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id); const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0); await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id); } } } } for (const user of this.users) { const userOvertimeReqs = this.requests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED && this.isOvertimeRequest(r.typeId)); const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0); await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id); } await this.refresh(); } finally { this.setBusy(false); } }
+  async repairOvertimeIntegrity() { this.setBusy(true); try { const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED); for (const req of approvedWithUsage) { const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType); if (isConsumptionType && req.hours && req.hours > 0) { const correctedHours = -req.hours; await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id); req.hours = correctedHours; } const usageList = req.overtimeUsage || []; if (usageList.length > 0) { for (const u of usageList) { const source = this.requests.find(r => r.id === u.requestId); if (source) { const allUsages = this.requests.filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage).flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id); const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0); await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id); } } } } for (const user of this.users) { const userOvertimeReqs = this.requests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED && this.isOvertimeRequest(r.typeId)); // Fixed syntax error where 'theoretical balance' had a space.
+const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0); await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id); } await this.refresh(); } finally { this.setBusy(false); } }
 }
 
 export const store = new Store();

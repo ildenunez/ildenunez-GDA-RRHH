@@ -3,7 +3,7 @@ import { store } from './services/store';
 import { User, Role, LeaveRequest } from './types';
 import type { Notification } from './types';
 import Dashboard from './components/Dashboard';
-import { Approvals, UserManagement, UpcomingAbsences, AdminSettings } from './components/Management';
+import { Approvals, UserManagement, AdminSettings } from './components/Management';
 import CalendarView from './components/CalendarView';
 import NotificationsView from './components/NotificationsView';
 import ProfileView from './components/ProfileView';
@@ -269,7 +269,6 @@ export default function App() {
               <NavItem id="horario" icon={Clock} label="Horario" />
               <NavItem id="approvals" icon={ShieldCheck} label="Aprobaciones" badgeCount={pendingCount} />
               <NavItem id="team" icon={UsersIcon} label="Mi Equipo" />
-              <NavItem id="upcoming" icon={CalendarClock} label="Próximas" />
             </>
           )}
           {isAdmin && (
@@ -308,7 +307,6 @@ export default function App() {
              {activeTab === 'profile' && <ProfileView user={user} onProfileUpdate={() => setUser({...store.currentUser!})} />}
              {activeTab === 'approvals' && <Approvals user={user} onViewRequest={setViewingRequest} />}
              {activeTab === 'team' && <UserManagement currentUser={user} onViewRequest={setViewingRequest} />}
-             {activeTab === 'upcoming' && <UpcomingAbsences user={user} onViewRequest={setViewingRequest} />}
              {activeTab === 'epis' && <PPEView user={user} />}
              {activeTab === 'repartidores' && <RepartidoresView user={user} />}
              {activeTab === 'settings' && isAdmin && <AdminSettings onViewRequest={setViewingRequest} />}
