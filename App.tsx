@@ -13,6 +13,7 @@ import HelpView from './components/HelpView';
 import PPEView from './components/PPEView';
 import RepartidoresView from './components/RepartidoresView';
 import UnreadNotificationsModal from './components/UnreadNotificationsModal';
+import ShiftScheduler from './components/ShiftScheduler';
 import { 
   LayoutDashboard, 
   CalendarDays, 
@@ -32,7 +33,8 @@ import {
   AlertTriangle,
   Truck,
   ShieldAlert,
-  ArrowUpRight
+  ArrowUpRight,
+  Clock
 } from 'lucide-react';
 
 const LOGO_URL = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
@@ -264,6 +266,7 @@ export default function App() {
               <NavItem id="repartidores" icon={Truck} label="Repartidores" />
               
               <div className="pt-3 pb-1 px-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Gestión</div>
+              <NavItem id="horario" icon={Clock} label="Horario" />
               <NavItem id="approvals" icon={ShieldCheck} label="Aprobaciones" badgeCount={pendingCount} />
               <NavItem id="team" icon={UsersIcon} label="Mi Equipo" />
               <NavItem id="upcoming" icon={CalendarClock} label="Próximas" />
@@ -300,6 +303,7 @@ export default function App() {
            <ErrorBoundary>
              {activeTab === 'dashboard' && <Dashboard user={user} onNewRequest={t => {setModalInitialTab(t); setShowRequestModal(true);}} onEditRequest={r => {setEditingRequest(r); setShowRequestModal(true);}} onViewRequest={setViewingRequest} />}
              {activeTab === 'calendar' && <CalendarView user={user} />}
+             {activeTab === 'horario' && isSupervisor && <ShiftScheduler users={store.users} />}
              {activeTab === 'notifications' && <NotificationsView user={user} />}
              {activeTab === 'profile' && <ProfileView user={user} onProfileUpdate={() => setUser({...store.currentUser!})} />}
              {activeTab === 'approvals' && <Approvals user={user} onViewRequest={setViewingRequest} />}
