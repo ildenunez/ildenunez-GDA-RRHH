@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { User, RequestStatus, Role, ShiftType } from '../types';
+import { User, RequestStatus, Role, ShiftType, RequestType } from '../types';
 import { store } from '../services/store';
 import { 
   ChevronLeft, 
@@ -32,7 +32,6 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Mapa de cambios locales: "userId:dateStr" -> shiftTypeId
   const [draftChanges, setDraftChanges] = useState<Record<string, string>>({});
   const [tick, setTick] = useState(0);
 
@@ -43,17 +42,15 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
 
   const monthsData = useMemo(() => {
     const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    return [0, 1].map(offset => {
-      const first = new Date(year, month + offset, 1);
-      const mIdx = first.getMonth();
-      const mYear = first.getFullYear();
-      const daysInM = new Date(mYear, mIdx + 1, 0).getDate();
+    // Generamos los 12 meses del año (0 a 11)
+    return Array.from({ length: 12 }).map((_, mIdx) => {
+      const first = new Date(year, mIdx, 1);
+      const daysInM = new Date(year, mIdx + 1, 0).getDate();
       const days = [];
       for (let d = 1; d <= daysInM; d++) {
-        const dObj = new Date(mYear, mIdx, d);
+        const dObj = new Date(year, mIdx, d);
         days.push({
-          dateStr: `${mYear}-${String(mIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+          dateStr: `${year}-${String(mIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
           day: d,
           isWeekend: [0, 6].includes(dObj.getDay()),
           weekday: dObj.toLocaleDateString('es-ES', { weekday: 'short' }).charAt(0).toUpperCase()
@@ -61,7 +58,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
       }
       return { 
         monthName: first.toLocaleString('es-ES', { month: 'long', year: 'numeric' }), 
-        monthKey: `${mYear}-${String(mIdx + 1).padStart(2, '0')}`, 
+        monthKey: `${year}-${String(mIdx + 1).padStart(2, '0')}`, 
         days 
       };
     });
@@ -74,10 +71,11 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   }, [allUsers, selectedDept, tick]);
 
   const getAbsence = (userId: string, dateStr: string) => {
+    const cleanUid = String(userId).trim().toLowerCase();
     return store.requests.find(r => {
-        const start = r.startDate.split('T')[0];
-        const end = (r.endDate || r.startDate).split('T')[0];
-        return String(r.userId) === String(userId) && 
+        const start = r.startDate.split(/[ T]/)[0];
+        const end = (r.endDate || r.startDate).split(/[ T]/)[0];
+        return String(r.userId).trim().toLowerCase() === cleanUid && 
                r.status === RequestStatus.APPROVED && 
                !store.isOvertimeRequest(r.typeId) && 
                dateStr >= start && dateStr <= end;
@@ -85,11 +83,14 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   };
 
   const getActiveShiftId = (userId: string, dateStr: string): string => {
-    const key = `${userId}:${dateStr}`;
-    // El borrador tiene prioridad visual
+    const cleanUid = String(userId).trim().toLowerCase();
+    const key = `${cleanUid}:${dateStr}`;
     if (key in draftChanges) return draftChanges[key];
-    // Si no hay borrador, mostrar lo del store
-    return store.config.shiftAssignments.find(a => String(a.userId) === String(userId) && a.date === dateStr)?.shiftTypeId || '';
+    const found = store.config.shiftAssignments.find(a => 
+        String(a.userId).trim().toLowerCase() === cleanUid && 
+        String(a.date).trim() === dateStr
+    );
+    return found?.shiftTypeId || '';
   };
 
   const handleCellClick = (userId: string, dateStr: string) => {
@@ -97,10 +98,10 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     if (getAbsence(userId, dateStr)) return;
 
     const targetShiftId = selectedShiftId === 'eraser' ? '' : selectedShiftId;
-    const key = `${userId}:${dateStr}`;
+    const cleanUid = String(userId).trim().toLowerCase();
+    const key = `${cleanUid}:${dateStr}`;
     
-    // Si el valor seleccionado es igual al que ya está en el store, simplemente eliminamos el cambio del borrador
-    const currentDbValue = store.config.shiftAssignments.find(a => String(a.userId) === String(userId) && a.date === dateStr)?.shiftTypeId || '';
+    const currentDbValue = getActiveShiftId(userId, dateStr);
     
     if (targetShiftId === currentDbValue) {
         const next = { ...draftChanges };
@@ -122,23 +123,29 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     setIsSaving(true);
     try {
         await store.assignShiftsBatch(changes);
-        setDraftChanges({}); // Limpiar borrador local tras éxito real
+        setDraftChanges({}); 
         alert("¡Planificación sincronizada con éxito!");
     } catch (err) {
         console.error("Error al guardar planificación:", err);
-        alert("Fallo crítico al guardar. Se mantienen tus cambios en local por ahora.");
+        alert("Fallo crítico al guardar.");
     } finally {
         setIsSaving(false);
     }
   };
 
   const getAbsenceStyle = (typeId: string) => {
-      const type = String(typeId).toLowerCase();
-      if (type.includes('vacaci')) return { bg: 'bg-green-100', text: 'text-green-700', label: 'VAC', icon: Palmtree };
-      if (type.includes('baja') || type.includes('medica')) return { bg: 'bg-red-100', text: 'text-red-700', label: 'BAJA', icon: Thermometer };
-      if (type.includes('asunto') || type.includes('person')) return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'AP', icon: UserIcon };
-      if (type.includes('canje') || type.includes('extra')) return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'DL', icon: ShieldCheck };
-      return { bg: 'bg-slate-100', text: 'text-slate-700', label: 'ABS', icon: AlertCircle };
+      const label = store.getTypeLabel(typeId).toLowerCase();
+      const id = String(typeId).toLowerCase();
+      
+      const isBaja = label.includes('baja') || label.includes('medica') || id.includes('baja') || id.includes('medica') || id === RequestType.SICKNESS;
+      const isAsuntos = label.includes('asunto') || label.includes('person') || id.includes('asunto') || id.includes('person') || id === RequestType.PERSONAL;
+      const isExtra = label.includes('canje') || label.includes('extra') || id.includes('canje') || id.includes('extra') || id === RequestType.OVERTIME_SPEND_DAYS;
+
+      if (isBaja) return { bg: 'bg-red-100', text: 'text-red-700', label: 'BAJA', icon: Thermometer };
+      if (isAsuntos) return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'AP', icon: UserIcon };
+      if (isExtra) return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'DL', icon: ShieldCheck };
+      
+      return { bg: 'bg-green-100', text: 'text-green-700', label: 'VAC', icon: Palmtree };
   };
 
   const hasChanges = Object.keys(draftChanges).length > 0;
@@ -150,12 +157,13 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
       <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 z-40">
         <div className="flex items-center gap-4">
           <div className="flex bg-white rounded-xl border border-slate-200 p-1 shadow-sm">
-            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronLeft size={20}/></button>
-            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronRight size={20}/></button>
+            {/* Ahora navegamos por años completos para ver la planificación anual */}
+            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear() - 1, 0, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronLeft size={20}/></button>
+            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear() + 1, 0, 1))} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"><ChevronRight size={20}/></button>
           </div>
           <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-none">Gestor de Planificación</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Sincronización por Upsert (Clave Única)</p>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-none">Gestor de Planificación Anual</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Año {currentDate.getFullYear()}</p>
           </div>
         </div>
 
@@ -203,13 +211,12 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         </div>
       </div>
 
-      {/* PLANNER GRID */}
       <div className="flex-1 overflow-y-auto p-4 space-y-12 bg-slate-100/40 relative">
         {isSaving && (
             <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-md flex items-center justify-center">
                 <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center border border-blue-100 animate-scale-in">
                     <Loader2 size={48} className="animate-spin text-blue-600 mb-4" />
-                    <p className="font-black uppercase text-blue-600 tracking-widest text-xs">Transmitiendo a Base de Datos...</p>
+                    <p className="font-black uppercase text-blue-600 tracking-widest text-xs">Guardando cambios...</p>
                 </div>
             </div>
         )}
@@ -224,7 +231,6 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                 <div className="overflow-x-auto no-scrollbar">
                     <div className="inline-block min-w-full">
                         <div className="grid" style={{ gridTemplateColumns: `180px repeat(${m.days.length}, 34px)` }}>
-                            {/* Días Header */}
                             <div className="sticky left-0 z-30 bg-slate-50 border-b border-r border-slate-200 p-2 h-12 flex items-center text-[9px] font-black text-slate-500 uppercase tracking-tighter shadow-sm">Empleado</div>
                             {m.days.map(d => {
                                 const holiday = store.config.holidays.find(h => h.date === d.dateStr);
@@ -237,7 +243,6 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                 );
                             })}
 
-                            {/* Filas de Empleados */}
                             {filteredUsers.map(user => (
                                 <React.Fragment key={user.id}>
                                     <div className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 px-4 flex items-center gap-3 h-9 shadow-sm">
@@ -247,7 +252,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                     {m.days.map(d => {
                                         const shiftId = getActiveShiftId(user.id, d.dateStr);
                                         const shift = store.config.shiftTypes.find(s => s.id === shiftId);
-                                        const isDraft = `${user.id}:${d.dateStr}` in draftChanges;
+                                        const isDraft = `${String(user.id).trim().toLowerCase()}:${d.dateStr}` in draftChanges;
                                         const absence = getAbsence(user.id, d.dateStr);
                                         const style = absence ? getAbsenceStyle(absence.typeId) : null;
 
@@ -285,17 +290,13 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         ))}
       </div>
 
-      {/* FOOTER ACCIONES */}
       <div className="bg-white border-t border-slate-200 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
         <div className="flex flex-wrap gap-4 justify-center md:justify-start">
             <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                <div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded-sm flex items-center justify-center"><Check size={8} className="text-green-600"/></div> Ausencias Aprobadas
+                <div className="w-2.5 h-2.5 bg-green-100 border border-green-200 rounded-sm flex items-center justify-center"><Check size={8} className="text-green-600"/></div> VAC / Ausencia
             </div>
             <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
                 <div className="w-2.5 h-2.5 bg-red-100 border border-red-200 rounded-sm flex items-center justify-center"><Star size={8} className="text-red-600"/></div> Festivos
-            </div>
-            <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                <div className="w-2.5 h-2.5 border-2 border-blue-500 rounded-sm bg-blue-50 flex items-center justify-center"><Edit size={8} className="text-blue-500"/></div> Modificación en Borrador
             </div>
         </div>
 
@@ -303,27 +304,25 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
             <div className="flex items-center gap-4 animate-fade-in-up">
                 <div className="text-right">
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Cambios pendientes: {Object.keys(draftChanges).length}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase italic">Listo para persistir</p>
                 </div>
                 <button 
-                    onClick={() => { if(confirm('¿Descartar todos los cambios no guardados?')) setDraftChanges({}); }} 
+                    onClick={() => { if(confirm('¿Descartar cambios?')) setDraftChanges({}); }} 
                     className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                    title="Descartar borrador"
                 >
                     <X size={20}/>
                 </button>
                 <button 
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-all transform hover:scale-105 active:scale-95"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs shadow-lg flex items-center gap-2 transition-all"
                 >
                     {isSaving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} 
-                    Persistir Planificación
+                    Guardar Cambios
                 </button>
             </div>
         ) : (
-            <div className="flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest italic bg-slate-50 px-4 py-2 rounded-full border border-slate-100 shadow-inner">
-                <Check size={14} className="text-green-500"/> Estado sincronizado con servidor
+            <div className="flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest italic bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
+                <Check size={14} className="text-green-500"/> Sincronizado
             </div>
         )}
       </div>
