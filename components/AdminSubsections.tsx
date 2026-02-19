@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { store } from '../services/store';
 import { 
-    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight, Eye, TrendingUp, BarChart3
+    BarChart2, Activity, Target, Palmtree, Users, Settings, Plus, Trash2, Database, Download, Upload, Info, ShieldCheck, Mail, Megaphone, Server, Layout, Edit2, RotateCcw, Send, Lock, Loader2, Search, Save, X, UserCheck, ShieldAlert, Briefcase, Calendar, Clock, HardHat, Check, Minus, AlertCircle, Printer, AlertTriangle, Archive, ShoppingCart, List, History, RefreshCcw, Timer, ChevronRight, Eye, TrendingUp, BarChart3, Bell, MessageSquare
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Role, RequestStatus, RequestType, EmailTemplate, Department, Holiday, ShiftType, LeaveTypeConfig, PPEType } from '../types';
@@ -576,6 +576,14 @@ export const CommunicationsManager = () => {
     const [testEmail, setTestEmail] = useState('');
     const [isTestingSmtp, setIsTestingSmtp] = useState(false);
 
+    // WhatsApp State
+    const [waSettings, setWaSettings] = useState(store.config.whatsappSettings);
+
+    // Diagnostics State
+    const [testPhone, setTestPhone] = useState('');
+    const [testPushTitle, setTestPushTitle] = useState('Notificación de Prueba');
+    const [testPushBody, setTestPushBody] = useState('Este es un mensaje de diagnóstico del Portal GdA RRHH.');
+
     const handleCreatePost = async () => {
         if (!title.trim() || !content.trim()) return;
         setIsSaving(true);
@@ -590,6 +598,13 @@ export const CommunicationsManager = () => {
         await store.saveSmtpSettings(smtp);
         setIsSaving(false);
         alert("Configuración SMTP guardada.");
+    };
+
+    const handleSaveWhatsApp = async () => {
+        setIsSaving(true);
+        await store.saveWhatsAppSettings(waSettings);
+        setIsSaving(false);
+        alert("Configuración de WhatsApp guardada.");
     };
 
     const handleSaveTemplate = async () => {
@@ -616,6 +631,20 @@ export const CommunicationsManager = () => {
         }
     };
 
+    const testWhatsApp = () => {
+        const phoneToUse = testPhone || waSettings.companyPhone;
+        if (!phoneToUse) return alert("Introduce un número de teléfono en el campo de prueba o configura el número corporativo.");
+        store.openWhatsApp(phoneToUse, "Mensaje de diagnóstico del sistema GdA RRHH. Si recibes esto, WhatsApp funciona.");
+    };
+
+    const testPush = () => {
+        if (Notification.permission !== 'granted') {
+            alert("Las notificaciones están desactivadas en tu navegador. Debes activarlas en 'Mi Perfil' o ajustes del navegador.");
+            return;
+        }
+        store.sendPush(testPushTitle, testPushBody);
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="flex gap-2 p-1 bg-slate-100 rounded-xl self-start w-fit">
@@ -640,6 +669,78 @@ export const CommunicationsManager = () => {
                                 {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
                                 Publicar Anuncio
                             </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* CONFIGURACIÓN WHATSAPP CORPORATIVO */}
+                        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><MessageSquare size={20} className="text-green-500"/> WhatsApp Corporativo</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1 tracking-widest">Número Oficial de la Empresa</label>
+                                    <div className="relative">
+                                        <MessageSquare className="absolute left-3 top-3 text-slate-400" size={18}/>
+                                        <input 
+                                            className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-green-100" 
+                                            placeholder="Ej: +34 600000000"
+                                            value={waSettings.companyPhone}
+                                            onChange={e => setWaSettings({...waSettings, companyPhone: e.target.value})}
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-2 px-1">Este número se usará como referencia interna. Los envíos de WhatsApp se abrirán desde la sesión activa de WhatsApp Web en este navegador.</p>
+                                </div>
+                                <label className="flex items-center gap-3 p-3 bg-green-50 border border-green-100 rounded-xl cursor-pointer">
+                                    <input type="checkbox" checked={waSettings.enabled} onChange={e=>setWaSettings({...waSettings, enabled: e.target.checked})} className="w-4 h-4 text-green-600 rounded" />
+                                    <span className="text-xs font-black text-green-700 uppercase">Habilitar botones de envío</span>
+                                </label>
+                                <button onClick={handleSaveWhatsApp} disabled={isSaving} className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase flex justify-center items-center gap-2">
+                                    {isSaving ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Guardar Configuración
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* DIAGNÓSTICO NOTIFICACIONES */}
+                        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-6"><ShieldCheck size={20} className="text-blue-500"/> Centro de Diagnóstico</h4>
+                            <div className="space-y-6">
+                                {/* Probar WhatsApp */}
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
+                                    <h5 className="font-black uppercase text-[10px] text-slate-400 mb-3 flex items-center gap-2"><MessageSquare size={14} className="text-green-500"/> Test de Mensajería</h5>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            className="flex-1 p-3 bg-white border rounded-xl text-xs font-bold outline-none" 
+                                            placeholder="Tlf. Destino..." 
+                                            value={testPhone} 
+                                            onChange={e => setTestPhone(e.target.value)} 
+                                        />
+                                        <button 
+                                            onClick={testWhatsApp}
+                                            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-[10px] uppercase shadow-lg shadow-green-500/20"
+                                        >
+                                            Abrir Chat
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* Probar Push */}
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
+                                    <h5 className="font-black uppercase text-[10px] text-slate-400 mb-3 flex items-center gap-2"><Bell size={14} className="text-blue-500"/> Test de Alertas Push</h5>
+                                    <div className="space-y-3">
+                                        <input 
+                                            className="w-full p-2 bg-white border rounded-xl text-[10px] font-bold" 
+                                            placeholder="Título de la alerta" 
+                                            value={testPushTitle} 
+                                            onChange={e => setTestPushTitle(e.target.value)} 
+                                        />
+                                        <button 
+                                            onClick={testPush}
+                                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-[10px] uppercase shadow-lg shadow-blue-500/20"
+                                        >
+                                            Disparar Notificación Local
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1080,7 +1181,7 @@ export const MaintenanceManager = () => {
             </div>
 
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-500"/> Integridad de Datos</h4>
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-50"/> Integridad de Datos</h4>
                 <p className="text-sm text-slate-500 mb-6">Si detectas que a algunos empleados les siguen apareciendo registros de horas extra que ya deberían estar consumidos, usa esta herramienta para sincronizar la base de datos.</p>
                 <button 
                     onClick={handleRepair} 

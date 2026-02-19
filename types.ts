@@ -41,6 +41,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string; // Campo para WhatsApp
   role: Role;
   departmentId: string;
   daysAvailable: number;
@@ -192,6 +193,10 @@ export interface AppConfig {
     port: number;
     user: string;
     password?: string;
+    enabled: boolean;
+  };
+  whatsappSettings: {
+    companyPhone: string;
     enabled: boolean;
   };
   trucks: Truck[];

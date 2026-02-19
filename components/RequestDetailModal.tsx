@@ -1,7 +1,7 @@
 import React from 'react';
 import { LeaveRequest, RequestStatus } from '../types';
 import { store } from '../services/store';
-import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, ExternalLink } from 'lucide-react';
+import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, MessageSquare as WhatsAppIcon } from 'lucide-react';
 
 interface RequestDetailModalProps {
   request: LeaveRequest;
@@ -11,11 +11,8 @@ interface RequestDetailModalProps {
 const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
   const user = store.users.find(u => u.id === request.userId);
   const dept = user ? store.departments.find(d => d.id === user.departmentId) : null;
-  
-  // Buscar quién resolvió la solicitud
   const approver = request.resolvedBy ? store.users.find(u => u.id === request.resolvedBy) : null;
 
-  // Trazabilidad de las horas vinculadas a registros específicos
   const usageDetails = request.overtimeUsage?.map(usage => {
       const sourceReq = store.requests.find(r => r.id === usage.requestId);
       return {
@@ -25,24 +22,35 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
       };
   }) || [];
 
-  // Calcular si hay horas que provienen del saldo histórico (no vinculadas a un ID de solicitud)
   const totalTracedHours = usageDetails.reduce((sum, u) => sum + u.hoursUsed, 0);
   const untracedHours = Math.max(0, Math.abs(request.hours || 0) - totalTracedHours);
 
-  const handlePrint = () => {
-      window.print();
+  const handlePrint = () => window.print();
+
+  const handleNotifyWhatsApp = () => {
+    if (!user || !user.phone) {
+        alert("Este usuario no tiene un número de teléfono configurado en su perfil.");
+        return;
+    }
+    const statusMsg = request.status === RequestStatus.APPROVED ? "APROBADA ✅" : "RECHAZADA ❌";
+    const msg = `Hola ${user.name}, te informamos que tu solicitud de ${store.getTypeLabel(request.typeId)} para las fechas ${new Date(request.startDate).toLocaleDateString()} ha sido ${statusMsg}. Saludos de RRHH.`;
+    store.openWhatsApp(user.phone, msg);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex justify-center items-start z-[150] p-4 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:items-start print:static print:block">
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up my-8 print:my-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
         
-        {/* Header (No Print Actions) */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:hidden">
             <h2 className="font-bold text-slate-700">Detalle de Solicitud</h2>
             <div className="flex gap-2">
+                {request.status !== RequestStatus.PENDING && user?.phone && (
+                    <button onClick={handleNotifyWhatsApp} className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors shadow-sm font-bold">
+                        <WhatsAppIcon size={16}/> Enviar WhatsApp
+                    </button>
+                )}
                 <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm hover:bg-slate-50 transition-colors shadow-sm text-slate-700">
-                    <Printer size={16}/> Imprimir Informe
+                    <Printer size={16}/> Imprimir
                 </button>
                 <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-500">
                     <X size={20}/>
@@ -50,9 +58,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
             </div>
         </div>
 
-        {/* Report Content */}
         <div className="p-8 print:p-0">
-            {/* Header del Informe */}
             <div className="flex justify-between items-start mb-8 pb-6 border-b-2 border-slate-100">
                 <div className="flex items-center gap-4">
                     <div className="w-20 h-20 bg-white border border-slate-200 flex items-center justify-center rounded-xl p-2 print:border-none print:p-0">
@@ -78,7 +84,6 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                 </div>
             </div>
 
-            {/* Datos del Empleado */}
             <div className="mb-8">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Datos del Empleado</h3>
                 <div className="grid grid-cols-2 gap-6">
@@ -90,14 +95,17 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                         <span className="block text-xs text-slate-500">Departamento</span>
                         <span className="font-semibold text-slate-800">{dept?.name || '-'}</span>
                     </div>
-                    <div className="col-span-2">
+                    <div>
                         <span className="block text-xs text-slate-500">Email</span>
                         <span className="font-semibold text-slate-800">{user?.email}</span>
+                    </div>
+                    <div>
+                        <span className="block text-xs text-slate-500">Teléfono WhatsApp</span>
+                        <span className="font-semibold text-slate-800">{user?.phone || 'No registrado'}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Detalles de la Solicitud */}
             <div className="mb-8 bg-slate-50 p-6 rounded-xl border border-slate-100 print:bg-white print:border-black">
                 <h3 className="text-lg font-bold text-slate-800 mb-4">{store.getTypeLabel(request.typeId)}</h3>
                 
@@ -128,7 +136,6 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                 )}
             </div>
 
-            {/* Documento Justificante */}
             {request.documentUrl && (
                 <div className="mb-8 bg-slate-900 text-white p-6 rounded-3xl overflow-hidden relative group print:hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={80}/></div>
@@ -174,7 +181,6 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                 </div>
             )}
 
-            {/* Validación y Observaciones Admin */}
             {(request.status !== RequestStatus.PENDING) && (
                 <div className="mb-8 bg-blue-50/50 p-6 rounded-xl border border-blue-100">
                     <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-4 border-b border-blue-100 pb-2">Información de Validación</h3>
@@ -201,58 +207,6 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                     </div>
                 </div>
             )}
-
-            {/* Trazabilidad de Horas (Si aplica) */}
-            {((usageDetails && usageDetails.length > 0) || untracedHours > 0) && (
-                <div className="mb-8">
-                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Trazabilidad de Horas Consumidas</h3>
-                     <table className="w-full text-sm text-left">
-                         <thead className="bg-slate-100 text-slate-600 print:bg-slate-50">
-                             <tr>
-                                 <th className="p-2 rounded-l-lg">Fecha Origen</th>
-                                 <th className="p-2">Motivo Origen</th>
-                                 <th className="p-2 text-right rounded-r-lg">Horas Usadas</th>
-                             </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                             {usageDetails.map((u, i) => (
-                                 <tr key={i}>
-                                     <td className="p-2">{u.sourceDate ? new Date(u.sourceDate).toLocaleDateString() : 'N/A'}</td>
-                                     <td className="p-2 text-slate-500 italic">{u.sourceReason || '-'}</td>
-                                     <td className="p-2 text-right font-mono font-bold text-red-600">-{u.hoursUsed}h</td>
-                                 </tr>
-                             ))}
-                             {/* Fila para completar las horas que vienen del saldo histórico */}
-                             {untracedHours > 0 && (
-                                 <tr className="bg-blue-50/30">
-                                     <td className="p-2 text-blue-600 font-medium italic">Histórico</td>
-                                     <td className="p-2 text-slate-500 italic text-xs">Saldo acumulado anterior o ajustes de administración</td>
-                                     <td className="p-2 text-right font-mono font-bold text-red-700">-{untracedHours.toFixed(1)}h</td>
-                                 </tr>
-                             )}
-                         </tbody>
-                         <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
-                             <tr>
-                                 <td colSpan={2} className="p-2 text-right text-slate-600 uppercase text-[10px]">Total Consumido en esta Solicitud:</td>
-                                 <td className="p-2 text-right font-mono text-red-700">{request.hours}h</td>
-                             </tr>
-                         </tfoot>
-                     </table>
-                </div>
-            )}
-            
-            {/* Footer Firma */}
-            <div className="mt-12 pt-8 border-t border-slate-200 print:flex hidden justify-between">
-                <div className="text-center">
-                    <div className="h-16 border-b border-slate-400 w-48 mb-2"></div>
-                    <p className="text-xs text-slate-500">Firma Empleado</p>
-                </div>
-                <div className="text-center">
-                    <div className="h-16 border-b border-slate-400 w-48 mb-2"></div>
-                    <p className="text-xs text-slate-500">Firma Responsable</p>
-                </div>
-            </div>
-
         </div>
       </div>
     </div>
