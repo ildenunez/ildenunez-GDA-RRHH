@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, RequestStatus, LeaveRequest, RequestType, NewsPost } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck, Info, CalendarDays } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck, Info, CalendarDays, CalendarClock } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -25,6 +25,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
   const currentUser = store.users.find(u => u.id === initialUser.id) || initialUser;
   const requests = store.getMyRequests();
   const news = store.config.news;
+
+  const upcomingAbsences = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return requests
+      .filter(r => 
+        r.status === RequestStatus.APPROVED && 
+        !store.isOvertimeRequest(r.typeId) && 
+        (r.endDate || r.startDate) >= today
+      )
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+      .slice(0, 4);
+  }, [requests]);
   const isRepartidor = store.departments.find(d => d.id === currentUser.departmentId)?.name === 'Repartidores';
 
   const scheduleData = useMemo(() => {
@@ -248,7 +260,61 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-4">
-        <div className={`${isRepartidor ? 'lg:col-span-3' : 'lg:col-span-2'} bg-white p-6 rounded-3xl shadow-sm border border-slate-100 h-fit`}><h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tighter"><Megaphone className="text-blue-600" size={20}/> Muro de Anuncios</h3><div className="space-y-4">{news.length === 0 ? (<div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed text-slate-400 italic">No hay anuncios publicados.</div>) : news.map(post => (<div key={post.id} className="relative p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition-all group overflow-hidden"><div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600"></div><div className="flex justify-between items-start mb-2"><h4 className="font-black text-slate-800 text-lg tracking-tight">{post.title}</h4><span className="text-[10px] font-black text-slate-400 uppercase bg-white px-2 py-0.5 rounded-full border">{new Date(post.createdAt).toLocaleDateString()}</span></div><p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{post.content}</p></div>))}</div></div>
+        <div className={`${isRepartidor ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-6`}>
+          {upcomingAbsences.length > 0 && (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tighter">
+                <CalendarClock className="text-orange-500" size={20}/> Próximas Ausencias
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {upcomingAbsences.map(abs => (
+                  <div key={abs.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-between group hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="px-2 py-0.5 bg-white border border-orange-100 text-orange-600 text-[10px] font-black rounded-lg uppercase">
+                          {store.getTypeLabel(abs.typeId)}
+                        </span>
+                        <Calendar size={14} className="text-slate-300" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-800">
+                        {new Date(abs.startDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        {abs.endDate && abs.endDate !== abs.startDate && ` - ${new Date(abs.endDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">
+                        {abs.endDate ? `${Math.ceil(Math.abs(new Date(abs.endDate).getTime() - new Date(abs.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} días` : '1 día'}
+                      </p>
+                    </div>
+                    <button onClick={() => onViewRequest(abs)} className="mt-3 text-[10px] font-black text-blue-600 uppercase flex items-center gap-1 hover:gap-2 transition-all">
+                      Detalles <ChevronRight size={12}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 h-fit">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tighter">
+              <Megaphone className="text-blue-600" size={20}/> Muro de Anuncios
+            </h3>
+            <div className="space-y-4">
+              {news.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed text-slate-400 italic">No hay anuncios publicados.</div>
+              ) : (
+                news.map(post => (
+                  <div key={post.id} className="relative p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition-all group overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600"></div>
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-black text-slate-800 text-lg tracking-tight">{post.title}</h4>
+                      <span className="text-[10px] font-black text-slate-400 uppercase bg-white px-2 py-0.5 rounded-full border">{new Date(post.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{post.content}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
       {showPPEModal && <PPERequestModal userId={currentUser.id} onClose={() => setShowPPEModal(false)} />}
     </div>

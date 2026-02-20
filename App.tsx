@@ -12,6 +12,7 @@ import RequestFormModal from './components/RequestFormModal';
 import HelpView from './components/HelpView';
 import PPEView from './components/PPEView';
 import RepartidoresView from './components/RepartidoresView';
+import UpcomingAbsencesView from './components/UpcomingAbsencesView';
 import UnreadNotificationsModal from './components/UnreadNotificationsModal';
 import ShiftScheduler from './components/ShiftScheduler';
 import { 
@@ -267,6 +268,7 @@ export default function App() {
               
               <div className="pt-3 pb-1 px-3 text-[10px] font-black text-slate-600 uppercase tracking-widest">Gestión</div>
               <NavItem id="horario" icon={Clock} label="Horario" />
+              <NavItem id="upcoming_absences" icon={CalendarClock} label="Próximas Ausencias" />
               <NavItem id="approvals" icon={ShieldCheck} label="Aprobaciones" badgeCount={pendingCount} />
               <NavItem id="team" icon={UsersIcon} label="Mi Equipo" />
             </>
@@ -302,6 +304,7 @@ export default function App() {
            <ErrorBoundary>
              {activeTab === 'dashboard' && <Dashboard user={user} onNewRequest={t => {setModalInitialTab(t); setShowRequestModal(true);}} onEditRequest={r => {setEditingRequest(r); setShowRequestModal(true);}} onViewRequest={setViewingRequest} />}
              {activeTab === 'calendar' && <CalendarView user={user} />}
+             {activeTab === 'upcoming_absences' && isSupervisor && <UpcomingAbsencesView currentUser={user} onViewRequest={setViewingRequest} />}
              {activeTab === 'horario' && isSupervisor && <ShiftScheduler users={store.users} />}
              {activeTab === 'notifications' && <NotificationsView user={user} />}
              {activeTab === 'profile' && <ProfileView user={user} onProfileUpdate={() => setUser({...store.currentUser!})} />}
