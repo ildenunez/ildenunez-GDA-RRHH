@@ -62,10 +62,22 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
             onClose();
         } else {
             if (daysAdjust && !isNaN(parseFloat(daysAdjust))) {
-                await store.createRequest({ typeId: RequestType.ADJUSTMENT_DAYS, startDate: new Date().toISOString(), hours: parseFloat(daysAdjust), reason: adjustReason || 'Ajuste manual de días (Admin)' }, user.id, RequestStatus.APPROVED);
+                await store.createRequest({ 
+                    typeId: RequestType.ADJUSTMENT_DAYS, 
+                    label: 'REGULARIZACION ADMIN',
+                    startDate: new Date().toISOString(), 
+                    hours: parseFloat(daysAdjust), 
+                    reason: adjustReason || 'Ajuste manual de días (Admin)' 
+                }, user.id, RequestStatus.APPROVED);
             }
             if (hoursAdjust && !isNaN(parseFloat(hoursAdjust))) {
-                await store.createRequest({ typeId: RequestType.ADJUSTMENT_OVERTIME, startDate: new Date().toISOString(), hours: parseFloat(hoursAdjust), reason: adjustReason || 'Ajuste manual de horas (Admin)' }, user.id, RequestStatus.APPROVED);
+                await store.createRequest({ 
+                    typeId: RequestType.ADJUSTMENT_OVERTIME, 
+                    label: 'REGULARIZACION ADMIN',
+                    startDate: new Date().toISOString(), 
+                    hours: parseFloat(hoursAdjust), 
+                    reason: adjustReason || 'Ajuste manual de horas (Admin)' 
+                }, user.id, RequestStatus.APPROVED);
             }
             
             const updatePayload = { 
@@ -176,8 +188,48 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
             )}
             {!isNew && (
                 <section>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 pb-2 border-b border-slate-100">Historial Reciente</h3>
-                    <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase"><tr><th className="px-6 py-4">Tipo</th><th className="px-6 py-4">Cant.</th><th className="px-6 py-4">Estado</th><th className="px-6 py-4 text-right">Acción</th></tr></thead><tbody className="divide-y divide-slate-100">{requests.slice(0, 10).map(req => (<tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors group"><td className="px-6 py-4"><div className="font-bold text-slate-700">{store.getTypeLabel(req.typeId)}</div><div className="text-[9px] text-slate-400">{new Date(req.startDate).toLocaleDateString()}</div></td><td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-lg font-black text-[10px] ${calculateAmountStr(req).startsWith('+') ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'}`}>{calculateAmountStr(req)}</span></td><td className="px-6 py-4"><span className={`px-2 py-0.5 rounded-lg font-black text-[9px] uppercase border ${req.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700' : req.status === RequestStatus.PENDING ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-700'}`}>{req.status}</span></td><td className="px-6 py-4 text-right"><div className="flex justify-end gap-3"><button onClick={(e) => { e.stopPropagation(); if(confirm('¿Eliminar registro?')) store.deleteRequest(req.id); }} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button><ChevronRight className="text-slate-200" size={16}/></div></td></tr>))}</tbody></table></div>
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 pb-2 border-b border-slate-100">Historial de Registros</h3>
+                    <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-6 py-4">Tipo / Motivo</th>
+                                    <th className="px-6 py-4">Cant.</th>
+                                    <th className="px-6 py-4">Estado</th>
+                                    <th className="px-6 py-4 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {requests.map(req => (
+                                    <tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-slate-700">{req.label || store.getTypeLabel(req.typeId)}</div>
+                                            <div className="text-[9px] text-slate-400">{new Date(req.startDate).toLocaleDateString()}</div>
+                                            {req.reason && <div className="text-[9px] text-slate-400 italic truncate max-w-[200px]">{req.reason}</div>}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-0.5 rounded-lg font-black text-[10px] ${calculateAmountStr(req).startsWith('+') ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'}`}>
+                                                {calculateAmountStr(req)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-0.5 rounded-lg font-black text-[9px] uppercase border ${req.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700' : req.status === RequestStatus.PENDING ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-700'}`}>
+                                                {req.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-3">
+                                                <button onClick={(e) => { e.stopPropagation(); if(confirm('¿Eliminar registro?')) store.deleteRequest(req.id); }} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100">
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                                <ChevronRight className="text-slate-200" size={16}/>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             )}
             <div className="flex gap-4 pt-8 border-t border-slate-100">

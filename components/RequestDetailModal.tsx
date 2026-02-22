@@ -1,7 +1,7 @@
 import React from 'react';
 import { LeaveRequest, RequestStatus } from '../types';
 import { store } from '../services/store';
-import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, MessageSquare as WhatsAppIcon } from 'lucide-react';
+import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, MessageSquare as WhatsAppIcon, Trash2 } from 'lucide-react';
 
 interface RequestDetailModalProps {
   request: LeaveRequest;
@@ -37,6 +37,13 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
     store.openWhatsApp(user.phone, msg);
   };
 
+  const handleDelete = async () => {
+    if (window.confirm("¿Estás seguro de que deseas eliminar esta solicitud? Esta acción es irreversible y devolverá los días/horas al empleado si corresponde.")) {
+        await store.deleteRequest(request.id);
+        onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 flex justify-center items-start z-[150] p-4 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:items-start print:static print:block">
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up my-8 print:my-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
@@ -51,6 +58,9 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                 )}
                 <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm hover:bg-slate-50 transition-colors shadow-sm text-slate-700">
                     <Printer size={16}/> Imprimir
+                </button>
+                <button onClick={handleDelete} className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg text-sm hover:bg-red-100 transition-colors shadow-sm font-bold">
+                    <Trash2 size={16}/> Eliminar
                 </button>
                 <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-500">
                     <X size={20}/>

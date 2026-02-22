@@ -303,14 +303,29 @@ class Store {
   async createRequest(d: any, uid: string, s: RequestStatus) {
       this.setBusy(true);
       try {
-        await supabase.from('requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: d.typeId, label: d.label || this.getTypeLabel(d.typeId), start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, status: s, created_at: new Date().toISOString(), overtime_usage: d.overtimeUsage || [], document_url: d.documentUrl || null });
+        const id = crypto.randomUUID();
+        await supabase.from('requests').insert({ id, user_id: uid, type_id: d.typeId, label: d.label || this.getTypeLabel(d.typeId), start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, status: s, created_at: new Date().toISOString(), overtime_usage: d.overtimeUsage || [], document_url: d.documentUrl || null });
+        
+        // Descontar saldo si entra como PENDIENTE o APROBADO
+        if (s === RequestStatus.PENDING || s === RequestStatus.APPROVED) {
+            await this.adjustUserBalance(uid, d.typeId, d.startDate, d.endDate, d.hours, 1);
+        }
+        await this.refresh();
       } finally { this.setBusy(false); }
   }
 
   async updateRequest(id: string, d: any) {
     this.setBusy(true);
     try {
+      const oldReq = this.requests.find(r => r.id === id);
+      if (oldReq && (oldReq.status === RequestStatus.PENDING || oldReq.status === RequestStatus.APPROVED)) {
+          // Revertir saldo anterior
+          await this.adjustUserBalance(oldReq.userId, oldReq.typeId, oldReq.startDate, oldReq.endDate, oldReq.hours, -1);
+          // Aplicar nuevo saldo
+          await this.adjustUserBalance(oldReq.userId, d.typeId, d.startDate, d.endDate, d.hours, 1);
+      }
       await supabase.from('requests').update({ type_id: d.typeId, start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, overtime_usage: d.overtimeUsage || [], document_url: d.documentUrl || null }).eq('id', id);
+      await this.refresh();
     } finally { this.setBusy(false); }
   }
 
@@ -318,7 +333,23 @@ class Store {
       this.setBusy(true);
       try {
         const req = this.requests.find(r => r.id === id);
-        if (req && s === RequestStatus.APPROVED) {
+        if (!req) return;
+
+        const oldStatus = req.status;
+        const newStatus = s;
+
+        // Si pasa de PENDIENTE a RECHAZADO, devolvemos los días
+        if (oldStatus === RequestStatus.PENDING && newStatus === RequestStatus.REJECTED) {
+            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+        }
+        
+        // Si pasa de RECHAZADO a APROBADO o PENDIENTE, aplicamos el descuento
+        if (oldStatus === RequestStatus.REJECTED && (newStatus === RequestStatus.APPROVED || newStatus === RequestStatus.PENDING)) {
+            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, 1);
+        }
+
+        // Manejo de horas extra consumidas
+        if (newStatus === RequestStatus.APPROVED && oldStatus !== RequestStatus.APPROVED) {
             const usage = req.overtimeUsage || [];
             for (const u of usage) {
                 const source = this.requests.find(r => r.id === u.requestId);
@@ -327,39 +358,64 @@ class Store {
                     await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
                 }
             }
-            const targetUser = this.users.find(u => u.id === req.userId);
-            if (targetUser) {
-                if (this.isOvertimeRequest(req.typeId)) {
-                    const newBalance = targetUser.overtimeHours + (req.hours || 0);
-                    await supabase.from('users').update({ overtime_hours: newBalance }).eq('id', req.userId);
-                } else {
-                    const isSickness = req.typeId === RequestType.SICKNESS;
-                    const isUnjustified = req.typeId === RequestType.UNJUSTIFIED;
-                    const currentType = this.config.leaveTypes.find(t => t.id === req.typeId);
-                    const subtracts = currentType ? currentType.subtractsDays : true;
-                    if (subtracts && !isSickness && !isUnjustified) {
-                        const start = new Date(req.startDate);
-                        const end = new Date(req.endDate || req.startDate);
-                        const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                        const newBalance = targetUser.daysAvailable - diffDays;
-                        await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
-                    }
-                    if (req.typeId === RequestType.OVERTIME_TO_DAYS) {
-                        const daysAdded = Math.abs(req.hours || 0) / 8;
-                        const newBalance = targetUser.daysAvailable + daysAdded;
-                        await supabase.from('users').update({ days_available: newBalance }).eq('id', req.userId);
-                    }
-                }
-            }
         }
+
         await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
+        await this.refresh();
       } finally { this.setBusy(false); }
   }
 
-  async deleteRequest(id: string) { this.setBusy(true); try { await supabase.from('requests').delete().eq('id', id); } finally { this.setBusy(false); } }
+  async deleteRequest(id: string) { 
+    this.setBusy(true); 
+    try { 
+      const req = this.requests.find(r => r.id === id);
+      if (req && (req.status === RequestStatus.PENDING || req.status === RequestStatus.APPROVED)) {
+          // Si se elimina estando pendiente o aprobada, devolvemos los días
+          await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+      }
+      await supabase.from('requests').delete().eq('id', id); 
+      await this.refresh();
+    } finally { this.setBusy(false); } 
+  }
   async markNotificationAsRead(id: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('id', id); } finally { this.setBusy(false); } }
   async markAllNotificationsAsRead(uid: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid); } finally { this.setBusy(false); } }
   async deleteNotification(id: string) { this.setBusy(true); try { await supabase.from('notifications').delete().eq('id', id); } finally { this.setBusy(false); } }
+
+  private async adjustUserBalance(userId: string, typeId: string, startDate: string, endDate: string | undefined, hours: number | undefined, multiplier: number) {
+    const { data: userData, error: userError } = await supabase.from('users').select('overtime_hours, days_available').eq('id', userId).single();
+    if (userError || !userData) return;
+
+    let currentOvertime = Number(userData.overtime_hours || 0);
+    let currentDays = Number(userData.days_available || 0);
+
+    if (this.isOvertimeRequest(typeId)) {
+        currentOvertime += ((hours || 0) * multiplier);
+        await supabase.from('users').update({ overtime_hours: currentOvertime }).eq('id', userId);
+        
+        if (typeId === RequestType.OVERTIME_TO_DAYS) {
+            const daysAdded = Math.abs(hours || 0) / 8;
+            currentDays += (daysAdded * multiplier);
+            await supabase.from('users').update({ days_available: currentDays }).eq('id', userId);
+        }
+    } else if (typeId === RequestType.ADJUSTMENT_DAYS) {
+        currentDays += ((hours || 0) * multiplier);
+        await supabase.from('users').update({ days_available: currentDays }).eq('id', userId);
+    } else {
+        const isSickness = typeId === RequestType.SICKNESS;
+        const isUnjustified = typeId === RequestType.UNJUSTIFIED;
+        const currentType = this.config.leaveTypes.find(t => t.id === typeId);
+        const subtracts = currentType ? currentType.subtractsDays : true;
+
+        if (subtracts && !isSickness && !isUnjustified) {
+            const start = new Date(startDate);
+            const end = new Date(endDate || startDate);
+            const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            currentDays -= (diffDays * multiplier);
+            await supabase.from('users').update({ days_available: currentDays }).eq('id', userId);
+        }
+    }
+  }
+
   getMyRequests() { return this.requests.filter(r => r.userId === this.currentUser?.id).sort((a,b) => b.startDate.localeCompare(a.startDate)); }
   getNotificationsForUser(uid: string) { return this.notifications.filter(n => n.userId === uid); }
   getShiftForUserDate(uid: string, d: string) { 
@@ -373,7 +429,15 @@ class Store {
     if (u.role === Role.ADMIN) return this.requests.filter(r => r.status === RequestStatus.PENDING);
     if (u.role === Role.SUPERVISOR) {
         const dIds = this.departments.filter(d => (d.supervisorIds || []).includes(uid)).map(d => d.id);
-        return this.requests.filter(r => r.status === RequestStatus.PENDING && dIds.includes(this.users.find(x => x.id === r.userId)?.departmentId || ''));
+        return this.requests.filter(r => {
+            if (r.status !== RequestStatus.PENDING) return false;
+            // Ver solicitudes de sus departamentos asignados
+            const applicant = this.users.find(x => x.id === r.userId);
+            if (applicant && dIds.includes(applicant.departmentId)) return true;
+            // Ver sus propias solicitudes pendientes
+            if (r.userId === uid) return true;
+            return false;
+        });
     }
     return [];
   }
