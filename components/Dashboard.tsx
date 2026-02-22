@@ -126,12 +126,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       }).reverse(); // Mostramos lo más reciente primero en la tabla
   }, [detailView, requests, refresh]);
 
+  const pendingRequests = useMemo(() => requests.filter(r => r.status === RequestStatus.PENDING), [requests]);
+
   const stats = [
     { id: 'days', label: 'Vacaciones', value: (currentUser.daysAvailable ?? 0).toFixed(1), icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50', clickable: true, visible: !isRepartidor },
     { id: 'hours', label: 'Horas Extra', value: `${(currentUser.overtimeHours ?? 0).toFixed(1)}h`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50', clickable: true, visible: !isRepartidor },
     { id: 'truck', label: 'Camión Asignado', value: currentUser.truckNumber || 'N/A', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50', clickable: false, visible: isRepartidor },
     { id: 'pending', label: 'Solicitudes EPI', value: String(store.config.ppeRequests.filter(r => r.userId === currentUser.id && r.status !== 'ENTREGADO').length), icon: HardHat, color: 'text-orange-500', bg: 'bg-orange-50', clickable: false, visible: isRepartidor },
-    { id: 'pending_abs', label: 'En Revisión', value: String(requests.filter(r => r.status === RequestStatus.PENDING).length), icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', clickable: false, visible: !isRepartidor },
   ];
 
   if (detailView !== 'none') {
@@ -251,6 +252,43 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-4">
         <div className={`${isRepartidor ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-6`}>
+          {pendingRequests.length > 0 && (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tighter">
+                <AlertCircle className="text-yellow-500" size={20}/> Solicitudes en Revisión
+              </h3>
+              <div className="space-y-3">
+                {pendingRequests.map(req => (
+                  <div key={req.id} className="flex items-center justify-between p-4 bg-yellow-50/30 border border-yellow-100 rounded-2xl group hover:bg-yellow-50 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-white rounded-xl text-yellow-600 shadow-sm">
+                        {store.isOvertimeRequest(req.typeId) ? <Clock size={16}/> : <Calendar size={16}/>}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{store.getTypeLabel(req.typeId)}</p>
+                        <p className="text-[10px] text-slate-500 font-medium uppercase">
+                          {new Date(req.startDate).toLocaleDateString()}
+                          {req.endDate && req.endDate !== req.startDate && ` - ${new Date(req.endDate).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <button onClick={() => onEditRequest(req)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                         <Edit2 size={14}/>
+                       </button>
+                       <button onClick={() => handleDelete(req.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                         <Trash2 size={14}/>
+                       </button>
+                       <button onClick={() => onViewRequest(req)} className="p-2 text-blue-600 hover:bg-white rounded-lg transition-all">
+                         <ChevronRight size={18}/>
+                       </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {upcomingAbsences.length > 0 && (
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
               <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tighter">
