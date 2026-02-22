@@ -112,7 +112,7 @@ export interface Notification {
   message: string;
   read: boolean;
   date: string;
-  type?: 'system' | 'admin';
+  type?: 'system' | 'admin' | 'chat';
 }
 
 export interface NewsPost {

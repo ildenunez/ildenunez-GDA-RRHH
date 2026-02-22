@@ -304,13 +304,34 @@ class Store {
       this.setBusy(true);
       try {
         const id = crypto.randomUUID();
-        await supabase.from('requests').insert({ id, user_id: uid, type_id: d.typeId, label: d.label || this.getTypeLabel(d.typeId), start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, status: s, created_at: new Date().toISOString(), overtime_usage: d.overtimeUsage || [], document_url: d.documentUrl || null });
+        const { error } = await supabase.from('requests').insert({ 
+            id, 
+            user_id: uid, 
+            type_id: d.typeId, 
+            label: d.label || this.getTypeLabel(d.typeId), 
+            start_date: d.startDate, 
+            end_date: d.endDate || null, 
+            hours: d.hours, 
+            reason: d.reason, 
+            status: s, 
+            created_at: new Date().toISOString(), 
+            overtime_usage: d.overtimeUsage || [], 
+            consumed_hours: 0
+        });
         
+        if (error) {
+            console.error("Error creating request in Supabase:", error);
+            throw error;
+        }
+
         // Descontar saldo si entra como PENDIENTE o APROBADO
         if (s === RequestStatus.PENDING || s === RequestStatus.APPROVED) {
             await this.adjustUserBalance(uid, d.typeId, d.startDate, d.endDate, d.hours, 1);
         }
         await this.refresh();
+      } catch (e) {
+          console.error("Error in createRequest:", e);
+          throw e;
       } finally { this.setBusy(false); }
   }
 
@@ -324,8 +345,23 @@ class Store {
           // Aplicar nuevo saldo
           await this.adjustUserBalance(oldReq.userId, d.typeId, d.startDate, d.endDate, d.hours, 1);
       }
-      await supabase.from('requests').update({ type_id: d.typeId, start_date: d.startDate, end_date: d.endDate, hours: d.hours, reason: d.reason, overtime_usage: d.overtimeUsage || [], document_url: d.documentUrl || null }).eq('id', id);
+      const { error } = await supabase.from('requests').update({ 
+          type_id: d.typeId, 
+          start_date: d.startDate, 
+          end_date: d.endDate || null, 
+          hours: d.hours, 
+          reason: d.reason, 
+          overtime_usage: d.overtimeUsage || []
+      }).eq('id', id);
+
+      if (error) {
+          console.error("Error updating request in Supabase:", error);
+          throw error;
+      }
       await this.refresh();
+    } catch (e) {
+        console.error("Error in updateRequest:", e);
+        throw e;
     } finally { this.setBusy(false); }
   }
 
@@ -355,13 +391,21 @@ class Store {
                 const source = this.requests.find(r => r.id === u.requestId);
                 if (source) {
                     const newConsumed = (source.consumedHours || 0) + u.hoursUsed;
-                    await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
+                    const { error: consumedError } = await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
+                    if (consumedError) throw consumedError;
                 }
             }
         }
 
-        await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
+        const { error } = await supabase.from('requests').update({ status: s, admin_comment: c || '', resolved_by: aid }).eq('id', id);
+        if (error) {
+            console.error("Error updating request status in Supabase:", error);
+            throw error;
+        }
         await this.refresh();
+      } catch (e) {
+          console.error("Error in updateRequestStatus:", e);
+          throw e;
       } finally { this.setBusy(false); }
   }
 
@@ -373,13 +417,62 @@ class Store {
           // Si se elimina estando pendiente o aprobada, devolvemos los días
           await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
       }
-      await supabase.from('requests').delete().eq('id', id); 
+      const { error } = await supabase.from('requests').delete().eq('id', id); 
+      if (error) {
+          console.error("Error deleting request in Supabase:", error);
+          throw error;
+      }
       await this.refresh();
+    } catch (e) {
+        console.error("Error in deleteRequest:", e);
+        throw e;
     } finally { this.setBusy(false); } 
   }
   async markNotificationAsRead(id: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('id', id); } finally { this.setBusy(false); } }
   async markAllNotificationsAsRead(uid: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid); } finally { this.setBusy(false); } }
   async deleteNotification(id: string) { this.setBusy(true); try { await supabase.from('notifications').delete().eq('id', id); } finally { this.setBusy(false); } }
+
+  async sendChatMessage(senderId: string, message: string, recipientId?: string) {
+    this.setBusy(true);
+    try {
+        const sender = this.users.find(u => u.id === senderId);
+        if (!sender) return;
+
+        const recipients: string[] = [];
+        if (recipientId) {
+            recipients.push(recipientId);
+        } else {
+            // Si no hay destinatario específico, enviamos a supervisores y admins
+            const dept = this.departments.find(d => d.id === sender.departmentId);
+            if (dept && dept.supervisorIds) {
+                recipients.push(...dept.supervisorIds);
+            }
+            const admins = this.users.filter(u => u.role === Role.ADMIN).map(u => u.id);
+            recipients.push(...admins);
+        }
+
+        // Eliminar duplicados y el propio remitente
+        const uniqueRecipients = Array.from(new Set(recipients)).filter(id => id !== senderId);
+
+        const notifications = uniqueRecipients.map(rid => ({
+            id: crypto.randomUUID(),
+            user_id: rid,
+            message: `[CHAT][${senderId}] ${sender.name}: ${message}`,
+            type: 'chat',
+            read: false,
+            created_at: new Date().toISOString()
+        }));
+
+        if (notifications.length > 0) {
+            await supabase.from('notifications').insert(notifications);
+        }
+        await this.refresh();
+    } catch (e) {
+        console.error("Error sending chat message:", e);
+    } finally {
+        this.setBusy(false);
+    }
+  }
 
   private async adjustUserBalance(userId: string, typeId: string, startDate: string, endDate: string | undefined, hours: number | undefined, multiplier: number) {
     const { data: userData, error: userError } = await supabase.from('users').select('overtime_hours, days_available').eq('id', userId).single();
@@ -485,24 +578,41 @@ class Store {
   async createUser(d: any, p: string) { 
     this.setBusy(true); 
     try { 
-        await supabase.from('users').insert({ 
+        const { departmentId, ...rest } = d;
+        const { error } = await supabase.from('users').insert({ 
             id: crypto.randomUUID(), 
-            ...d, 
-            department_id: d.departmentId, 
+            ...rest, 
+            department_id: departmentId, 
             phone: d.phone || null,
             password: p 
         }); 
+        if (error) {
+            console.error("Error creating user in Supabase:", error);
+            throw error;
+        }
+        await this.refresh();
+    } catch (e) {
+        console.error("Error in createUser:", e);
+        throw e;
     } finally { this.setBusy(false); } 
   }
   async updateUserAdmin(id: string, d: any) { 
     this.setBusy(true); 
     try { 
         const { departmentId, ...rest } = d; 
-        await supabase.from('users').update({ 
+        const { error } = await supabase.from('users').update({ 
             ...rest, 
             department_id: departmentId,
             phone: d.phone // Asegurar que el campo se mapea correctamente
         }).eq('id', id); 
+        if (error) {
+            console.error("Error updating user in Supabase:", error);
+            throw error;
+        }
+        await this.refresh();
+    } catch (e) {
+        console.error("Error in updateUserAdmin:", e);
+        throw e;
     } finally { this.setBusy(false); } 
   }
   async updateUserProfile(id: string, d: any) { 

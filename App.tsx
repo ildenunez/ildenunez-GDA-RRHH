@@ -15,6 +15,7 @@ import RepartidoresView from './components/RepartidoresView';
 import UpcomingAbsencesView from './components/UpcomingAbsencesView';
 import UnreadNotificationsModal from './components/UnreadNotificationsModal';
 import ShiftScheduler from './components/ShiftScheduler';
+import ChatFloatingButton from './components/ChatFloatingButton';
 import { 
   LayoutDashboard, 
   CalendarDays, 
@@ -320,6 +321,8 @@ export default function App() {
         {viewingRequest && <RequestDetailModal request={viewingRequest} onClose={() => setViewingRequest(null)} />}
         {unreadToModal && <UnreadNotificationsModal notification={unreadToModal} onClose={() => setUnreadToModal(null)} />}
         
+        <ChatFloatingButton user={user} />
+
         {/* Modal Recordatorio para Supervisores */}
         {showSupervisorReminder && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in">

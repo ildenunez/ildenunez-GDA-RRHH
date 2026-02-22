@@ -99,23 +99,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       if (detailView === 'none') return [];
       const isOvertime = detailView === 'hours';
       
-      // Filtrar solicitudes relevantes aprobadas
+      // Filtrar solicitudes relevantes (todas las que no sean canceladas o eliminadas)
       const relevant = requests
-        .filter(r => r.status === RequestStatus.APPROVED && (isOvertime ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId)))
+        .filter(r => (isOvertime ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId)))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt)); // Orden cronológico para calcular acumulado
 
       let runningBalance = 0;
       return relevant.map(req => {
           let impact = 0;
-          if (isOvertime) {
-              impact = req.hours || 0;
-          } else {
-              if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
+          // Solo tienen impacto las aprobadas o pendientes (según lógica de store)
+          if (req.status === RequestStatus.APPROVED || req.status === RequestStatus.PENDING) {
+              if (isOvertime) {
                   impact = req.hours || 0;
               } else {
-                  const start = new Date(req.startDate);
-                  const end = new Date(req.endDate || req.startDate);
-                  impact = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                  if (req.typeId === RequestType.ADJUSTMENT_DAYS) {
+                      impact = req.hours || 0;
+                  } else {
+                      const start = new Date(req.startDate);
+                      const end = new Date(req.endDate || req.startDate);
+                      impact = -(Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                  }
               }
           }
           runningBalance += impact;
@@ -149,6 +152,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                     <p className={`text-3xl font-black ${isOvertimeView ? 'text-blue-600' : 'text-orange-600'}`}>
                         {isOvertimeView ? `${(currentUser.overtimeHours ?? 0).toFixed(1)}h` : (currentUser.daysAvailable ?? 0).toFixed(1)}
                     </p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Incluye solicitudes pendientes de aprobación</p>
                 </div>
                 <button 
                   disabled={store.isBusy}
@@ -158,30 +162,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                     <PlusCircle size={18} /> Nueva Solicitud
                 </button>
             </div>
-
-            {/* Pendientes de Aprobación */}
-            {pendingReqs.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4">
-                    <h3 className="text-sm font-bold text-yellow-800 mb-3 flex items-center gap-2"><Clock size={16}/> Solicitudes en Revisión (No afectan al saldo aún)</h3>
-                    <div className="space-y-2">
-                        {pendingReqs.map(req => (
-                            <div key={req.id} className="bg-white/80 p-3 rounded-xl border border-yellow-200 flex justify-between items-center text-sm">
-                                <div>
-                                    <span className="font-bold">{store.getTypeLabel(req.typeId)}</span>
-                                    <span className="ml-2 text-slate-500">{new Date(req.startDate).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="font-mono font-bold text-yellow-600">{isOvertimeView ? `${req.hours}h` : 'Pendiente'}</span>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => onEditRequest(req)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14}/></button>
-                                        <button onClick={() => handleDelete(req.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 xl:p-4 border-b border-slate-100 flex justify-between items-center">
@@ -194,6 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                             <tr>
                                 <th className="px-6 py-4">Fecha</th>
                                 <th className="px-6 py-4">Concepto / Motivo</th>
+                                <th className="px-6 py-4 text-center">Estado</th>
                                 <th className="px-6 py-4 text-center">Movimiento</th>
                                 <th className="px-6 py-4 text-center">Saldo Resultante</th>
                                 <th className="px-6 py-4 text-right print:hidden">Info</th>
@@ -201,7 +182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {auditTrail.length === 0 ? (
-                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados en el sistema.</td></tr>
+                                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados en el sistema.</td></tr>
                             ) : auditTrail.map((move: any) => (
                                 <tr key={move.id} onClick={() => onViewRequest(move)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
                                     <td className="px-6 py-4 text-slate-500 font-medium">{new Date(move.startDate).toLocaleDateString()}</td>
@@ -209,7 +190,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                                         <div className="font-bold text-slate-800">{store.getTypeLabel(move.typeId)}</div>
                                         <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{move.reason || '-'}</div>
                                     </td>
-                                    <td className={`px-6 py-4 text-center font-black ${move.impact < 0 ? 'text-red-600 bg-red-50/30' : 'text-green-600 bg-green-50/30'}`}>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className={`px-2 py-0.5 rounded-lg font-black text-[9px] uppercase border ${
+                                            move.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-100' : 
+                                            move.status === RequestStatus.PENDING ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+                                            'bg-red-50 text-red-700 border-red-100'
+                                        }`}>
+                                            {move.status}
+                                        </span>
+                                    </td>
+                                    <td className={`px-6 py-4 text-center font-black ${move.impact < 0 ? 'text-red-600 bg-red-50/30' : move.impact > 0 ? 'text-green-600 bg-green-50/30' : 'text-slate-400 bg-slate-50'}`}>
                                         {move.impact > 0 ? '+' : ''}{move.impact}{isOvertimeView ? 'h' : 'd'}
                                     </td>
                                     <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
@@ -227,8 +217,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
                 <Info size={20} className="text-blue-500 shrink-0"/>
                 <p className="text-xs text-blue-700 leading-relaxed">
-                    Este reporte muestra la trazabilidad completa de sus saldos. Los movimientos se registran automáticamente en el momento que un administrador aprueba su solicitud. 
-                    Si detecta alguna discrepancia, contacte con el departamento de RRHH.
+                    Este reporte muestra la trazabilidad completa de sus saldos. Los movimientos se registran automáticamente al crear la solicitud (como pendientes) y se consolidan al ser aprobados. 
+                    Si una solicitud es rechazada, el saldo se devuelve automáticamente.
                 </p>
             </div>
         </div>

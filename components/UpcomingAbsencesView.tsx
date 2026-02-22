@@ -96,7 +96,7 @@ const UpcomingAbsencesView: React.FC<UpcomingAbsencesViewProps> = ({ currentUser
         const start = r.startDate.split(/[ T]/)[0];
         const end = (r.endDate || r.startDate).split(/[ T]/)[0];
         return r.userId === userId && 
-               r.status === RequestStatus.APPROVED && 
+               (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
                !store.isOvertimeRequest(r.typeId) && 
                dateStr >= start && dateStr <= end;
     });
@@ -121,7 +121,7 @@ const UpcomingAbsencesView: React.FC<UpcomingAbsencesViewProps> = ({ currentUser
         m.days.forEach(d => {
           if (!d.isWeekend) {
             const abs = getAbsence(user.id, d.dateStr);
-            if (abs) {
+            if (abs && abs.status === RequestStatus.APPROVED) {
               // Excluir ajustes de admin para vacaciones
               if (abs.typeId === RequestType.ADJUSTMENT_DAYS || abs.typeId === RequestType.ADJUSTMENT_OVERTIME) return;
 
@@ -287,13 +287,15 @@ const UpcomingAbsencesView: React.FC<UpcomingAbsencesViewProps> = ({ currentUser
                                                     key={d.dateStr} 
                                                     onClick={() => absence && onViewRequest(absence)}
                                                     className={`border-b border-r border-slate-100 h-10 flex items-center justify-center relative transition-all text-[9px] font-black
-                                                        ${absence ? `${style?.bg} ${style?.text} cursor-pointer hover:brightness-95` : holiday ? 'bg-red-50/30' : d.isWeekend ? 'bg-slate-50/50' : 'hover:bg-slate-50'}
+                                                        ${absence ? (absence.status === RequestStatus.PENDING ? 'bg-slate-100 text-slate-400' : `${style?.bg} ${style?.text}`) + ' cursor-pointer hover:brightness-95' : holiday ? 'bg-red-50/30' : d.isWeekend ? 'bg-slate-50/50' : 'hover:bg-slate-50'}
                                                     `}
                                                 >
                                                     {absence && style && (
-                                                        <div className="flex flex-col items-center leading-none" title={`${store.getTypeLabel(absence.typeId)}: ${new Date(absence.startDate).toLocaleDateString()}`}>
+                                                        <div className="flex flex-col items-center leading-none" title={`${store.getTypeLabel(absence.typeId)}: ${new Date(absence.startDate).toLocaleDateString()} (${absence.status})`}>
                                                             <style.icon size={12} className="mb-0.5 opacity-70"/>
-                                                            <span className="text-[7px] font-black">{style.label}</span>
+                                                            <span className="text-[7px] font-black">
+                                                                {absence.status === RequestStatus.PENDING ? 'PEND' : style.label}
+                                                            </span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -326,6 +328,10 @@ const UpcomingAbsencesView: React.FC<UpcomingAbsencesViewProps> = ({ currentUser
                 <div className="flex items-center gap-2">
                     <div className="w-4 h-4 bg-blue-100 border border-blue-200 rounded flex items-center justify-center"><ShieldCheck size={10} className="text-blue-600"/></div>
                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Días Libres (Canje)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-[7px] font-black text-slate-400">PEND</div>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pendiente de Aprobación</span>
                 </div>
             </div>
             <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-100">

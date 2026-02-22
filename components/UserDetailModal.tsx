@@ -39,7 +39,7 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
   const [showPPEModal, setShowPPEModal] = useState(false);
 
   const isNew = user.id === 'new';
-  const requests = store.requests.filter(r => r.userId === user.id).sort((a,b) => b.createdAt.localeCompare(a.startDate));
+  const requests = store.requests.filter(r => r.userId === user.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
 
   const handleUpdate = async () => {
     setIsSaving(true);
