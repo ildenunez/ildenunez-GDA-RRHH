@@ -578,12 +578,17 @@ class Store {
   async createUser(d: any, p: string) { 
     this.setBusy(true); 
     try { 
-        const { departmentId, ...rest } = d;
         const { error } = await supabase.from('users').insert({ 
             id: crypto.randomUUID(), 
-            ...rest, 
-            department_id: departmentId, 
+            name: d.name,
+            email: d.email,
+            role: d.role,
+            department_id: d.departmentId,
+            days_available: d.daysAvailable ?? 22,
+            overtime_hours: d.overtimeHours ?? 0,
+            avatar: d.avatar,
             phone: d.phone || null,
+            birthdate: d.birthdate || null,
             password: p 
         }); 
         if (error) {
@@ -599,12 +604,23 @@ class Store {
   async updateUserAdmin(id: string, d: any) { 
     this.setBusy(true); 
     try { 
-        const { departmentId, ...rest } = d; 
-        const { error } = await supabase.from('users').update({ 
-            ...rest, 
-            department_id: departmentId,
-            phone: d.phone // Asegurar que el campo se mapea correctamente
-        }).eq('id', id); 
+        const updateData: any = {
+            name: d.name,
+            email: d.email,
+            role: d.role,
+            department_id: d.departmentId,
+            days_available: d.daysAvailable,
+            overtime_hours: d.overtimeHours,
+            avatar: d.avatar,
+            phone: d.phone,
+            birthdate: d.birthdate
+        };
+        
+        if (d.password) {
+            updateData.password = d.password;
+        }
+
+        const { error } = await supabase.from('users').update(updateData).eq('id', id); 
         if (error) {
             console.error("Error updating user in Supabase:", error);
             throw error;
