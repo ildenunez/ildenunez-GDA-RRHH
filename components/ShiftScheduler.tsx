@@ -85,7 +85,7 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         const start = r.startDate.split(/[ T]/)[0];
         const end = (r.endDate || r.startDate).split(/[ T]/)[0];
         return String(r.userId).trim().toLowerCase() === cleanUid && 
-               r.status === RequestStatus.APPROVED && 
+               (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
                !store.isOvertimeRequest(r.typeId) && 
                dateStr >= start && dateStr <= end;
     });
@@ -289,6 +289,8 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                         const shift = store.config.shiftTypes.find(s => s.id === shiftId);
                                         const isDraft = `${String(user.id).trim().toLowerCase()}:${d.dateStr}` in draftChanges;
                                         const absence = getAbsence(user.id, d.dateStr);
+                                        const isPending = absence?.status === RequestStatus.PENDING;
+                                        const isApproved = absence?.status === RequestStatus.APPROVED;
                                         const style = absence ? getAbsenceStyle(absence.typeId) : null;
 
                                         return (
@@ -297,19 +299,25 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                                                 onMouseDown={() => handleCellInteraction(user.id, d.dateStr, true)}
                                                 onMouseEnter={() => handleCellInteraction(user.id, d.dateStr)}
                                                 className={`border-b border-r border-slate-100 h-9 flex items-center justify-center relative transition-all text-[9px] font-black
-                                                    ${absence ? `${style?.bg} ${style?.text} cursor-not-allowed` : 'cursor-pointer hover:bg-black/5'}
+                                                    ${absence ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-black/5'}
                                                     ${isDraft ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}
                                                 `}
-                                                style={{ backgroundColor: !absence ? (shift?.color || 'transparent') : undefined }}
+                                                style={{ backgroundColor: shift?.color || 'transparent' }}
                                             >
-                                                {!absence && shift && <span className="text-white drop-shadow-sm">{shift.name.charAt(0)}</span>}
-                                                {absence && style && (
-                                                    <div className="flex flex-col items-center leading-none" title={store.getTypeLabel(absence.typeId)}>
-                                                        <style.icon size={10} className="mb-0.5 opacity-60"/>
-                                                        <span className="text-[7px]">{style.label}</span>
+                                                {shift && <span className="text-white drop-shadow-sm">{shift.name.charAt(0)}</span>}
+                                                
+                                                {absence && (
+                                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                                                        <span 
+                                                            className={`text-[6px] font-black px-0.5 rounded border shadow-sm ${isPending ? 'text-slate-800 bg-white/90 border-slate-200' : `${style?.text} ${style?.bg} border-current opacity-95`}`} 
+                                                            title={`${isPending ? 'Pendiente' : 'Aprobado'}: ${store.getTypeLabel(absence.typeId)}`}
+                                                        >
+                                                            {isPending ? 'PEND' : style?.label}
+                                                        </span>
                                                     </div>
                                                 )}
-                                                {isDraft && !absence && (
+
+                                                {isDraft && (
                                                     <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-blue-500 flex items-center justify-center rounded-bl shadow-sm z-20">
                                                         <Edit size={6} className="text-white"/>
                                                     </div>
