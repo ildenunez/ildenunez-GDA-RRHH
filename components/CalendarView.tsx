@@ -50,6 +50,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ user }) => {
       filteredReqs = filteredReqs.filter(r => {
            if (r.typeId === RequestType.WORKED_HOLIDAY) return true;
            if (r.typeId === RequestType.OVERTIME_SPEND_DAYS) return true;
+           if (r.typeId === RequestType.ADJUSTMENT_DAYS) return false;
            if (store.isOvertimeRequest(r.typeId)) return false;
            return true;
       });

@@ -210,6 +210,7 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
             const deptReqs = store.requests.filter(r => 
                 (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
                 (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS || r.typeId === RequestType.OVERTIME_TO_DAYS) &&
+                r.typeId !== RequestType.ADJUSTMENT_DAYS &&
                 deptUsers.includes(r.userId) &&
                 (r.endDate || r.startDate) >= today
             );

@@ -86,7 +86,8 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
         const end = (r.endDate || r.startDate).split(/[ T]/)[0];
         return String(r.userId).trim().toLowerCase() === cleanUid && 
                (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING) && 
-               !store.isOvertimeRequest(r.typeId) && 
+               (!store.isOvertimeRequest(r.typeId) || r.typeId === RequestType.OVERTIME_SPEND_DAYS) && 
+               r.typeId !== RequestType.ADJUSTMENT_DAYS &&
                dateStr >= start && dateStr <= end;
     });
   };

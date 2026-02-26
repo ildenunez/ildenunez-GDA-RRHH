@@ -539,11 +539,13 @@ class Store {
   getRequestConflicts(req: LeaveRequest) {
     const u = this.users.find(usr => usr.id === req.userId);
     if (!u) return [];
+    if (req.typeId === RequestType.ADJUSTMENT_DAYS) return [];
     const s1 = req.startDate.split(/[ T]/)[0];
     const e1 = (req.endDate || req.startDate).split(/[ T]/)[0];
     return this.requests.filter(r => {
       if (r.id === req.id) return false;
       if (r.status !== RequestStatus.APPROVED && r.status !== RequestStatus.PENDING) return false;
+      if (r.typeId === RequestType.ADJUSTMENT_DAYS) return false;
       const rUser = this.users.find(usr => usr.id === r.userId);
       if (!rUser || rUser.departmentId !== u.departmentId) return false;
       const rIsOvertime = this.isOvertimeRequest(r.typeId);
