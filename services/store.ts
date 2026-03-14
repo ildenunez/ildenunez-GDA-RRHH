@@ -324,8 +324,8 @@ class Store {
             throw error;
         }
 
-        // Descontar saldo si entra como PENDIENTE o APROBADO
-        if (s === RequestStatus.PENDING || s === RequestStatus.APPROVED) {
+        // Descontar saldo solo si entra como APROBADO
+        if (s === RequestStatus.APPROVED) {
             await this.adjustUserBalance(uid, d.typeId, d.startDate, d.endDate, d.hours, 1);
         }
         await this.refresh();
@@ -339,10 +339,11 @@ class Store {
     this.setBusy(true);
     try {
       const oldReq = this.requests.find(r => r.id === id);
-      if (oldReq && (oldReq.status === RequestStatus.PENDING || oldReq.status === RequestStatus.APPROVED)) {
-          // Revertir saldo anterior
+      if (oldReq && oldReq.status === RequestStatus.APPROVED) {
+          // Revertir saldo anterior solo si estaba aprobado
           await this.adjustUserBalance(oldReq.userId, oldReq.typeId, oldReq.startDate, oldReq.endDate, oldReq.hours, -1);
-          // Aplicar nuevo saldo
+          // Aplicar nuevo saldo (asumimos que sigue aprobado si se está editando y estaba aprobado, 
+          // o que la UI maneja el cambio de estado por separado)
           await this.adjustUserBalance(oldReq.userId, d.typeId, d.startDate, d.endDate, d.hours, 1);
       }
       const { error } = await supabase.from('requests').update({ 
@@ -374,14 +375,13 @@ class Store {
         const oldStatus = req.status;
         const newStatus = s;
 
-        // Si pasa de PENDIENTE a RECHAZADO, devolvemos los días
-        if (oldStatus === RequestStatus.PENDING && newStatus === RequestStatus.REJECTED) {
-            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
-        }
-        
-        // Si pasa de RECHAZADO a APROBADO o PENDIENTE, aplicamos el descuento
-        if (oldStatus === RequestStatus.REJECTED && (newStatus === RequestStatus.APPROVED || newStatus === RequestStatus.PENDING)) {
+        // Solo ajustamos balance si hay un cambio hacia o desde APROBADO
+        if (oldStatus !== RequestStatus.APPROVED && newStatus === RequestStatus.APPROVED) {
+            // Aplicar saldo
             await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, 1);
+        } else if (oldStatus === RequestStatus.APPROVED && newStatus !== RequestStatus.APPROVED) {
+            // Revertir saldo
+            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
         }
 
         // Manejo de horas extra consumidas
@@ -413,8 +413,8 @@ class Store {
     this.setBusy(true); 
     try { 
       const req = this.requests.find(r => r.id === id);
-      if (req && (req.status === RequestStatus.PENDING || req.status === RequestStatus.APPROVED)) {
-          // Si se elimina estando pendiente o aprobada, devolvemos los días
+      if (req && req.status === RequestStatus.APPROVED) {
+          // Si se elimina estando aprobada, devolvemos los días
           await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
       }
       const { error } = await supabase.from('requests').delete().eq('id', id); 
@@ -670,7 +670,54 @@ class Store {
   async createDriverPPE(did: string, tid: string, sz: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: did, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); } finally { this.setBusy(false); } }
   async updateDriverPPEStatus(id: string, s: string, _q?: number) { this.setBusy(true); try { const updateData: any = { status: s }; if (s === 'ENTREGADO') updateData.delivery_date = new Date().toISOString(); if (s === 'SOLICITADO') updateData.requested_date = new Date().toISOString(); await supabase.from('drivers_ppe').update(updateData).eq('id', id); } finally { this.setBusy(false); } }
   async deleteDriverPPE(id: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').delete().eq('id', id); } finally { this.setBusy(false); } }
-  async repairOvertimeIntegrity() { this.setBusy(true); try { const approvedWithUsage = this.requests.filter(r => r.status === RequestStatus.APPROVED); for (const req of approvedWithUsage) { const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType); if (isConsumptionType && req.hours && req.hours > 0) { const correctedHours = -req.hours; await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id); req.hours = correctedHours; } const usageList = req.overtimeUsage || []; if (usageList.length > 0) { for (const u of usageList) { const source = this.requests.find(r => r.id === u.requestId); if (source) { const allUsages = this.requests.filter(r => r.status === RequestStatus.APPROVED && r.overtimeUsage).flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id); const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0); await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id); } } } } for (const user of this.users) { const userOvertimeReqs = this.requests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED && this.isOvertimeRequest(r.typeId)); const theoreticalBalance = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0); await supabase.from('users').update({ overtime_hours: theoreticalBalance }).eq('id', user.id); } await this.refresh(); } finally { this.setBusy(false); } }
+  async repairOvertimeIntegrity() {
+    this.setBusy(true);
+    try {
+        // 1. Corregir signos de horas en solicitudes de consumo
+        const allRequests = this.requests;
+        for (const req of allRequests) {
+            const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
+            if (isConsumptionType && req.hours && req.hours > 0) {
+                const correctedHours = -req.hours;
+                await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id);
+                req.hours = correctedHours;
+            }
+        }
+
+        // 2. Recalcular consumed_hours para registros de horas extra
+        const approvedRequests = this.requests.filter(r => r.status === RequestStatus.APPROVED);
+        for (const source of approvedRequests) {
+            if (source.typeId === RequestType.OVERTIME_EARN || source.typeId === RequestType.WORKED_HOLIDAY) {
+                const allUsages = approvedRequests.filter(r => r.overtimeUsage).flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id);
+                const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0);
+                if (source.consumedHours !== totalConsumed) {
+                    await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
+                }
+            }
+        }
+
+        // 3. Recalcular balances de usuarios (SOLO basados en solicitudes APROBADAS)
+        for (const user of this.users) {
+            const userApprovedReqs = this.requests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
+            
+            // Overtime
+            const userOvertimeReqs = userApprovedReqs.filter(r => this.isOvertimeRequest(r.typeId));
+            const theoreticalOvertime = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
+            
+            // Days Available (esto es más complejo, pero intentamos una aproximación)
+            // Asumimos que el balance base es lo que tiene el usuario actualmente + lo que se ha restado por solicitudes aprobadas
+            // O mejor, simplemente recalculamos desde un base de 22 si no tenemos el histórico de ajustes manuales.
+            // Por ahora nos centramos en Overtime que es el problema reportado.
+            
+            await supabase.from('users').update({ 
+                overtime_hours: theoreticalOvertime
+            }).eq('id', user.id);
+        }
+        await this.refresh();
+    } catch (e) {
+        console.error("Error in repairOvertimeIntegrity:", e);
+    } finally { this.setBusy(false); }
+  }
 }
 
 export const store = new Store();
