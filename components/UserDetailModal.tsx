@@ -89,12 +89,13 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
                 department_id: deptId, 
                 birthdate: payloadBirthdate, 
                 avatar, 
-                daysAvailable: user.daysAvailable, 
-                overtimeHours: user.overtimeHours,
                 password: password.trim() || undefined
             };
 
             await store.updateUserAdmin(user.id, updatePayload);
+            setDaysAdjust('');
+            setHoursAdjust('');
+            setAdjustReason('');
             onClose();
         }
     } catch (error: any) { 

@@ -611,8 +611,6 @@ class Store {
             email: d.email,
             role: d.role,
             department_id: d.departmentId,
-            days_available: d.daysAvailable,
-            overtime_hours: d.overtimeHours,
             avatar: d.avatar,
             phone: d.phone,
             birthdate: d.birthdate
