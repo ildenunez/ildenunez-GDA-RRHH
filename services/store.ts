@@ -366,6 +366,21 @@ class Store {
     } finally { this.setBusy(false); }
   }
 
+  async createNotification(userId: string, message: string, type: 'system' | 'admin' | 'chat' = 'system') {
+    try {
+      const { error } = await supabase.from('notifications').insert({
+        user_id: userId,
+        message,
+        type,
+        read: false
+      });
+      if (error) throw error;
+      await this.refresh();
+    } catch (e) {
+      console.error("Error creating notification:", e);
+    }
+  }
+
   async updateRequestStatus(id: string, s: RequestStatus, aid: string, c?: string) {
       this.setBusy(true);
       try {
@@ -402,6 +417,14 @@ class Store {
             console.error("Error updating request status in Supabase:", error);
             throw error;
         }
+
+        // Notificar al usuario
+        const statusLabel = s === RequestStatus.APPROVED ? 'APROBADA' : 'RECHAZADA';
+        const typeLabel = this.getTypeLabel(req.typeId);
+        const dateStr = new Date(req.startDate).toLocaleDateString();
+        const msg = `Tu solicitud de ${typeLabel} para el ${dateStr} ha sido ${statusLabel}.${c ? ` Comentario: ${c}` : ''}`;
+        await this.createNotification(req.userId, msg, 'admin');
+
         await this.refresh();
       } catch (e) {
           console.error("Error in updateRequestStatus:", e);
@@ -715,6 +738,64 @@ class Store {
     } catch (e) {
         console.error("Error in repairOvertimeIntegrity:", e);
     } finally { this.setBusy(false); }
+  }
+
+  async exportData() {
+    this.setBusy(true);
+    try {
+      const tables = [
+        'users', 'departments', 'requests', 'leave_types', 'ppe_types', 
+        'ppe_requests', 'news', 'holidays', 'shift_types', 'user_schedules', 
+        'trucks', 'drivers', 'drivers_ppe', 'settings'
+      ];
+      const data: any = {};
+      for (const table of tables) {
+        data[table] = await this.fetchAll(table);
+      }
+      return data;
+    } catch (e) {
+      console.error("Error exporting data:", e);
+      throw e;
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  async importData(data: any) {
+    this.setBusy(true);
+    try {
+      const deleteOrder = [
+        'user_schedules', 'drivers_ppe', 'ppe_requests', 'requests', 
+        'drivers', 'trucks', 'news', 'holidays', 'shift_types', 
+        'ppe_types', 'leave_types', 'users', 'departments', 'settings'
+      ];
+
+      const insertOrder = [
+        'settings', 'leave_types', 'ppe_types', 'shift_types', 'holidays', 
+        'departments', 'users', 'trucks', 'drivers', 'news', 
+        'requests', 'ppe_requests', 'drivers_ppe', 'user_schedules'
+      ];
+
+      for (const table of deleteOrder) {
+          await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      }
+
+      for (const table of insertOrder) {
+        if (data[table] && Array.isArray(data[table]) && data[table].length > 0) {
+          const { error } = await supabase.from(table).insert(data[table]);
+          if (error) {
+              console.error(`Error inserting into ${table}:`, error);
+              throw error;
+          }
+        }
+      }
+      await this.refresh();
+    } catch (e) {
+      console.error("Error importing data:", e);
+      throw e;
+    } finally {
+      this.setBusy(false);
+    }
   }
 }
 

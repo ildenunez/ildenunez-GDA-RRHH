@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, RequestStatus, LeaveRequest, RequestType, NewsPost } from '../types';
 import { store } from '../services/store';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Legend, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck, Info, CalendarDays, CalendarClock } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, Sun, PlusCircle, Timer, ChevronRight, ArrowLeft, History, Edit2, Trash2, Briefcase, ShieldCheck, HardHat, FileText, CheckCircle2, Megaphone, Cake, Quote, Star, Truck, Info, CalendarDays, CalendarClock, Filter } from 'lucide-react';
 import PPERequestModal from './PPERequestModal';
 
 interface DashboardProps {
@@ -14,6 +14,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, onEditRequest, onViewRequest }) => {
   const [detailView, setDetailView] = useState<'none' | 'days' | 'hours'>('none');
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [showPPEModal, setShowPPEModal] = useState(false);
   const [refresh, setRefresh] = useState(0);
 
@@ -100,9 +101,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       const isOvertime = detailView === 'hours';
       
       // Filtrar solicitudes relevantes (todas las que no sean canceladas o eliminadas)
-      const relevant = requests
+      let relevant = requests
         .filter(r => (isOvertime ? store.isOvertimeRequest(r.typeId) : !store.isOvertimeRequest(r.typeId)))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt)); // Orden cronológico para calcular acumulado
+
+      if (selectedMonth) {
+          relevant = relevant.filter(r => r.startDate.startsWith(selectedMonth));
+      }
 
       let runningBalance = 0;
       return relevant.map(req => {
@@ -147,21 +152,42 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                 <h2 className="text-xl font-bold text-slate-800">{title}</h2>
             </div>
             
-            <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100 gap-4">
+                <div className="flex-1">
                     <p className="text-sm text-slate-500 uppercase font-semibold">Saldo Actual Consolidado</p>
                     <p className={`text-3xl font-black ${isOvertimeView ? 'text-blue-600' : 'text-orange-600'}`}>
                         {isOvertimeView ? `${(currentUser.overtimeHours ?? 0).toFixed(1)}h` : (currentUser.daysAvailable ?? 0).toFixed(1)}
                     </p>
                     <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Incluye solicitudes pendientes de aprobación</p>
                 </div>
-                <button 
-                  disabled={store.isBusy}
-                  onClick={() => onNewRequest(isOvertimeView ? 'overtime' : 'absence')} 
-                  className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                    <PlusCircle size={18} /> Nueva Solicitud
-                </button>
+                
+                <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
+                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+                        <Filter size={14} className="text-slate-400" />
+                        <select 
+                            value={selectedMonth} 
+                            onChange={e => setSelectedMonth(e.target.value)}
+                            className="bg-transparent text-xs font-bold text-slate-600 outline-none"
+                        >
+                            <option value="">Todos los meses</option>
+                            {Array.from({ length: 12 }, (_, i) => {
+                                const d = new Date();
+                                d.setMonth(d.getMonth() - i);
+                                const val = d.toISOString().slice(0, 7);
+                                const label = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                                return <option key={val} value={val}>{label}</option>;
+                            })}
+                        </select>
+                    </div>
+
+                    <button 
+                      disabled={store.isBusy}
+                      onClick={() => onNewRequest(isOvertimeView ? 'overtime' : 'absence')} 
+                      className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                        <PlusCircle size={18} /> Nueva Solicitud
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -239,11 +265,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 xl:gap-4">
-        <div onClick={() => { const btn = Array.from(document.querySelectorAll('aside nav button')).find(b => b.textContent?.includes('Calendario')) as HTMLButtonElement; if(btn) btn.click(); }} className="md:col-span-2 bg-slate-900 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden group cursor-pointer border border-slate-800 hover:border-blue-500 transition-all">
-             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform"><CalendarDays size={120}/></div>
-             <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Mi Planificación (2 Semanas)</p><ChevronRight size={16} className="text-slate-500 group-hover:text-blue-400"/></div>
-             <div className="grid grid-cols-7 gap-1 relative z-10">{scheduleData.map((d, idx) => (<div key={idx} className="flex flex-col items-center"><span className="text-[8px] font-black text-slate-500 mb-1">{d.dayLabel}</span><div title={d.holiday?.name || d.shift?.name || 'Libre'} className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all border ${d.isToday ? 'ring-2 ring-blue-500 border-transparent shadow-lg scale-110 z-20' : 'border-slate-800'} ${d.holiday ? 'bg-red-500/20 text-red-500 border-red-500/30' : d.activeRequest ? 'bg-green-500/20 text-green-500 border-green-500/30' : d.shift ? 'shadow-inner' : 'bg-slate-800/50 text-slate-600'}`} style={d.shift && !d.holiday && !d.activeRequest ? { backgroundColor: d.shift.color + '40', color: d.shift.color, borderColor: d.shift.color + '60' } : {}}>{d.dayNumber}</div></div>))}</div>
-             <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 relative z-10 py-3 border-t border-slate-800/50">{activeShiftsInPeriod.map(s => (<div key={s.id} className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color }}></div><span className="text-[9px] font-bold text-slate-300 uppercase">{s.name}</span></div>))}</div>
+        <div onClick={() => { const btn = Array.from(document.querySelectorAll('aside nav button')).find(b => b.textContent?.includes('Calendario')) as HTMLButtonElement; if(btn) btn.click(); }} className="md:col-span-2 bg-white text-slate-800 p-6 rounded-3xl shadow-sm relative overflow-hidden group cursor-pointer border border-slate-100 hover:border-blue-500 transition-all">
+             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform text-slate-900"><CalendarDays size={120}/></div>
+             <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Mi Planificación (2 Semanas)</p><ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500"/></div>
+             <div className="grid grid-cols-7 gap-1 relative z-10">{scheduleData.map((d, idx) => (<div key={idx} className="flex flex-col items-center"><span className="text-[8px] font-black text-slate-400 mb-1 uppercase">{d.dayLabel}</span><div title={d.holiday?.name || d.shift?.name || 'Libre'} className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all border ${d.isToday ? 'ring-2 ring-blue-500 border-transparent shadow-lg scale-110 z-20' : 'border-slate-100'} ${d.holiday ? 'bg-red-500 text-white border-red-600' : d.activeRequest ? 'bg-green-500 text-white border-green-600' : d.shift ? 'shadow-inner' : 'bg-slate-50 text-slate-400'}`} style={d.shift && !d.holiday && !d.activeRequest ? { backgroundColor: d.shift.color, color: 'white', borderColor: d.shift.color } : {}}>{d.dayNumber}</div></div>))}</div>
+             <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 relative z-10 py-3 border-t border-slate-100">{activeShiftsInPeriod.map(s => (<div key={s.id} className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color }}></div><span className="text-[9px] font-bold text-slate-500 uppercase">{s.name}</span></div>))}</div>
         </div>
         {stats.filter(s => s.visible).map((stat) => (
           <div key={stat.id} onClick={() => stat.clickable && setDetailView(stat.id as any)} className={`bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between group transition-all ${stat.clickable ? 'cursor-pointer hover:shadow-md' : ''}`}><div className="flex items-center space-x-4"><div className={`p-4 rounded-2xl ${stat.bg}`}><stat.icon className={`w-8 h-8 ${stat.color}`} /></div><div><p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">{stat.label}</p><h3 className="text-2xl font-black text-slate-800">{stat.value}</h3></div></div>{stat.clickable && <ChevronRight className="text-slate-200 group-hover:text-blue-500" size={20}/>}</div>

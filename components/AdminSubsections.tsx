@@ -1160,6 +1160,8 @@ export const AbsenceQueryManager = () => {
 // Mantenimiento
 export const MaintenanceManager = () => {
     const [isRepairing, setIsRepairing] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     const handleRepair = async () => {
         if (confirm('¿Deseas sincronizar la trazabilidad de horas extra? Esto corregirá registros antiguos marcándolos como consumidos si están vinculados a solicitudes aprobadas.')) {
@@ -1169,14 +1171,67 @@ export const MaintenanceManager = () => {
         }
     };
 
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const data = await store.exportData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_rrhh_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert('Error al exportar los datos');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (confirm('ATENCIÓN: Esto borrará TODOS los datos actuales y los reemplazará con el contenido del archivo. ¿Estás seguro?')) {
+            setIsImporting(true);
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const data = JSON.parse(event.target?.result as string);
+                    await store.importData(data);
+                    alert('Datos importados con éxito');
+                } catch (err) {
+                    console.error(err);
+                    alert('Error al importar el archivo. Asegúrate de que sea un JSON válido.');
+                } finally {
+                    setIsImporting(false);
+                }
+            };
+            reader.readAsText(file);
+        }
+        e.target.value = '';
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="bg-blue-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-10"><Database size={120} /></div>
                 <h4 className="text-xl font-bold mb-4">Punto de Restauración y Backup</h4>
                 <div className="flex gap-4">
-                    <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Download size={18}/> Exportar JSON</button>
-                    <button className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all"><Upload size={18}/> Importar Backup</button>
+                    <button 
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18}/>}
+                        Exportar JSON
+                    </button>
+                    <label className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50">
+                        {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18}/>}
+                        Importar Backup
+                        <input type="file" accept=".json" className="hidden" onChange={handleImport} disabled={isImporting} />
+                    </label>
                 </div>
             </div>
 

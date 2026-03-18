@@ -303,8 +303,28 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                                     </td>
                                     <td className="px-6 py-4">
                                         {conflicts.length > 0 ? (
-                                            <div className="flex flex-col gap-1.5 max-w-[220px]">
+                                            <div className="flex flex-col gap-1.5 max-w-[250px]">
                                                 <span className="flex items-center gap-1 text-red-600 font-black text-[10px] uppercase bg-red-50 px-2 py-1 rounded-lg border border-red-100 w-fit"><AlertTriangle size={12}/> {conflicts.length} Coincidencias</span>
+                                                <div className="space-y-1 mt-1">
+                                                    {conflicts.map(c => {
+                                                        const cUser = store.users.find(u => u.id === c.userId);
+                                                        const s1 = req.startDate.split(/[ T]/)[0];
+                                                        const e1 = (req.endDate || req.startDate).split(/[ T]/)[0];
+                                                        const s2 = c.startDate.split(/[ T]/)[0];
+                                                        const e2 = (c.endDate || c.startDate).split(/[ T]/)[0];
+                                                        const overlapStart = s1 > s2 ? s1 : s2;
+                                                        const overlapEnd = e1 < e2 ? e1 : e2;
+                                                        const dateStr = overlapStart === overlapEnd 
+                                                            ? new Date(overlapStart).toLocaleDateString()
+                                                            : `${new Date(overlapStart).toLocaleDateString()} - ${new Date(overlapEnd).toLocaleDateString()}`;
+                                                        return (
+                                                            <div key={c.id} className="text-[9px] leading-tight">
+                                                                <span className="font-bold text-slate-700">{cUser?.name}:</span>
+                                                                <span className="text-slate-500 ml-1 italic">{dateStr}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         ) : <span className="text-green-600 font-bold text-[10px] uppercase bg-green-50 px-2 py-1 rounded-lg">Sin conflictos</span>}
                                     </td>
@@ -335,31 +355,6 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                     </select>
                 </div>
             </div>
-
-            {/* RESUMEN DE CONFLICTOS MEJORADO */}
-            {conflictsSummary.length > 0 && (
-                <div className="bg-red-900 text-white p-6 rounded-3xl shadow-xl animate-fade-in-up relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform"><ShieldAlert size={80}/></div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <AlertTriangle className="text-yellow-400 animate-pulse"/>
-                        <h4 className="text-lg font-black uppercase tracking-tighter">Resumen Crítico de Solapamientos</h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {conflictsSummary.slice(0, 6).map((c, i) => (
-                            <div key={i} className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                                <div className="text-[10px] font-black text-red-300 uppercase mb-1">{c.deptName}</div>
-                                <div className="font-bold text-sm mb-2">{c.dateRange}</div>
-                                <div className="flex flex-wrap gap-1">
-                                    {c.users.map(u => <span key={u} className="px-2 py-0.5 bg-red-600/50 rounded-full text-[9px] font-bold">{u}</span>)}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {conflictsSummary.length > 6 && (
-                        <p className="mt-4 text-[10px] font-bold text-red-200 uppercase text-center">Y {conflictsSummary.length - 6} coincidencias más...</p>
-                    )}
-                </div>
-            )}
 
             <Table title="Ausencias y Vacaciones" requests={absenceRequests} icon={CalendarDays} color="text-blue-600" />
             <Table title="Gestión de Horas" requests={overtimeRequests} icon={Timer} color="text-indigo-600" />

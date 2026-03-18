@@ -34,6 +34,17 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
+  const [showSmartPlanner, setShowSmartPlanner] = useState(false);
+  const [plannerPattern, setPlannerPattern] = useState('');
+  const [plannerStartDate, setPlannerStartDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [plannerEndDate, setPlannerEndDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+  });
+  
   const [draftChanges, setDraftChanges] = useState<Record<string, string>>({});
   const [tick, setTick] = useState(0);
 
@@ -157,6 +168,57 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
     }
   };
 
+  const applySmartPattern = () => {
+    if (!plannerPattern || !plannerStartDate || !plannerEndDate) {
+        alert("Por favor, completa todos los campos del planificador.");
+        return;
+    }
+    
+    const patternItems = plannerPattern.split(',').map(p => p.trim());
+    const patternIds = patternItems.map(p => {
+      const shift = store.config.shiftTypes.find(s => s.name.toLowerCase() === p.toLowerCase() || s.id === p);
+      if (shift) return shift.id;
+      if (['descanso', 'd', 'off', 'vacio', 'borrar'].includes(p.toLowerCase())) return '';
+      return null;
+    }).filter(p => p !== null) as string[];
+
+    if (patternIds.length === 0) {
+        alert("No se han reconocido turnos válidos en el patrón. Usa nombres de turnos (ej: Mañana) o 'D' para descanso.");
+        return;
+    }
+
+    const start = new Date(plannerStartDate);
+    const end = new Date(plannerEndDate);
+    const newDraft = { ...draftChanges };
+
+    filteredUsers.forEach(user => {
+      let current = new Date(start);
+      let patternIdx = 0;
+      while (current <= end) {
+        const dateStr = current.toISOString().split('T')[0];
+        // Solo aplicar si no hay ausencia aprobada/pendiente
+        if (!getAbsence(user.id, dateStr)) {
+          const shiftId = patternIds[patternIdx % patternIds.length];
+          const key = `${String(user.id).trim().toLowerCase()}:${dateStr}`;
+          
+          // Solo añadir si es diferente al valor actual en DB
+          const currentDbValue = getActiveShiftId(user.id, dateStr);
+          if (shiftId !== currentDbValue) {
+              newDraft[key] = shiftId;
+          } else {
+              delete newDraft[key];
+          }
+        }
+        current.setDate(current.getDate() + 1);
+        patternIdx++;
+      }
+    });
+
+    setDraftChanges(newDraft);
+    setShowSmartPlanner(false);
+    alert(`Se han propuesto cambios para ${filteredUsers.length} empleados. Revisa el calendario y pulsa 'Guardar' para confirmar.`);
+  };
+
   const getAbsenceStyle = (typeId: string) => {
       const label = store.getTypeLabel(typeId).toLowerCase();
       const id = String(typeId).toLowerCase();
@@ -220,6 +282,12 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
             >
                 {isRefreshing ? <Loader2 size={18} className="animate-spin"/> : <RefreshCcw size={18}/>}
             </button>
+            <button 
+                onClick={() => setShowSmartPlanner(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase hover:bg-blue-700 transition-all shadow-md"
+            >
+                <Star size={14} fill="currentColor"/> Planificador
+            </button>
         </div>
 
         <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-2xl shadow-sm">
@@ -253,6 +321,97 @@ const ShiftScheduler: React.FC<ShiftSchedulerProps> = ({ users: allUsers }) => {
                 <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center border border-blue-100 animate-scale-in">
                     <Loader2 size={48} className="animate-spin text-blue-600 mb-4" />
                     <p className="font-black uppercase text-blue-600 tracking-widest text-xs">Guardando cambios...</p>
+                </div>
+            </div>
+        )}
+
+        {showSmartPlanner && (
+            <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 animate-scale-in overflow-hidden">
+                    <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                        <div>
+                            <h3 className="text-lg font-black uppercase tracking-tighter">Planificador Inteligente</h3>
+                            <p className="text-[10px] font-bold opacity-80 uppercase">Generación automática de turnos</p>
+                        </div>
+                        <button onClick={() => setShowSmartPlanner(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20}/></button>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Fecha Inicio</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white"
+                                    value={plannerStartDate}
+                                    onChange={e => setPlannerStartDate(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Fecha Fin</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white"
+                                    value={plannerEndDate}
+                                    onChange={e => setPlannerEndDate(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Patrón de Turnos (Separado por comas)</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ej: Mañana, Mañana, Tarde, Tarde, D, D"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white"
+                                value={plannerPattern}
+                                onChange={e => setPlannerPattern(e.target.value)}
+                            />
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {[
+                                    { label: '6-2 Rotativo', pattern: 'Mañana, Mañana, Tarde, Tarde, Noche, Noche, D, D' },
+                                    { label: '5-2 Mañana', pattern: 'Mañana, Mañana, Mañana, Mañana, Mañana, D, D' },
+                                    { label: '5-2 Tarde', pattern: 'Tarde, Tarde, Tarde, Tarde, Tarde, D, D' },
+                                    { label: 'Limpiar', pattern: 'D' }
+                                ].map(p => (
+                                    <button 
+                                        key={p.label}
+                                        type="button"
+                                        onClick={() => setPlannerPattern(p.pattern)}
+                                        className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-[9px] font-black text-slate-500 hover:text-blue-600 rounded-lg transition-colors border border-slate-200"
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[9px] text-slate-400 mt-2 font-medium italic">Usa nombres de turnos o 'D' para descanso. El patrón se repetirá cíclicamente.</p>
+                        </div>
+
+                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                            <h4 className="text-[10px] font-black text-blue-600 uppercase mb-2 flex items-center gap-2">
+                                <AlertCircle size={12}/> Resumen de Aplicación
+                            </h4>
+                            <ul className="text-[10px] text-blue-700 font-bold space-y-1">
+                                <li>• Se aplicará a {filteredUsers.length} empleados</li>
+                                <li>• Respeta vacaciones y ausencias aprobadas</li>
+                                <li>• Los cambios aparecerán como "Borrador"</li>
+                            </ul>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button 
+                                onClick={() => setShowSmartPlanner(false)}
+                                className="flex-1 py-3 text-slate-400 font-black uppercase text-[10px] hover:bg-slate-50 rounded-xl transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={applySmartPattern}
+                                className="flex-1 py-3 bg-blue-600 text-white font-black uppercase text-[10px] rounded-xl shadow-lg hover:bg-blue-700 transition-all"
+                            >
+                                Aplicar Patrón
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         )}
