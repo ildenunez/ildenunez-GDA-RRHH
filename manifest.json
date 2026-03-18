@@ -1,0 +1,17 @@
+{
+  "name": "GdA RRHH - Portal del Empleado",
+  "short_name": "GdA RRHH",
+  "description": "Portal de gestión de recursos humanos para empleados y supervisores.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

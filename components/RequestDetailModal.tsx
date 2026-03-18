@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LeaveRequest, RequestStatus } from '../types';
 import { store } from '../services/store';
-import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, MessageSquare as WhatsAppIcon, Trash2 } from 'lucide-react';
+import { X, Printer, Calendar, Clock, FileText, CheckCircle, XCircle, AlertCircle, User as UserIcon, MessageSquare, UserCheck, Eye, Download, MessageSquare as WhatsAppIcon, Trash2, Maximize2 } from 'lucide-react';
 
 interface RequestDetailModalProps {
   request: LeaveRequest;
@@ -9,6 +9,7 @@ interface RequestDetailModalProps {
 }
 
 const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
+  const [showLightbox, setShowLightbox] = useState(false);
   const user = store.users.find(u => u.id === request.userId);
   const dept = user ? store.departments.find(d => d.id === user.departmentId) : null;
   const approver = request.resolvedBy ? store.users.find(u => u.id === request.resolvedBy) : null;
@@ -34,7 +35,10 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
     }
     const statusMsg = request.status === RequestStatus.APPROVED ? "APROBADA ✅" : "RECHAZADA ❌";
     const msg = `Hola ${user.name}, te informamos que tu solicitud de ${store.getTypeLabel(request.typeId)} para las fechas ${new Date(request.startDate).toLocaleDateString()} ha sido ${statusMsg}. Saludos de RRHH.`;
-    store.openWhatsApp(user.phone, msg);
+    
+    // WhatsApp Click-to-Chat is 100% free and reliable
+    const waUrl = `https://wa.me/${user.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
   };
 
   const handleDelete = async () => {
@@ -46,6 +50,30 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
 
   return (
     <div className="fixed inset-0 bg-black/60 flex justify-center items-start z-[150] p-4 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:items-start print:static print:block">
+      {/* Lightbox Preview */}
+      {showLightbox && request.documentUrl && (
+        <div className="fixed inset-0 bg-black/90 z-[200] flex flex-col items-center justify-center p-4 animate-fade-in">
+          <button onClick={() => setShowLightbox(false)} className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all">
+            <X size={32}/>
+          </button>
+          <div className="max-w-4xl w-full h-full flex items-center justify-center">
+            {request.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+              <img src={request.documentUrl} alt="Vista previa" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+            ) : (
+              <iframe src={request.documentUrl} className="w-full h-[80vh] rounded-lg bg-white" title="Documento PDF" />
+            )}
+          </div>
+          <div className="mt-6 flex gap-4">
+            <a href={request.documentUrl} download className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-blue-700 shadow-lg">
+              <Download size={20}/> Descargar Original
+            </a>
+            <button onClick={() => setShowLightbox(false)} className="px-6 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20">
+              Cerrar Vista Previa
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl animate-fade-in-up my-8 print:my-0 print:shadow-none print:w-full print:max-w-none print:rounded-none">
         
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:hidden">
@@ -157,26 +185,30 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClos
                             <h3 className="font-black uppercase tracking-widest text-xs">Documento Justificante Adjunto</h3>
                         </div>
                         <div className="flex flex-col sm:flex-row items-center gap-4">
-                            {request.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                                <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-white/20 bg-black/20">
+                            <div 
+                                onClick={() => setShowLightbox(true)}
+                                className="w-24 h-24 rounded-xl overflow-hidden border-2 border-white/20 bg-black/20 cursor-pointer hover:border-blue-500 transition-all relative group/thumb"
+                            >
+                                {request.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
                                     <img src={request.documentUrl} alt="Vista previa" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-white/10">
+                                        <FileText size={32} className="text-blue-400"/>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Maximize2 size={20} className="text-white"/>
                                 </div>
-                            ) : (
-                                <div className="w-24 h-24 rounded-xl flex items-center justify-center bg-white/10 border-2 border-white/20">
-                                    <FileText size={32} className="text-blue-400"/>
-                                </div>
-                            )}
+                            </div>
                             <div className="flex-1 text-center sm:text-left">
                                 <p className="text-slate-400 text-[10px] font-bold uppercase mb-2">Archivo digital validado</p>
                                 <div className="flex gap-2 justify-center sm:justify-start">
-                                    <a 
-                                        href={request.documentUrl} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
+                                    <button 
+                                        onClick={() => setShowLightbox(true)}
                                         className="flex items-center gap-2 bg-white text-slate-900 px-4 py-2 rounded-xl font-black uppercase text-[10px] hover:bg-slate-100 transition-all"
                                     >
-                                        <Eye size={14}/> Ver Original
-                                    </a>
+                                        <Eye size={14}/> Vista Previa
+                                    </button>
                                     <a 
                                         href={request.documentUrl} 
                                         download 
