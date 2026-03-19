@@ -113,26 +113,57 @@ class Store {
    * Envía una notificación Push al navegador si hay permiso
    */
   sendPush(title: string, body: string) {
-      if (!("Notification" in window)) return;
-      if (Notification.permission === "granted") {
-          const icon = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
+      console.log(`[Push] Attempting to send: ${title} - ${body}`);
+      if (!("Notification" in window)) {
+          console.warn("[Push] Notifications not supported in this browser.");
+          return;
+      }
+      
+      const icon = "https://termosycalentadoresgranada.com/wp-content/uploads/2025/08/https___cdn.evbuc_.com_images_677236879_73808960223_1_original.png";
+      const options = {
+          body,
+          icon,
+          badge: icon,
+          vibrate: [200, 100, 200],
+          tag: 'gda-rrhh-notif',
+          renotify: true,
+          requireInteraction: true
+      };
+
+      const deliverLocal = () => {
           try {
-              navigator.serviceWorker.ready.then(registration => {
-                  registration.showNotification(title, {
-                      body,
-                      icon,
-                      badge: icon,
-                      vibrate: [200, 100, 200],
-                      tag: 'gda-rrhh-notif'
-                  } as any);
-              }).catch(() => {
-                  new Notification(title, { body, icon });
-              });
+              new Notification(title, options);
+              console.log("[Push] Local notification delivered successfully.");
           } catch (e) {
-              new Notification(title, { body, icon });
+              console.error("[Push] Local notification delivery failed:", e);
           }
-      } else if (Notification.permission !== "denied") {
-          Notification.requestPermission();
+      };
+
+      if (Notification.permission === "granted") {
+          if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then(registration => {
+                  console.log("[Push] Service Worker ready, showing notification...");
+                  registration.showNotification(title, options).catch(err => {
+                      console.warn("[Push] SW showNotification failed, falling back to local:", err);
+                      deliverLocal();
+                  });
+              }).catch(err => {
+                  console.warn("[Push] SW ready failed, falling back to local:", err);
+                  deliverLocal();
+              });
+          } else {
+              deliverLocal();
+          }
+      } else if (Notification.permission === "default") {
+          console.log("[Push] Permission is default, requesting...");
+          Notification.requestPermission().then(permission => {
+              console.log(`[Push] Permission result: ${permission}`);
+              if (permission === "granted") {
+                  this.sendPush(title, body);
+              }
+          });
+      } else {
+          console.warn("[Push] Notification permission denied by user.");
       }
   }
 
@@ -676,8 +707,40 @@ class Store {
   async updatePPEStock(id: string, s: any) { this.setBusy(true); try { await supabase.from('ppe_types').update({ stock: s }).eq('id', id); } finally { this.setBusy(false); } }
   async deletePPEType(id: string) { this.setBusy(true); try { await supabase.from('ppe_types').delete().eq('id', id); } finally { this.setBusy(false); } }
   async createPPERequest(uid: string, tid: string, sz: string) { this.setBusy(true); try { await supabase.from('ppe_requests').insert({ id: crypto.randomUUID(), user_id: uid, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); } finally { this.setBusy(false); } }
-  async markPPEAsRequested(id: string) { this.setBusy(true); try { await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id); } finally { this.setBusy(false); } }
-  async deliverPPERequest(id: string, q: number = 1) { this.setBusy(true); try { await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id); } finally { this.setBusy(false); } }
+  async markPPEAsRequested(id: string) { 
+    this.setBusy(true); 
+    try { 
+      const ppe = this.config.ppeRequests.find(p => p.id === id);
+      await supabase.from('ppe_requests').update({ status: 'SOLICITADO' }).eq('id', id); 
+      if (ppe) {
+        const type = this.config.ppeTypes.find(t => t.id === ppe.type_id);
+        await this.createNotification(ppe.userId, `Tu solicitud de EPI (${type?.name || 'EPI'}) ha sido procesada y solicitada a proveedor.`, 'admin');
+      }
+    } finally { this.setBusy(false); } 
+  }
+  async rejectPPERequest(id: string, reason?: string) {
+    this.setBusy(true);
+    try {
+      const ppe = this.config.ppeRequests.find(p => p.id === id);
+      await supabase.from('ppe_requests').update({ status: 'RECHAZADO' }).eq('id', id);
+      if (ppe) {
+        const type = this.config.ppeTypes.find(t => t.id === ppe.type_id);
+        await this.createNotification(ppe.userId, `❌ Tu solicitud de EPI (${type?.name || 'EPI'}) ha sido RECHAZADA.${reason ? ` Motivo: ${reason}` : ''}`, 'admin');
+      }
+      await this.refresh();
+    } finally { this.setBusy(false); }
+  }
+  async deliverPPERequest(id: string, q: number = 1) { 
+    this.setBusy(true); 
+    try { 
+      const ppe = this.config.ppeRequests.find(p => p.id === id);
+      await supabase.from('ppe_requests').update({ status: 'ENTREGADO', delivery_date: new Date().toISOString() }).eq('id', id); 
+      if (ppe) {
+        const type = this.config.ppeTypes.find(t => t.id === ppe.type_id);
+        await this.createNotification(ppe.userId, `✅ Tu EPI (${type?.name || 'EPI'}) ha sido entregado.`, 'admin');
+      }
+    } finally { this.setBusy(false); } 
+  }
   async deletePPERequest(id: string) { this.setBusy(true); try { await supabase.from('ppe_requests').delete().eq('id', id); } finally { this.setBusy(false); } }
   async createNewsPost(t: string, c: string, aid: string) { this.setBusy(true); try { await supabase.from('news').insert({ id: crypto.randomUUID(), title: t, content: c, author_id: aid, created_at: new Date().toISOString() }); } finally { this.setBusy(false); } }
   async deleteNewsPost(id: string) { this.setBusy(true); try { await supabase.from('news').delete().eq('id', id); } finally { this.setBusy(false); } }
@@ -690,6 +753,13 @@ class Store {
   async deleteDriver(id: string) { this.setBusy(true); try { await supabase.from('drivers').delete().eq('id', id); } finally { this.setBusy(false); } }
   async createDriverPPE(did: string, tid: string, sz: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').insert({ id: crypto.randomUUID(), driver_id: did, type_id: tid, size: sz, status: 'PENDIENTE', created_at: new Date().toISOString() }); } finally { this.setBusy(false); } }
   async updateDriverPPEStatus(id: string, s: string, _q?: number) { this.setBusy(true); try { const updateData: any = { status: s }; if (s === 'ENTREGADO') updateData.delivery_date = new Date().toISOString(); if (s === 'SOLICITADO') updateData.requested_date = new Date().toISOString(); await supabase.from('drivers_ppe').update(updateData).eq('id', id); } finally { this.setBusy(false); } }
+  async rejectDriverPPE(id: string) {
+    this.setBusy(true);
+    try {
+      await supabase.from('drivers_ppe').update({ status: 'RECHAZADO' }).eq('id', id);
+      await this.refresh();
+    } finally { this.setBusy(false); }
+  }
   async deleteDriverPPE(id: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').delete().eq('id', id); } finally { this.setBusy(false); } }
   async repairOvertimeIntegrity() {
     this.setBusy(true);

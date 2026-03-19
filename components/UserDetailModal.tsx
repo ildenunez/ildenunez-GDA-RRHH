@@ -190,16 +190,17 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
             {!isNew && (
                 <section>
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 pb-2 border-b border-slate-100">Historial de Registros</h3>
-                    <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm max-h-[400px] overflow-y-auto">
-                        <table className="w-full text-left text-xs">
-                            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase sticky top-0 z-10">
-                                <tr>
-                                    <th className="px-6 py-4">Tipo / Motivo</th>
-                                    <th className="px-6 py-4">Cant.</th>
-                                    <th className="px-6 py-4">Estado</th>
-                                    <th className="px-6 py-4 text-right">Acción</th>
-                                </tr>
-                            </thead>
+                    <div className="border border-slate-100 rounded-2xl shadow-sm max-h-[400px] overflow-y-auto">
+                        <div className="overflow-x-auto pb-2">
+                            <table className="w-full min-w-[600px] text-left text-xs">
+                                <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-6 py-4 whitespace-nowrap">Tipo / Motivo</th>
+                                        <th className="px-6 py-4 whitespace-nowrap">Cant.</th>
+                                        <th className="px-6 py-4 whitespace-nowrap">Estado</th>
+                                        <th className="px-6 py-4 text-right whitespace-nowrap">Acción</th>
+                                    </tr>
+                                </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {requests.map(req => (
                                     <tr key={req.id} onClick={() => onViewRequest(req)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
@@ -231,8 +232,9 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user: initialUser, on
                             </tbody>
                         </table>
                     </div>
-                </section>
-            )}
+                </div>
+            </section>
+        )}
             <div className="flex gap-4 pt-8 border-t border-slate-100">
                 <button onClick={onClose} className="flex-1 py-4 text-slate-500 font-black uppercase text-[10px] hover:bg-slate-50 rounded-2xl">Cerrar</button>
                 <button onClick={handleUpdate} disabled={isSaving} className="flex-1 py-4 bg-blue-600 text-white font-black uppercase text-[10px] rounded-2xl shadow-xl hover:bg-blue-700 flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}</button>

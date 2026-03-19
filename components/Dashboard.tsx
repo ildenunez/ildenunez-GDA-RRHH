@@ -14,7 +14,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, onEditRequest, onViewRequest }) => {
   const [detailView, setDetailView] = useState<'none' | 'days' | 'hours'>('none');
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState<string>(''); // Default to all months
   const [showPPEModal, setShowPPEModal] = useState(false);
   const [refresh, setRefresh] = useState(0);
 
@@ -195,16 +195,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18} className="text-slate-400"/> Historial de Movimientos (Audit Trail)</h3>
                     <div className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded border tracking-widest">Orden Cronológico Inverso</div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto pb-2">
+                    <table className="w-full min-w-[850px] text-left text-sm">
                         <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                             <tr>
-                                <th className="px-6 py-4">Fecha</th>
+                                <th className="px-6 py-4 w-[120px] whitespace-nowrap">Fecha</th>
                                 <th className="px-6 py-4">Concepto / Motivo</th>
-                                <th className="px-6 py-4 text-center">Estado</th>
-                                <th className="px-6 py-4 text-center">Movimiento</th>
-                                <th className="px-6 py-4 text-center">Saldo Resultante</th>
-                                <th className="px-6 py-4 text-right print:hidden">Info</th>
+                                <th className="px-6 py-4 text-center w-[100px] whitespace-nowrap">Estado</th>
+                                <th className="px-6 py-4 text-center w-[120px] whitespace-nowrap">Movimiento</th>
+                                <th className="px-6 py-4 text-center w-[140px] whitespace-nowrap">Saldo Resultante</th>
+                                <th className="px-6 py-4 text-right print:hidden w-[60px]">Info</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -212,12 +212,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                                 <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No hay movimientos registrados en el sistema.</td></tr>
                             ) : auditTrail.map((move: any) => (
                                 <tr key={move.id} onClick={() => onViewRequest(move)} className="hover:bg-slate-50 cursor-pointer transition-colors group">
-                                    <td className="px-6 py-4 text-slate-500 font-medium">{new Date(move.startDate).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 text-slate-500 font-medium whitespace-nowrap">{new Date(move.startDate).toLocaleDateString()}</td>
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-800">{store.getTypeLabel(move.typeId)}</div>
-                                        <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{move.reason || '-'}</div>
+                                        <div className="text-[10px] text-slate-400 whitespace-normal line-clamp-2">{move.reason || '-'}</div>
                                     </td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-6 py-4 text-center whitespace-nowrap">
                                         <span className={`px-2 py-0.5 rounded-lg font-black text-[9px] uppercase border ${
                                             move.status === RequestStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-100' : 
                                             move.status === RequestStatus.PENDING ? 'bg-orange-50 text-orange-600 border-orange-100' : 
@@ -226,10 +226,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user: initialUser, onNewRequest, 
                                             {move.status}
                                         </span>
                                     </td>
-                                    <td className={`px-6 py-4 text-center font-black ${move.impact < 0 ? 'text-red-600 bg-red-50/30' : move.impact > 0 ? 'text-green-600 bg-green-50/30' : 'text-slate-400 bg-slate-50'}`}>
+                                    <td className={`px-6 py-4 text-center font-black whitespace-nowrap ${move.impact < 0 ? 'text-red-600 bg-red-50/30' : move.impact > 0 ? 'text-green-600 bg-green-50/30' : 'text-slate-400 bg-slate-50'}`}>
                                         {move.impact > 0 ? '+' : ''}{move.impact}{isOvertimeView ? 'h' : 'd'}
                                     </td>
-                                    <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
+                                    <td className="px-6 py-4 text-center font-mono font-bold text-slate-900 bg-slate-50/50 whitespace-nowrap">
                                         {move.runningBalance.toFixed(1)}{isOvertimeView ? 'h' : 'd'}
                                     </td>
                                     <td className="px-6 py-4 text-right print:hidden">

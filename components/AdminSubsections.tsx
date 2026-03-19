@@ -481,8 +481,8 @@ export const EPIManager = () => {
                     ))}
                 </div>
             ) : (
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    <table className="w-full text-left text-sm">
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-x-auto">
+                    <table className="w-full min-w-[800px] text-left text-sm">
                         <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
                             <tr>
                                 <th className="px-6 py-4">Tipo de Material</th>
@@ -1018,17 +1018,17 @@ export const AbsenceQueryManager = () => {
                             Rango: {new Date(start).toLocaleDateString()} al {new Date(end).toLocaleDateString()}
                         </div>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
+                    <div className="overflow-x-auto pb-2">
+                        <table className="w-full min-w-[850px] text-left text-sm">
                             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                                 <tr>
-                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Material / Acción' : 'Empleado / Departamento'}</th>
-                                    <th className="px-6 py-4">{queryMode === 'overtime' ? 'Motivo' : 'Tipo de Registro'}</th>
-                                    <th className="px-6 py-4">Periodo / Fecha</th>
+                                    <th className="px-6 py-4 whitespace-nowrap">{queryMode === 'overtime' ? 'Material / Acción' : 'Empleado / Departamento'}</th>
+                                    <th className="px-6 py-4 whitespace-nowrap">{queryMode === 'overtime' ? 'Motivo' : 'Tipo de Registro'}</th>
+                                    <th className="px-6 py-4 whitespace-nowrap">Periodo / Fecha</th>
                                     {queryMode === 'overtime' ? (
-                                        <th className="px-6 py-4 text-center">Horas</th>
+                                        <th className="px-6 py-4 text-center whitespace-nowrap">Horas</th>
                                     ) : (
-                                        <th className="px-6 py-4 text-center">Días en Rango</th>
+                                        <th className="px-6 py-4 text-center whitespace-nowrap">Días en Rango</th>
                                     )}
                                 </tr>
                             </thead>

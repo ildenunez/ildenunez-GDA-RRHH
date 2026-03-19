@@ -257,14 +257,14 @@ export const Approvals = ({ user, onViewRequest }: { user: User, onViewRequest: 
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Icon className={color}/> {title}</h3>
                 <span className="bg-white border px-3 py-1 rounded-full text-xs font-black uppercase text-slate-500">{requests.length} Pendientes</span>
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto pb-2">
+                <table className="w-full min-w-[850px] text-left text-sm">
                     <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
                         <tr>
-                            <th className="px-6 py-4">Empleado / Dpto</th>
-                            <th className="px-6 py-4">Tipo / Fechas</th>
-                            <th className="px-6 py-4">Conflictos</th>
-                            <th className="px-6 py-4 text-right">Acciones</th>
+                            <th className="px-6 py-4 w-[200px] whitespace-nowrap">Empleado / Dpto</th>
+                            <th className="px-6 py-4 w-[180px] whitespace-nowrap">Tipo / Fechas</th>
+                            <th className="px-6 py-4 whitespace-nowrap">Conflictos</th>
+                            <th className="px-6 py-4 text-right w-[200px] whitespace-nowrap">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">

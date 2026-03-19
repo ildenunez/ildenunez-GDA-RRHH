@@ -182,6 +182,12 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
       await store.deliverPPERequest(reqId, qty);
   };
 
+  const handleReject = async (reqId: string) => {
+      const reason = window.prompt('Indique el motivo del rechazo (opcional):');
+      if (reason === null) return;
+      await store.rejectPPERequest(reqId, reason);
+  };
+
   const handleDelete = async (reqId: string) => {
       if(confirm('¿Seguro que deseas eliminar esta solicitud de EPI?')) {
           await store.deletePPERequest(reqId);
@@ -333,7 +339,15 @@ const PPEView: React.FC<PPEViewProps> = ({ user }) => {
                                                                     Solicitar
                                                                 </button>
                                                             )}
-                                                            {req.status !== 'ENTREGADO' && (
+                                                            {req.status === 'PENDIENTE' && (
+                                                                <button 
+                                                                    onClick={() => handleReject(req.id)}
+                                                                    className="bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                                                                >
+                                                                    Rechazar
+                                                                </button>
+                                                            )}
+                                                            {req.status !== 'ENTREGADO' && req.status !== 'RECHAZADO' && (
                                                                 <button 
                                                                     onClick={() => handleDeliver(req.id)}
                                                                     className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-800 transition-colors"
