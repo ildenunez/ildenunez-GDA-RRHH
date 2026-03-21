@@ -44,7 +44,7 @@ const UnreadNotificationsModal: React.FC<UnreadNotificationsModalProps> = ({ not
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 group"
             >
               <Check size={20} className="group-hover:scale-110 transition-transform" />
-              Marcar como leído
+              Confirmar lectura
             </button>
             <button 
               onClick={onClose}

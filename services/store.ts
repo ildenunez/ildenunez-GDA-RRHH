@@ -482,9 +482,9 @@ class Store {
         throw e;
     } finally { this.setBusy(false); } 
   }
-  async markNotificationAsRead(id: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('id', id); } finally { this.setBusy(false); } }
-  async markAllNotificationsAsRead(uid: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid); } finally { this.setBusy(false); } }
-  async deleteNotification(id: string) { this.setBusy(true); try { await supabase.from('notifications').delete().eq('id', id); } finally { this.setBusy(false); } }
+  async markNotificationAsRead(id: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
+  async markAllNotificationsAsRead(uid: string) { this.setBusy(true); try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid); await this.refresh(); } finally { this.setBusy(false); } }
+  async deleteNotification(id: string) { this.setBusy(true); try { await supabase.from('notifications').delete().eq('id', id); await this.refresh(); } finally { this.setBusy(false); } }
 
   async sendChatMessage(senderId: string, message: string, recipientId?: string) {
     this.setBusy(true);

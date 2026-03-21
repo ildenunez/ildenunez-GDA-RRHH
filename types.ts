@@ -67,7 +67,7 @@ export interface DriverPPE {
   driverId: string;
   typeId: string;
   size: string;
-  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
+  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO' | 'RECHAZADO';
   createdAt: string;
   requestedDate?: string;
   deliveryDate?: string;
@@ -173,7 +173,7 @@ export interface PPERequest {
   userId: string;
   type_id: string;
   size: string;
-  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO';
+  status: 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO' | 'RECHAZADO';
   createdAt: string;
   deliveryDate?: string;
 }

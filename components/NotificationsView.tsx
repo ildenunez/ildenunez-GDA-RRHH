@@ -16,18 +16,18 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ user }) => {
   const notifications = store.getNotificationsForUser(user.id);
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleMarkAsRead = (id: string) => {
-    store.markNotificationAsRead(id);
+  const handleMarkAsRead = async (id: string) => {
+    await store.markNotificationAsRead(id);
     setRefresh(prev => prev + 1);
   };
 
-  const handleMarkAllRead = () => {
-    store.markAllNotificationsAsRead(user.id);
+  const handleMarkAllRead = async () => {
+    await store.markAllNotificationsAsRead(user.id);
     setRefresh(prev => prev + 1);
   };
 
-  const handleDelete = (id: string) => {
-    store.deleteNotification(id);
+  const handleDelete = async (id: string) => {
+    await store.deleteNotification(id);
     setRefresh(prev => prev + 1);
   };
 
