@@ -331,6 +331,35 @@ class Store {
     } catch (e) { console.error("Error uploading file:", e); return null; } finally { this.setBusy(false); }
   }
 
+  private isSpendingRequest(typeId: string, hours?: number, startDate?: string, endDate?: string): boolean {
+    if (this.isOvertimeRequest(typeId)) {
+        // OVERTIME_EARN y WORKED_HOLIDAY son ganancias, el resto son consumos
+        return ![RequestType.OVERTIME_EARN, RequestType.WORKED_HOLIDAY].includes(typeId as RequestType);
+    }
+    if (typeId === RequestType.ADJUSTMENT_DAYS) {
+        return (hours || 0) < 0;
+    }
+    if (typeId === RequestType.ADJUSTMENT_OVERTIME) {
+        return (hours || 0) < 0;
+    }
+    // Leave types
+    const isSickness = typeId === RequestType.SICKNESS;
+    const isUnjustified = typeId === RequestType.UNJUSTIFIED;
+    const currentType = this.config.leaveTypes.find(t => t.id === typeId);
+    const subtracts = currentType ? currentType.subtractsDays : true;
+    return subtracts && !isSickness && !isUnjustified;
+  }
+
+  private async adjustConsumedHours(usage: OvertimeUsage[], multiplier: number) {
+    for (const u of usage) {
+      const source = this.requests.find(r => r.id === u.requestId);
+      if (source) {
+        const newConsumed = (source.consumedHours || 0) + (u.hoursUsed * multiplier);
+        await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
+      }
+    }
+  }
+
   async createRequest(d: any, uid: string, s: RequestStatus) {
       this.setBusy(true);
       try {
@@ -355,9 +384,13 @@ class Store {
             throw error;
         }
 
-        // Descontar saldo solo si entra como APROBADO
-        if (s === RequestStatus.APPROVED) {
+        // Si es una solicitud de gasto (consumo), descontamos inmediatamente
+        const isSpending = this.isSpendingRequest(d.typeId, d.hours, d.startDate, d.endDate);
+        if (isSpending || s === RequestStatus.APPROVED) {
             await this.adjustUserBalance(uid, d.typeId, d.startDate, d.endDate, d.hours, 1);
+            if (d.overtimeUsage && d.overtimeUsage.length > 0) {
+                await this.adjustConsumedHours(d.overtimeUsage, 1);
+            }
         }
         await this.refresh();
       } catch (e) {
@@ -370,12 +403,20 @@ class Store {
     this.setBusy(true);
     try {
       const oldReq = this.requests.find(r => r.id === id);
-      if (oldReq && oldReq.status === RequestStatus.APPROVED) {
-          // Revertir saldo anterior solo si estaba aprobado
-          await this.adjustUserBalance(oldReq.userId, oldReq.typeId, oldReq.startDate, oldReq.endDate, oldReq.hours, -1);
-          // Aplicar nuevo saldo (asumimos que sigue aprobado si se está editando y estaba aprobado, 
-          // o que la UI maneja el cambio de estado por separado)
-          await this.adjustUserBalance(oldReq.userId, d.typeId, d.startDate, d.endDate, d.hours, 1);
+      if (oldReq) {
+          const wasDiscounted = this.isSpendingRequest(oldReq.typeId, oldReq.hours, oldReq.startDate, oldReq.endDate) || oldReq.status === RequestStatus.APPROVED;
+          if (wasDiscounted) {
+              // Revertir saldo y trazabilidad anterior
+              await this.adjustUserBalance(oldReq.userId, oldReq.typeId, oldReq.startDate, oldReq.endDate, oldReq.hours, -1);
+              await this.adjustConsumedHours(oldReq.overtimeUsage || [], -1);
+          }
+          
+          // Aplicar nuevo saldo y trazabilidad si corresponde
+          const willBeDiscounted = this.isSpendingRequest(d.typeId, d.hours, d.startDate, d.endDate) || oldReq.status === RequestStatus.APPROVED;
+          if (willBeDiscounted) {
+              await this.adjustUserBalance(oldReq.userId, d.typeId, d.startDate, d.endDate, d.hours, 1);
+              await this.adjustConsumedHours(d.overtimeUsage || [], 1);
+          }
       }
       const { error } = await supabase.from('requests').update({ 
           type_id: d.typeId, 
@@ -421,25 +462,29 @@ class Store {
         const oldStatus = req.status;
         const newStatus = s;
 
-        // Solo ajustamos balance si hay un cambio hacia o desde APROBADO
-        if (oldStatus !== RequestStatus.APPROVED && newStatus === RequestStatus.APPROVED) {
-            // Aplicar saldo
-            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, 1);
-        } else if (oldStatus === RequestStatus.APPROVED && newStatus !== RequestStatus.APPROVED) {
-            // Revertir saldo
-            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
-        }
+        const wasDiscountedAtCreation = this.isSpendingRequest(req.typeId, req.hours, req.startDate, req.endDate);
 
-        // Manejo de horas extra consumidas
-        if (newStatus === RequestStatus.APPROVED && oldStatus !== RequestStatus.APPROVED) {
-            const usage = req.overtimeUsage || [];
-            for (const u of usage) {
-                const source = this.requests.find(r => r.id === u.requestId);
-                if (source) {
-                    const newConsumed = (source.consumedHours || 0) + u.hoursUsed;
-                    const { error: consumedError } = await supabase.from('requests').update({ consumed_hours: newConsumed }).eq('id', u.requestId);
-                    if (consumedError) throw consumedError;
-                }
+        if (newStatus === RequestStatus.APPROVED) {
+            if (oldStatus !== RequestStatus.APPROVED && !wasDiscountedAtCreation) {
+                // Es una solicitud de "ganancia" (ej. horas extra trabajadas), aplicar ahora
+                await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, 1);
+            }
+            // Si ya fue descontada al crear (spending), no hacemos nada al balance ni a consumed_hours
+        } else if (newStatus === RequestStatus.REJECTED) {
+            if (wasDiscountedAtCreation) {
+                // Revertir descuento inmediato realizado al crear
+                await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+                await this.adjustConsumedHours(req.overtimeUsage || [], -1);
+            } else if (oldStatus === RequestStatus.APPROVED) {
+                // Revertir ganancia previa
+                await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+            }
+        } else if (newStatus === RequestStatus.PENDING && oldStatus === RequestStatus.APPROVED) {
+            // Revertir si vuelve a pendiente desde aprobado
+            await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+            if (!wasDiscountedAtCreation) {
+                // Si no era spending, también revertimos consumed_hours si los hubiera (raro en earnings)
+                await this.adjustConsumedHours(req.overtimeUsage || [], -1);
             }
         }
 
@@ -467,9 +512,12 @@ class Store {
     this.setBusy(true); 
     try { 
       const req = this.requests.find(r => r.id === id);
-      if (req && req.status === RequestStatus.APPROVED) {
-          // Si se elimina estando aprobada, devolvemos los días
-          await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+      if (req) {
+          const wasDiscounted = this.isSpendingRequest(req.typeId, req.hours, req.startDate, req.endDate) || req.status === RequestStatus.APPROVED;
+          if (wasDiscounted) {
+              await this.adjustUserBalance(req.userId, req.typeId, req.startDate, req.endDate, req.hours, -1);
+              await this.adjustConsumedHours(req.overtimeUsage || [], -1);
+          }
       }
       const { error } = await supabase.from('requests').delete().eq('id', id); 
       if (error) {
@@ -776,10 +824,15 @@ class Store {
         }
 
         // 2. Recalcular consumed_hours para registros de horas extra
-        const approvedRequests = this.requests.filter(r => r.status === RequestStatus.APPROVED);
-        for (const source of approvedRequests) {
+        // Incluimos tanto APROBADAS como PENDIENTES que sean de gasto (spending)
+        const spendingRequests = allRequests.filter(r => 
+            this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate) && 
+            (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING)
+        );
+
+        for (const source of allRequests) {
             if (source.typeId === RequestType.OVERTIME_EARN || source.typeId === RequestType.WORKED_HOLIDAY) {
-                const allUsages = approvedRequests.filter(r => r.overtimeUsage).flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id);
+                const allUsages = spendingRequests.flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id);
                 const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0);
                 if (source.consumedHours !== totalConsumed) {
                     await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
@@ -787,18 +840,18 @@ class Store {
             }
         }
 
-        // 3. Recalcular balances de usuarios (SOLO basados en solicitudes APROBADAS)
+        // 3. Recalcular balances de usuarios
         for (const user of this.users) {
-            const userApprovedReqs = this.requests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
+            const userApprovedReqs = allRequests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
+            const userSpendingPending = allRequests.filter(r => 
+                r.userId === user.id && 
+                r.status === RequestStatus.PENDING && 
+                this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate)
+            );
             
-            // Overtime
-            const userOvertimeReqs = userApprovedReqs.filter(r => this.isOvertimeRequest(r.typeId));
-            const theoreticalOvertime = userOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
-            
-            // Days Available (esto es más complejo, pero intentamos una aproximación)
-            // Asumimos que el balance base es lo que tiene el usuario actualmente + lo que se ha restado por solicitudes aprobadas
-            // O mejor, simplemente recalculamos desde un base de 22 si no tenemos el histórico de ajustes manuales.
-            // Por ahora nos centramos en Overtime que es el problema reportado.
+            // Overtime: Aprobadas + Pendientes de gasto
+            const relevantOvertimeReqs = [...userApprovedReqs, ...userSpendingPending].filter(r => this.isOvertimeRequest(r.typeId));
+            const theoreticalOvertime = relevantOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
             
             await supabase.from('users').update({ 
                 overtime_hours: theoreticalOvertime

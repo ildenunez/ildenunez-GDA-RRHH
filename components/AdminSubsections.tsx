@@ -1162,11 +1162,34 @@ export const MaintenanceManager = () => {
     const [isRepairing, setIsRepairing] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const [previewData, setPreviewData] = useState<any[] | null>(null);
 
-    const handleRepair = async () => {
-        if (confirm('¿Deseas sincronizar la trazabilidad de horas extra? Esto corregirá registros antiguos marcándolos como consumidos si están vinculados a solicitudes aprobadas.')) {
-            setIsRepairing(true);
-            await store.repairOvertimeIntegrity();
+    const handleRepairPreview = async () => {
+        setIsRepairing(true);
+        try {
+            const preview = await store.getRepairPreview();
+            if (preview.length === 0) {
+                alert('No se han detectado discrepancias en la trazabilidad de horas extra.');
+            } else {
+                setPreviewData(preview);
+            }
+        } catch (e) {
+            alert('Error al generar la previsualización');
+        } finally {
+            setIsRepairing(false);
+        }
+    };
+
+    const handleConfirmRepair = async () => {
+        if (!previewData) return;
+        setIsRepairing(true);
+        try {
+            await store.applyRepair(previewData);
+            setPreviewData(null);
+            alert('Sincronización completada con éxito.');
+        } catch (e) {
+            alert('Error al aplicar la sincronización');
+        } finally {
             setIsRepairing(false);
         }
     };
@@ -1238,14 +1261,74 @@ export const MaintenanceManager = () => {
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
                 <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><RotateCcw size={20} className="text-orange-50"/> Integridad de Datos</h4>
                 <p className="text-sm text-slate-500 mb-6">Si detectas que a algunos empleados les siguen apareciendo registros de horas extra que ya deberían estar consumidos, usa esta herramienta para sincronizar la base de datos.</p>
-                <button 
-                    onClick={handleRepair} 
-                    disabled={isRepairing}
-                    className="bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-100 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-                >
-                    {isRepairing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18}/>}
-                    Sincronizar Trazabilidad de Horas
-                </button>
+                
+                {!previewData ? (
+                    <button 
+                        onClick={handleRepairPreview} 
+                        disabled={isRepairing}
+                        className="bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-100 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {isRepairing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18}/>}
+                        Sincronizar Trazabilidad de Horas
+                    </button>
+                ) : (
+                    <div className="space-y-6 animate-in slide-in-from-top-4">
+                        <div className="border rounded-2xl overflow-hidden">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 text-slate-500 font-medium border-b">
+                                    <tr>
+                                        <th className="p-4">Empleado</th>
+                                        <th className="p-4 text-center">Horas (Act/New)</th>
+                                        <th className="p-4 text-center">Días (Act/New)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {previewData.map(p => (
+                                        <tr key={p.userId} className="hover:bg-slate-50/50">
+                                            <td className="p-4 font-medium">{p.name}</td>
+                                            <td className="p-4 text-center font-mono">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs text-slate-400 line-through">{p.currentOvertime.toFixed(1)}h</span>
+                                                    <span className="text-blue-600 font-bold">{p.newOvertime.toFixed(1)}h</span>
+                                                    <span className={`text-[10px] ${p.diffOvertime > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        ({p.diffOvertime > 0 ? '+' : ''}{p.diffOvertime.toFixed(1)}h)
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center font-mono">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs text-slate-400 line-through">{p.currentDays.toFixed(1)}d</span>
+                                                    <span className="text-indigo-600 font-bold">{p.newDays.toFixed(1)}d</span>
+                                                    <span className={`text-[10px] ${p.diffDays > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        ({p.diffDays > 0 ? '+' : ''}{p.diffDays.toFixed(1)}d)
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="flex gap-4">
+                            <button 
+                                onClick={handleConfirmRepair}
+                                disabled={isRepairing}
+                                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-50"
+                            >
+                                {isRepairing ? <Loader2 size={18} className="animate-spin" /> : <Check size={18}/>}
+                                Confirmar Cambios
+                            </button>
+                            <button 
+                                onClick={() => setPreviewData(null)}
+                                disabled={isRepairing}
+                                className="bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
+                            >
+                                <X size={18}/>
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
