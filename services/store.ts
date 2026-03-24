@@ -809,58 +809,93 @@ class Store {
     } finally { this.setBusy(false); }
   }
   async deleteDriverPPE(id: string) { this.setBusy(true); try { await supabase.from('drivers_ppe').delete().eq('id', id); } finally { this.setBusy(false); } }
-  async repairOvertimeIntegrity() {
+  async getRepairPreview(): Promise<any[]> {
+    const discrepancies: any[] = [];
+    const allRequests = this.requests;
+
+    // 1. Corregir signos de horas en solicitudes de consumo
+    for (const req of allRequests) {
+      const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
+      if (isConsumptionType && req.hours && req.hours > 0) {
+        discrepancies.push({
+          type: 'WRONG_SIGN',
+          requestId: req.id,
+          userName: this.users.find(u => u.id === req.userId)?.name || 'Unknown',
+          requestLabel: req.label || this.getTypeLabel(req.typeId),
+          currentValue: req.hours,
+          suggestedValue: -req.hours
+        });
+      }
+    }
+
+    // 2. Recalcular consumed_hours para registros de horas extra
+    const spendingRequests = allRequests.filter(r => 
+      this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate) && 
+      (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING)
+    );
+
+    for (const source of allRequests) {
+      if (source.typeId === RequestType.OVERTIME_EARN || source.typeId === RequestType.WORKED_HOLIDAY) {
+        const allUsages = spendingRequests.flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id);
+        const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0);
+        if (source.consumedHours !== totalConsumed) {
+          discrepancies.push({
+            type: 'CONSUMED_HOURS_MISMATCH',
+            requestId: source.id,
+            userName: this.users.find(u => u.id === source.userId)?.name || 'Unknown',
+            requestLabel: source.label || this.getTypeLabel(source.typeId),
+            currentValue: source.consumedHours,
+            suggestedValue: totalConsumed
+          });
+        }
+      }
+    }
+
+    // 3. Recalcular balances de usuarios
+    for (const user of this.users) {
+      const userApprovedReqs = allRequests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
+      const userSpendingPending = allRequests.filter(r => 
+        r.userId === user.id && 
+        r.status === RequestStatus.PENDING && 
+        this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate)
+      );
+      
+      const relevantOvertimeReqs = [...userApprovedReqs, ...userSpendingPending].filter(r => this.isOvertimeRequest(r.typeId));
+      const theoreticalOvertime = relevantOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
+      
+      if (user.overtimeHours !== theoreticalOvertime) {
+        discrepancies.push({
+          type: 'USER_BALANCE_MISMATCH',
+          userId: user.id,
+          userName: user.name,
+          currentValue: user.overtimeHours,
+          suggestedValue: theoreticalOvertime
+        });
+      }
+    }
+
+    return discrepancies;
+  }
+
+  async applyRepair(previewData: any[]) {
     this.setBusy(true);
     try {
-        // 1. Corregir signos de horas en solicitudes de consumo
-        const allRequests = this.requests;
-        for (const req of allRequests) {
-            const isConsumptionType = [RequestType.OVERTIME_SPEND_DAYS, RequestType.OVERTIME_PAY, RequestType.OVERTIME_TO_DAYS].includes(req.typeId as RequestType);
-            if (isConsumptionType && req.hours && req.hours > 0) {
-                const correctedHours = -req.hours;
-                await supabase.from('requests').update({ hours: correctedHours }).eq('id', req.id);
-                req.hours = correctedHours;
-            }
+      for (const item of previewData) {
+        if (item.type === 'WRONG_SIGN') {
+          await supabase.from('requests').update({ hours: item.suggestedValue }).eq('id', item.requestId);
+        } else if (item.type === 'CONSUMED_HOURS_MISMATCH') {
+          await supabase.from('requests').update({ consumed_hours: item.suggestedValue }).eq('id', item.requestId);
+        } else if (item.type === 'USER_BALANCE_MISMATCH') {
+          await supabase.from('users').update({ overtime_hours: item.suggestedValue }).eq('id', item.userId);
         }
-
-        // 2. Recalcular consumed_hours para registros de horas extra
-        // Incluimos tanto APROBADAS como PENDIENTES que sean de gasto (spending)
-        const spendingRequests = allRequests.filter(r => 
-            this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate) && 
-            (r.status === RequestStatus.APPROVED || r.status === RequestStatus.PENDING)
-        );
-
-        for (const source of allRequests) {
-            if (source.typeId === RequestType.OVERTIME_EARN || source.typeId === RequestType.WORKED_HOLIDAY) {
-                const allUsages = spendingRequests.flatMap(r => r.overtimeUsage || []).filter(usage => usage.requestId === source.id);
-                const totalConsumed = allUsages.reduce((sum, usage) => sum + usage.hoursUsed, 0);
-                if (source.consumedHours !== totalConsumed) {
-                    await supabase.from('requests').update({ consumed_hours: totalConsumed }).eq('id', source.id);
-                }
-            }
-        }
-
-        // 3. Recalcular balances de usuarios
-        for (const user of this.users) {
-            const userApprovedReqs = allRequests.filter(r => r.userId === user.id && r.status === RequestStatus.APPROVED);
-            const userSpendingPending = allRequests.filter(r => 
-                r.userId === user.id && 
-                r.status === RequestStatus.PENDING && 
-                this.isSpendingRequest(r.typeId, r.hours, r.startDate, r.endDate)
-            );
-            
-            // Overtime: Aprobadas + Pendientes de gasto
-            const relevantOvertimeReqs = [...userApprovedReqs, ...userSpendingPending].filter(r => this.isOvertimeRequest(r.typeId));
-            const theoreticalOvertime = relevantOvertimeReqs.reduce((sum, r) => sum + (r.hours || 0), 0);
-            
-            await supabase.from('users').update({ 
-                overtime_hours: theoreticalOvertime
-            }).eq('id', user.id);
-        }
-        await this.refresh();
+      }
+      await this.refresh();
     } catch (e) {
-        console.error("Error in repairOvertimeIntegrity:", e);
-    } finally { this.setBusy(false); }
+      console.error("Error in applyRepair:", e);
+      throw e;
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   async exportData() {
